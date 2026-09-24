@@ -1,0 +1,6 @@
+# @package _global_
+
+# Scaffold so the dispatcher can route to the Kitaev model.
+# Hamiltonian parameters belong in this block; none are implemented yet.
+sim_type: kitaev
+kitaev: {}
