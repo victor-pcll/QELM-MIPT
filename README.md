@@ -16,22 +16,33 @@ Other install options are in the [uv installation guide](https://docs.astral.sh/
 uv sync
 ```
 
-## Run tests
+## Layout
 
-```bash
-uv run pytest
-```
+| Path | Role |
+| --- | --- |
+| `conf/` | Hydra YAML: `config.yaml` plus groups `sim_type`, `training`, `evaluation` |
+| `data/` | Local time series and training datasets (not committed) |
+| `src/qrc_env_template/models/` | Hamiltonians and time evolution (Ising, Kitaev scaffolds) |
+| `src/qrc_env_template/training/` | Training algorithms (Readout, Ridge scaffolds) |
+| `src/qrc_env_template/evaluation/` | Metrics and plot scaffolds |
+| `main.py` | Entrypoint. Routes sim type → model → training → evaluation |
 
-## Configuration
+## Run the pipeline
 
-Scientific parameters live in `config/` and can be overridden from the command line. Secrets and machine-local paths (for example `WANDB_API_KEY`) belong in `.env`, not in YAML. Copy `.env.example` to `.env` for local secrets.
+Scientific parameters live in `conf/` and can be overridden from the command line. Secrets and machine-local paths (for example `WANDB_API_KEY`) belong in `.env`, not in YAML. Copy `.env.example` to `.env` for local secrets.
 
 ```bash
 cp .env.example .env
 uv run python main.py sim_type=ising ising.N=12 test.dt=0.05
 ```
 
-`sim_type=ising` selects `config/sim_type/ising.yaml`. Add another file in that directory to add a simulation type. `test` settings (`dt`, `n_steps`) live in `config/config.yaml`.
+`sim_type=ising` selects `conf/sim_type/ising.yaml` and the Ising model. `training=ridge` (default) or `training=readout` selects the trainer. `N`, `J`, `learning_rate`, and `dt` stay in YAML or CLI overrides.
+
+## Run tests
+
+```bash
+uv run pytest
+```
 
 ## Develop
 

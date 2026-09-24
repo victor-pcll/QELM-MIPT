@@ -1,8 +1,10 @@
 defaults:
   - sim_type: ising
+  - training: ridge
+  - evaluation: default
   - _self_
 
-# Shared experiment settings. Simulation-specific parameters live in config/sim_type/.
+# Shared experiment settings. Simulation-specific parameters live in conf/sim_type/.
 test:
   dt: 0.01
   n_steps: 100

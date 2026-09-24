@@ -38,10 +38,9 @@ wheels/
 *.parquet
 *.pkl
 
-# Ignorer le contenu des dossiers de données de travail (mais garder les dossiers eux-mêmes)
-# Si tu crées un dossier "data/", dé-commente la ligne suivante :
-# data/*
-# !data/.gitkeep  # (permet de garder le dossier vide sur Git)
+# Séries temporelles et jeux d'entraînement : ne pas versionner le contenu.
+data/*
+!data/README.md
 
 # =========================
 # 4. Logs et résultats de calculs
@@ -64,7 +63,7 @@ htmlcov/
 # 6. Secrets
 # =========================
 # Secrets locaux uniquement (mots de passe, clés API, chemins locaux).
-# Les hyperparamètres scientifiques vont dans les YAML sous config/.
+# Les hyperparamètres scientifiques vont dans les YAML sous conf/.
 .env
 
 # =========================

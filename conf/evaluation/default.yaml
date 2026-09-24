@@ -1,0 +1,4 @@
+name: default
+metrics:
+  - mse
+plot: timeseries

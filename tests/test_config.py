@@ -9,7 +9,7 @@ from hydra.core.global_hydra import GlobalHydra
 from qrc_env_template.selection import format_selection
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-CONFIG_DIR = REPO_ROOT / "config"
+CONFIG_DIR = REPO_ROOT / "conf"
 OVERRIDES = ["sim_type=ising", "ising.N=12", "test.dt=0.05"]
 
 
