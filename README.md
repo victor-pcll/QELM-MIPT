@@ -2,6 +2,8 @@
 
 A Python library managed with [uv](https://docs.astral.sh/uv/). Requires Python 3.12 or newer.
 
+Longer notes are in [`documentation/`](documentation/README.md): setup, Hydra and `.env`, the project layout, checkpoints, and code quality.
+
 ## Install uv
 
 ```bash
