@@ -7,12 +7,24 @@ from omegaconf import DictConfig
 
 
 def load_secrets() -> None:
-    """Load secrets from a local ``.env`` file. Missing files are ignored."""
+    """Load secrets from a local ``.env`` file.
+
+    Missing files are ignored. Scientific parameters stay in ``conf/``.
+    """
     load_dotenv()
 
 
 def format_selection(cfg: DictConfig) -> str:
-    """Expose the chosen simulation and test values."""
+    """Format the chosen simulation and test values.
+
+    Args:
+        cfg: Composed Hydra config. The active simulation block is
+            ``cfg[cfg.sim_type]``. Each exposed value is a scalar
+            (``N``, ``J``, ``learning_rate``, ``dt``, ``n_steps``).
+
+    Returns:
+        One line of ``key=value`` pairs, starting with ``sim_type``.
+    """
     sim_type = str(cfg.sim_type)
     sim = cfg[sim_type]
     parts = [f"sim_type={sim_type}"]

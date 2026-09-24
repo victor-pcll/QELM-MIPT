@@ -13,7 +13,17 @@ _TRAINERS: dict[str, type[Trainer]] = {
 
 
 def get_trainer(name: str) -> type[Trainer]:
-    """Return the trainer class for a ``training.name`` config value."""
+    """Return the trainer class for a ``training.name`` config value.
+
+    Args:
+        name: Scalar trainer name such as ``"ridge"`` or ``"readout"``.
+
+    Returns:
+        The matching :class:`Trainer` subclass.
+
+    Raises:
+        KeyError: If ``name`` is not registered.
+    """
     try:
         return _TRAINERS[name]
     except KeyError as exc:

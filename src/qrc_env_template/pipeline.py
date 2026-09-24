@@ -13,7 +13,14 @@ from qrc_env_template.training import Trainer, get_trainer
 
 @dataclass(frozen=True)
 class PipelinePlan:
-    """Classes and callables selected for one config."""
+    """Classes and callables selected for one config.
+
+    Attributes:
+        sim_type: Config key, such as ``"ising"`` or ``"kitaev"``.
+        model: Hamiltonian class for that simulation.
+        trainer: Training class named by ``cfg.training.name``.
+        evaluator: Callable named by ``cfg.evaluation.name``.
+    """
 
     sim_type: str
     model: type[HamiltonianModel]
@@ -22,7 +29,15 @@ class PipelinePlan:
 
 
 def resolve_pipeline(cfg: DictConfig) -> PipelinePlan:
-    """Map ``sim_type``, ``training.name``, and ``evaluation.name`` to modules."""
+    """Map config names to a model, trainer, and evaluator.
+
+    Args:
+        cfg: Composed Hydra config. ``cfg.sim_type``, ``cfg.training.name``,
+            and ``cfg.evaluation.name`` are scalar strings.
+
+    Returns:
+        The selected classes and evaluator. Nothing is instantiated.
+    """
     sim_type = str(cfg.sim_type)
     return PipelinePlan(
         sim_type=sim_type,
@@ -35,14 +50,25 @@ def resolve_pipeline(cfg: DictConfig) -> PipelinePlan:
 def run_pipeline(cfg: DictConfig) -> str:
     """Build the selected blocks and return a scaffold status line.
 
-    ``dt``, ``n_steps``, and simulation parameters are read from ``cfg``.
+    Args:
+        cfg: Composed Hydra config. ``cfg.test.dt`` is a scalar step size
+            and ``cfg.test.n_steps`` is a scalar step count. ``N``, ``J``,
+            and ``learning_rate`` stay on the simulation block.
+
+    Returns:
+        One status line naming the model, trainer, ``dt``, ``n_steps``,
+        and the evaluator report. No trajectory tensor is allocated.
     """
     plan = resolve_pipeline(cfg)
     model = plan.model.from_config(cfg)
     trainer = plan.trainer.from_config(cfg)
     evolution = model.evolve(dt=float(cfg.test.dt), n_steps=int(cfg.test.n_steps))
     training_status = trainer.fit(features=None, targets=None)
-    report = plan.evaluator(evolution=evolution, training_status=training_status, cfg=cfg)
+    report = plan.evaluator(
+        evolution=evolution,
+        training_status=training_status,
+        cfg=cfg,
+    )
     return (
         f"model={model.name} training={trainer.name} "
         f"dt={evolution['dt']} n_steps={evolution['n_steps']} {report}"

@@ -3,9 +3,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+import numpy as np
 from hydra import compose, initialize_config_dir
 from hydra.core.global_hydra import GlobalHydra
 
+from qrc_env_template.seed import set_seed
 from qrc_env_template.selection import format_selection
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +26,17 @@ def teardown_function() -> None:
 def _compose(overrides: list[str] | None = None):
     with initialize_config_dir(version_base="1.3", config_dir=str(CONFIG_DIR)):
         return compose(config_name="config", overrides=overrides)
+
+
+def test_default_seed_is_42() -> None:
+    assert int(_compose().seed) == 42
+
+
+def test_set_seed_uses_config_value() -> None:
+    assert set_seed(_compose(["seed=7"])) == 7
+    sample = np.random.random()
+    np.random.seed(7)
+    assert sample == np.random.random()
 
 
 def test_config_loads_and_cli_overrides_apply() -> None:

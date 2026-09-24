@@ -19,7 +19,19 @@ def evaluate(
     training_status: str,
     cfg: DictConfig,
 ) -> str:
-    """Summarize a scaffold evaluation. Does not score predictions."""
+    """Summarize a scaffold evaluation without scoring predictions.
+
+    Args:
+        evolution: Evolution record. ``dt`` and ``n_steps`` are scalars.
+            No trajectory of shape ``(n_steps, dim)`` is present.
+        training_status: Status string returned by the trainer.
+        cfg: Composed Hydra config. ``cfg.evaluation.metrics`` is a list of
+            scalar names and ``cfg.evaluation.plot`` is a scalar string.
+
+    Returns:
+        One status line covering metrics, the plot request, fit status,
+        and evolution status.
+    """
     names = [str(name) for name in cfg.evaluation.metrics]
     metrics = metric_status(names)
     plot = render_plot(str(cfg.evaluation.plot))
@@ -33,7 +45,17 @@ _EVALUATORS: dict[str, Evaluator] = {"default": evaluate}
 
 
 def get_evaluator(name: str) -> Evaluator:
-    """Return the evaluator for an ``evaluation.name`` config value."""
+    """Return the evaluator for an ``evaluation.name`` config value.
+
+    Args:
+        name: Scalar evaluator name. The built-in value is ``"default"``.
+
+    Returns:
+        A callable that summarizes one run as a status string.
+
+    Raises:
+        KeyError: If ``name`` is not registered.
+    """
     try:
         return _EVALUATORS[name]
     except KeyError as exc:
