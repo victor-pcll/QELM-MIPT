@@ -73,3 +73,15 @@ class Trainer:
             return predictions of shape ``(n_samples, n_outputs)``.
         """
         return "scaffold"
+
+    def state_dict(self) -> dict[str, np.ndarray]:
+        """Return arrays to store in a checkpoint.
+
+        The scaffold has not estimated a weight vector. ``weights`` is a
+        length-0 ``float64`` array. A later fit would store shape
+        ``(n_features,)`` or ``(n_features, n_outputs)``.
+
+        Returns:
+            Mapping whose ``weights`` entry is the trainable state.
+        """
+        return {"weights": np.zeros((0,), dtype=np.float64)}

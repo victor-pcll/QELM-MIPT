@@ -38,9 +38,8 @@ wheels/
 *.parquet
 *.pkl
 
-# Séries temporelles et jeux d'entraînement : ne pas versionner le contenu.
-data/*
-!data/README.md
+# Local datasets. Documented in README.md and never committed.
+data/
 
 # =========================
 # 4. Logs et résultats de calculs
@@ -50,6 +49,7 @@ data/*
 *.err
 outputs/
 results/
+wandb/
 
 # =========================
 # 5. Outils de dev (tests, ruff, etc.)

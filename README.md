@@ -21,7 +21,7 @@ uv sync
 | Path | Role |
 | --- | --- |
 | `conf/` | Hydra YAML: `config.yaml` plus groups `sim_type`, `training`, `evaluation` |
-| `data/` | Local time series and training datasets (not committed) |
+| `data/` | Local time series and training datasets (gitignored) |
 | `src/qrc_env_template/models/` | Hamiltonians and time evolution (Ising, Kitaev scaffolds) |
 | `src/qrc_env_template/training/` | Training algorithms (Readout, Ridge scaffolds) |
 | `src/qrc_env_template/evaluation/` | Metrics and plot scaffolds |
@@ -37,6 +37,14 @@ uv run python main.py sim_type=ising ising.N=12 test.dt=0.05
 ```
 
 `sim_type=ising` selects `conf/sim_type/ising.yaml` and the Ising model. `training=ridge` (default) or `training=readout` selects the trainer. `N`, `J`, `learning_rate`, and `dt` stay in YAML or CLI overrides.
+
+## Data and checkpoints
+
+Code is committed. Large data is not. `.gitignore` excludes `data/`, `outputs/`, and `wandb/`, plus payload formats such as `*.h5`, `*.csv`, and `*.npy`. Create `data/` locally for datasets; that folder is not committed.
+
+Each run saves a checkpoint at the end of training. `uv run python main.py` writes it in Hydra's timestamped directory from `hydra.run.dir`: `outputs/<YYYY-MM-DD>/<HH-MM-SS>/checkpoint.npz`. Without a Hydra job, the file is `<checkpoint.fallback_root>/<uuid>/checkpoint.npz` (`outputs/<uuid>/checkpoint.npz` by default). Set `checkpoint.dir` to choose the directory, and `checkpoint.use_uuid=true` to nest a UUID under it.
+
+DVC can be added later if large HDF5 or CSV files need strict versioning.
 
 ## Run tests
 

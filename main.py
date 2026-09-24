@@ -2,8 +2,8 @@
 
 Scientific parameters come from ``conf/`` YAML and CLI overrides.
 ``main`` seeds NumPy from ``cfg.seed``, then routes sim type to a model,
-training, and evaluation. Secrets (API keys, local paths) are loaded from
-``.env`` when present.
+training, and evaluation, and writes a checkpoint. Secrets (API keys,
+local paths) are loaded from ``.env`` when present.
 
 Run from the repository root:
 

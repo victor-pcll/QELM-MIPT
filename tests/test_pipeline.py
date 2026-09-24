@@ -40,11 +40,24 @@ def test_dispatcher_resolves_config_to_modules() -> None:
     assert kitaev.evaluator is evaluate
 
 
-def test_run_pipeline_uses_cli_overrides() -> None:
+def test_run_pipeline_uses_cli_overrides(tmp_path: Path) -> None:
     report = run_pipeline(
-        _compose(["sim_type=ising", "ising.N=12", "test.dt=0.05", "training=readout"])
+        _compose(
+            [
+                "sim_type=ising",
+                "ising.N=12",
+                "test.dt=0.05",
+                "training=readout",
+                f"checkpoint.dir={tmp_path}",
+                "checkpoint.use_uuid=false",
+                "checkpoint.filename=checkpoint.npz",
+            ]
+        )
     )
     assert "model=ising" in report
     assert "training=readout" in report
     assert "dt=0.05" in report
     assert "status=scaffold" in report
+    checkpoint = tmp_path / "checkpoint.npz"
+    assert checkpoint.is_file()
+    assert f"checkpoint={checkpoint}" in report
