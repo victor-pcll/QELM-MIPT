@@ -6,6 +6,10 @@ from qrc_env_template.training.base import Trainer
 
 
 class Readout(Trainer):
-    """Reservoir readout. Training is not implemented."""
+    """Reservoir readout.
+
+    ``fit`` accepts features of shape ``(n_samples, n_features)`` and does
+    not estimate a weight vector.
+    """
 
     name = "readout"

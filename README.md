@@ -44,6 +44,17 @@ uv run python main.py sim_type=ising ising.N=12 test.dt=0.05
 uv run pytest
 ```
 
+## Format, lint, and types
+
+```bash
+uv run ruff format
+uv run ruff check
+uv run ruff format --check
+uv run mypy
+```
+
+Ruff formats and lints. Mypy typechecks the package and `main.py`. At startup, `main.py` seeds NumPy from `seed` in `conf/config.yaml` (default `42`). Override it with `seed=0`.
+
 ## Develop
 
 Package code lives in `src/qrc_env_template`. Import it as `qrc_env_template`. Add a dependency with `uv add`.

@@ -1,8 +1,9 @@
 """Pipeline entrypoint.
 
 Scientific parameters come from ``conf/`` YAML and CLI overrides.
-``main`` routes sim type to a model, then training, then evaluation.
-Secrets (API keys, local paths) are loaded from ``.env`` when present.
+``main`` seeds NumPy from ``cfg.seed``, then routes sim type to a model,
+training, and evaluation. Secrets (API keys, local paths) are loaded from
+``.env`` when present.
 
 Run from the repository root:
 
@@ -15,11 +16,20 @@ import hydra
 from omegaconf import DictConfig
 
 from qrc_env_template.pipeline import run_pipeline
+from qrc_env_template.seed import set_seed
 from qrc_env_template.selection import format_selection, load_secrets
 
 
 @hydra.main(version_base="1.3", config_path="conf", config_name="config")
 def main(cfg: DictConfig) -> None:
+    """Seed NumPy, load secrets, and run the selected pipeline.
+
+    Args:
+        cfg: Hydra config composed from ``conf/`` and CLI overrides.
+            ``cfg.seed`` is a scalar integer (default 42) applied to NumPy
+            before the pipeline runs.
+    """
+    set_seed(cfg)
     load_secrets()
     print(format_selection(cfg))
     print(run_pipeline(cfg))

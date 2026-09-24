@@ -13,7 +13,17 @@ _MODELS: dict[str, type[HamiltonianModel]] = {
 
 
 def get_model(sim_type: str) -> type[HamiltonianModel]:
-    """Return the model class for a ``sim_type`` config value."""
+    """Return the model class for a ``sim_type`` config value.
+
+    Args:
+        sim_type: Scalar name such as ``"ising"`` or ``"kitaev"``.
+
+    Returns:
+        The matching :class:`HamiltonianModel` subclass.
+
+    Raises:
+        KeyError: If ``sim_type`` is not registered.
+    """
     try:
         return _MODELS[sim_type]
     except KeyError as exc:
