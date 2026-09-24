@@ -1,2 +1,2 @@
-def main() -> None:
-    print("Hello from qrc-env-template!")
+def hello() -> str:
+    return "Hello from qrc-env-template!"

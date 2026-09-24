@@ -12,6 +12,12 @@ __pycache__/
 *$py.class
 *.so
 
+# Artefacts de packaging produits par uv
+build/
+dist/
+wheels/
+*.egg-info
+
 # =========================
 # 2. Jupyter Notebooks
 # =========================
