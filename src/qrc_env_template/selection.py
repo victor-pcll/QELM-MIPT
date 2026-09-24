@@ -15,6 +15,7 @@ def format_selection(cfg: DictConfig) -> str:
     """Expose the chosen simulation and test values."""
     sim_type = str(cfg.sim_type)
     sim = cfg[sim_type]
-    sim_parts = " ".join(f"{sim_type}.{key}={value}" for key, value in sim.items())
-    test_parts = " ".join(f"test.{key}={value}" for key, value in cfg.test.items())
-    return f"sim_type={sim_type} {sim_parts} {test_parts}"
+    parts = [f"sim_type={sim_type}"]
+    parts.extend(f"{sim_type}.{key}={value}" for key, value in sim.items())
+    parts.extend(f"test.{key}={value}" for key, value in cfg.test.items())
+    return " ".join(parts)
