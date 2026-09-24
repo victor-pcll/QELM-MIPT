@@ -1,0 +1,8 @@
+# @package _global_
+
+# Placeholders for an Ising run. Add another file in this directory to add a sim type.
+sim_type: ising
+ising:
+  N: 10
+  J: 1.0
+  learning_rate: 1.0e-3

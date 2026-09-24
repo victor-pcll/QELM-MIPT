@@ -61,7 +61,14 @@ results/
 htmlcov/
 
 # =========================
-# 6. Fichiers Système / IDE
+# 6. Secrets
+# =========================
+# Secrets locaux uniquement (mots de passe, clés API, chemins locaux).
+# Les hyperparamètres scientifiques vont dans les YAML sous config/.
+.env
+
+# =========================
+# 7. Fichiers Système / IDE
 # =========================
 # Mac (essentiel pour toi)
 .DS_Store

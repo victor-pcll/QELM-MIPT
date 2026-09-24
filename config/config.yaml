@@ -1,0 +1,14 @@
+defaults:
+  - sim_type: ising
+  - _self_
+
+# Shared experiment settings. Simulation-specific parameters live in config/sim_type/.
+test:
+  dt: 0.01
+  n_steps: 100
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
