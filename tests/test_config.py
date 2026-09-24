@@ -79,3 +79,4 @@ def test_main_cli_override(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert "ising.N=12" in result.stdout
     assert "test.dt=0.05" in result.stdout
+    assert (tmp_path / "checkpoint.npz").is_file()

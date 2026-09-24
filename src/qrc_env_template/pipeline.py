@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from omegaconf import DictConfig
 
+from qrc_env_template.checkpoint import save_checkpoint
 from qrc_env_template.evaluation import Evaluator, get_evaluator
 from qrc_env_template.models import HamiltonianModel, get_model
 from qrc_env_template.training import Trainer, get_trainer
@@ -57,7 +58,9 @@ def run_pipeline(cfg: DictConfig) -> str:
 
     Returns:
         One status line naming the model, trainer, ``dt``, ``n_steps``,
-        and the evaluator report. No trajectory tensor is allocated.
+        the evaluator report, and the checkpoint path. No trajectory
+        tensor is allocated. The checkpoint directory comes from
+        ``cfg.checkpoint``.
     """
     plan = resolve_pipeline(cfg)
     model = plan.model.from_config(cfg)
@@ -69,9 +72,17 @@ def run_pipeline(cfg: DictConfig) -> str:
         training_status=training_status,
         cfg=cfg,
     )
+    saved = save_checkpoint(
+        cfg,
+        model=model,
+        trainer=trainer,
+        evolution=evolution,
+        training_status=training_status,
+    )
     return (
         f"model={model.name} training={trainer.name} "
-        f"dt={evolution['dt']} n_steps={evolution['n_steps']} {report}"
+        f"dt={evolution['dt']} n_steps={evolution['n_steps']} {report} "
+        f"checkpoint={saved}"
     )
 
 
