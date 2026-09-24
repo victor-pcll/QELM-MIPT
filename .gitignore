@@ -1,0 +1,68 @@
+# =========================
+# 1. Environnement uv / Python
+# =========================
+# On ignore les environnements virtuels (uv crée le dossier .venv par défaut)
+.venv/
+venv/
+env/
+
+# Fichiers compilés Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# =========================
+# 2. Jupyter Notebooks
+# =========================
+.ipynb_checkpoints/
+# (Optionnel) Ignorer les outputs de notebooks si on utilise des outils comme nbstripout
+# *.ipynb
+
+# =========================
+# 3. Données Scientifiques & Simulations (TRÈS IMPORTANT)
+# =========================
+# On ne pousse JAMAIS les gros fichiers de données sur Git
+*.hdf5
+*.h5
+*.npy
+*.npz
+*.dat
+*.csv
+*.parquet
+*.pkl
+
+# Ignorer le contenu des dossiers de données de travail (mais garder les dossiers eux-mêmes)
+# Si tu crées un dossier "data/", dé-commente la ligne suivante :
+# data/*
+# !data/.gitkeep  # (permet de garder le dossier vide sur Git)
+
+# =========================
+# 4. Logs et résultats de calculs
+# =========================
+*.log
+*.out
+*.err
+outputs/
+results/
+
+# =========================
+# 5. Outils de dev (tests, ruff, etc.)
+# =========================
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# =========================
+# 6. Fichiers Système / IDE
+# =========================
+# Mac (essentiel pour toi)
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Éditeurs de code (VS Code, PyCharm, etc.)
+.vscode/
+.idea/
+*.swp
