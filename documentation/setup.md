@@ -18,6 +18,6 @@ From the repository root:
 uv sync
 ```
 
-`uv sync` creates `.venv`, installs the package, and installs the `dev` group (Ruff, Mypy, and pytest). Run project commands with `uv run` so they use that environment.
+`uv sync` creates `.venv`, installs the package, and installs the `dev` group (Ruff, Mypy, pytest, ipykernel, and Matplotlib). Run project commands with `uv run` so they use that environment. The series notebook uses that kernel; see [Running](running.md).
 
 Add a dependency with `uv add`.
