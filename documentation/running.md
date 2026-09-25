@@ -24,3 +24,7 @@ uv run python main.py checkpoint.dir=/tmp/qrc-run checkpoint.use_uuid=true
 ```
 
 `training=ridge` and `evaluation=default` match the defaults in `conf/config.yaml`. `training=readout` selects `Readout`. `evaluation=default` is the only registered evaluator. An unknown `sim_type`, trainer name, or evaluator name raises `KeyError`.
+
+## Notebook
+
+From the repository root, run `uv sync`, then open `notebooks/series.ipynb`. When `data/series.npy` is a 1D or 2D numeric array, the notebook writes `outputs/series.png`. Both paths are gitignored. That figure is the local file. `evolve` stays a scaffold and is not a plot of the dynamics.

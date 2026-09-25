@@ -12,6 +12,7 @@
 | `src/qrc_env_template/seed.py` | Reads `seed` from the composed config |
 | `src/qrc_env_template/selection.py` | Loads `.env` and formats the selection line |
 | `data/` | Local datasets. Gitignored, and not created by the package |
+| `notebooks/series.ipynb` | Plots a local `data/series.npy` into `outputs/series.png` |
 | `tests/` | pytest |
 
 Import the library as `qrc_env_template`.

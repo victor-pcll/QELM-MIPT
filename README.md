@@ -27,6 +27,7 @@ uv sync
 | `src/qrc_env_template/models/` | Hamiltonians and time evolution (Ising, Kitaev scaffolds) |
 | `src/qrc_env_template/training/` | Training algorithms (Readout, Ridge scaffolds) |
 | `src/qrc_env_template/evaluation/` | Metrics and plot scaffolds |
+| `notebooks/series.ipynb` | Plot a local series from `data/`; the library call stays a scaffold |
 | `main.py` | Entrypoint. Routes sim type → model → training → evaluation |
 
 ## Run the pipeline
@@ -39,6 +40,18 @@ uv run python main.py sim_type=ising ising.N=12 test.dt=0.05
 ```
 
 `sim_type=ising` selects `conf/sim_type/ising.yaml` and the Ising model. `training=ridge` (default) or `training=readout` selects the trainer. `N`, `J`, `learning_rate`, and `dt` stay in YAML or CLI overrides.
+
+## Notebook
+
+From the repository root:
+
+```bash
+uv sync
+```
+
+Then open `notebooks/series.ipynb`. `uv sync` installs `ipykernel` and Matplotlib from the dev group, so the kernel can use `.venv`.
+
+The notebook reads `data/series.npy` (a 1D or 2D numeric array) and, when that file is present, writes `outputs/series.png`. Both directories are gitignored. The figure is the local file, not the Ising trajectory.
 
 ## Data and checkpoints
 
