@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from omegaconf import OmegaConf
 
-from QELM.models.base import EvolutionState, HamiltonianModel
+from QELM.models.base import EvolutionState, HamiltonianModel, evolution_request
 from QELM.models.TFIM import TransverseFieldIsingModel
 
 # =====================================================================
@@ -105,13 +105,14 @@ def test_base_class_raises_not_implemented():
         base_model.hamiltonian()
 
 
-def test_base_class_evolve_scaffold():
-    """Vérifie le comportement de la méthode stub evolve()."""
+def test_evolution_request_scaffold():
+    """``evolution_request`` enregistre dt et n_steps sans intégrer."""
     base_model = HamiltonianModel({"N": 2})
-    state: EvolutionState = base_model.evolve(dt=0.1, n_steps=10)
+    state: EvolutionState = evolution_request(base_model, dt=0.1, n_steps=10)
 
     assert state["dt"] == 0.1
     assert state["n_steps"] == 10
+    assert state["model"] == "base"
     assert state["status"] == "scaffold"
 
 
