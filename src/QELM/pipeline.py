@@ -9,6 +9,7 @@ from omegaconf import DictConfig
 from QELM.checkpoint import save_checkpoint
 from QELM.evaluation import Evaluator, get_evaluator
 from QELM.models import HamiltonianModel, get_model
+from QELM.seed import make_rng
 from QELM.training import Trainer, get_trainer
 
 
@@ -54,7 +55,9 @@ def run_pipeline(cfg: DictConfig) -> str:
     Args:
         cfg: Composed Hydra config. ``cfg.test.dt`` is a scalar step size
             and ``cfg.test.n_steps`` is a scalar step count. ``N``, ``J``,
-            and ``learning_rate`` stay on the simulation block.
+            and ``learning_rate`` stay on the simulation block. The model
+            draws its disorder from ``make_rng(cfg)``, so ``cfg.seed``
+            fixes it.
 
     Returns:
         One status line naming the model, trainer, ``dt``, ``n_steps``,
@@ -63,7 +66,7 @@ def run_pipeline(cfg: DictConfig) -> str:
         ``cfg.checkpoint``.
     """
     plan = resolve_pipeline(cfg)
-    model = plan.model.from_config(cfg)
+    model = plan.model.from_config(cfg, rng=make_rng(cfg))
     trainer = plan.trainer.from_config(cfg)
     evolution = model.evolve(dt=float(cfg.test.dt), n_steps=int(cfg.test.n_steps))
     training_status = trainer.fit(features=None, targets=None)

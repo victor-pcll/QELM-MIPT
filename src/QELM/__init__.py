@@ -2,7 +2,7 @@
 
 from QELM.models import TransverseFieldIsingModel
 from QELM.pipeline import resolve_pipeline, run_pipeline
-from QELM.seed import set_seed
+from QELM.seed import make_rng, set_seed, spawn_rngs
 
 
 def hello() -> str:
@@ -17,7 +17,9 @@ def hello() -> str:
 __all__ = [
     "TransverseFieldIsingModel",
     "hello",
+    "make_rng",
     "resolve_pipeline",
     "run_pipeline",
     "set_seed",
+    "spawn_rngs",
 ]

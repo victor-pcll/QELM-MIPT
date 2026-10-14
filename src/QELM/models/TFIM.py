@@ -22,21 +22,29 @@ class TransverseFieldIsingModel(HamiltonianModel):
 
     name = "TFIM"
 
-    def __init__(self, params: Mapping[str, Any]) -> None:
+    def __init__(
+        self,
+        params: Mapping[str, Any],
+        rng: np.random.Generator | None = None,
+    ) -> None:
         """Store the parameters and draw the disorder.
 
         Args:
             params: ``N`` (number of qubits), ``J`` (coupling scale) and
                 ``h`` (transverse field), as scalars from YAML.
+            rng: Generator the couplings are drawn from. It moves forward,
+                so the next model built from it gets new couplings. ``None``
+                uses NumPy's global generator, seeded by ``set_seed``.
         """
-        super().__init__(params)
+        super().__init__(params, rng)
         self.J = float(params["J"])
         self.h = float(params["h"])
-        # Drawn from NumPy's global generator, seeded by ``set_seed``. Only
-        # i < j entries are used.
-        self.J_matrix: np.ndarray = np.random.uniform(
-            -self.J / 2, self.J / 2, size=(self.N, self.N)
-        )
+        # Only i < j entries are used.
+        low, high, shape = -self.J / 2, self.J / 2, (self.N, self.N)
+        if rng is None:
+            self.J_matrix: np.ndarray = np.random.uniform(low, high, size=shape)
+        else:
+            self.J_matrix = rng.uniform(low, high, size=shape)
 
     def hamiltonian(self) -> np.ndarray:
         """Build the dense Hamiltonian.

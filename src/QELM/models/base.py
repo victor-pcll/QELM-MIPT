@@ -35,29 +35,44 @@ class HamiltonianModel:
             ``N`` and ``J``.
         N: Number of qubits.
         dim: Hilbert-space dimension, ``2**N``.
+        rng: Generator for random parameters such as disorder, or ``None``
+            to use NumPy's global generator.
     """
 
     name: str = "base"
 
-    def __init__(self, params: Mapping[str, Any]) -> None:
+    def __init__(
+        self,
+        params: Mapping[str, Any],
+        rng: np.random.Generator | None = None,
+    ) -> None:
         """Store scalar Hamiltonian parameters.
 
         Args:
             params: Parameter names mapped to scalar values from YAML.
                 ``N`` is required.
+            rng: Generator the model draws its random parameters from. Pass
+                the same one to every model of a run (see
+                ``QELM.seed.make_rng``) to get a new, reproducible
+                realisation per model. ``None`` falls back to NumPy's global
+                generator, seeded by ``set_seed``.
         """
+        self.rng: np.random.Generator | None = rng
         self.params: dict[str, Any] = dict(params)
         self.N: int = int(params["N"])
         self.dim: int = 2**self.N
         self._H: np.ndarray | None = None
 
     @classmethod
-    def from_config(cls, cfg: DictConfig) -> Self:
+    def from_config(
+        cls, cfg: DictConfig, rng: np.random.Generator | None = None
+    ) -> Self:
         """Build the model from the Hydra block named ``cls.name``.
 
         Args:
             cfg: Composed Hydra config. ``cfg[cls.name]`` is a mapping of
                 scalar parameters.
+            rng: Generator passed to the constructor. See ``__init__``.
 
         Returns:
             An instance of this model class.
@@ -76,7 +91,7 @@ class HamiltonianModel:
         if not isinstance(raw, dict):
             raise TypeError(f"{cls.name} config must be a mapping.")
         params = {str(key): value for key, value in raw.items()}
-        return cls(params)
+        return cls(params, rng=rng)
 
     def hamiltonian(self) -> np.ndarray:
         """Return the Hamiltonian matrix for ``self.params``.
