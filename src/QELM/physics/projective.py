@@ -112,4 +112,4 @@ class ProjectiveMeasurement(Readout):
         outcomes = np.empty(len(qubits), dtype=np.float64)
         for k, q in enumerate(qubits):
             rho, outcomes[k] = measure_projective_rho(rho, q, N, rng)
-        return ReadoutResult(values=outcomes, rho=rho)
+        return ReadoutResult(outcomes=outcomes, rho=rho)

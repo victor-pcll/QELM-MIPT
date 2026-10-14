@@ -1,4 +1,4 @@
-"""Tests des mesures projectives et de l'interface Readout commune."""
+"""Tests des mesures projectives et de la classe Readout commune."""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ def test_basis_states_are_deterministic() -> None:
     readout = ProjectiveMeasurement({})
     for _ in range(20):
         result = readout.measure(rho, rng)
-        np.testing.assert_array_equal(result.values, [-1, 1, -1])
+        np.testing.assert_array_equal(result.outcomes, [-1, 1, -1])
         np.testing.assert_allclose(result.rho, rho)
 
 
@@ -114,7 +114,7 @@ def test_bell_state_outcomes_are_correlated() -> None:
     n = 5000
     rng = np.random.default_rng(5)
     readout = ProjectiveMeasurement({})
-    outcomes = np.array([readout.measure(BELL, rng).values for _ in range(n)])
+    outcomes = np.array([readout.measure(BELL, rng).outcomes for _ in range(n)])
     np.testing.assert_array_equal(outcomes[:, 0], outcomes[:, 1])
     frac = np.mean(outcomes[:, 0] == 1)
     assert abs(frac - 0.5) < 5 * np.sqrt(0.25 / n)
@@ -133,7 +133,7 @@ def test_same_seed_gives_same_outcomes() -> None:
     readout = ProjectiveMeasurement({})
     a = readout.measure(rho, np.random.default_rng(42))
     b = readout.measure(rho, np.random.default_rng(42))
-    np.testing.assert_array_equal(a.values, b.values)
+    np.testing.assert_array_equal(a.outcomes, b.outcomes)
     np.testing.assert_array_equal(a.rho, b.rho)
 
 
@@ -142,9 +142,9 @@ def test_global_rng_is_used_without_generator() -> None:
     rho = _random_rho(4, 8)
     readout = ProjectiveMeasurement({})
     np.random.seed(123)
-    a = readout.measure(rho).values
+    a = readout.measure(rho).outcomes
     np.random.seed(123)
-    b = readout.measure(rho).values
+    b = readout.measure(rho).outcomes
     np.testing.assert_array_equal(a, b)
 
 
@@ -155,7 +155,7 @@ def test_selected_qubits_are_measured_in_order() -> None:
     result = ProjectiveMeasurement({"qubits": [2, 0]}).measure(
         _pure(psi), np.random.default_rng(0)
     )
-    np.testing.assert_array_equal(result.values, [1, -1])
+    np.testing.assert_array_equal(result.outcomes, [1, -1])
 
 
 def test_invalid_arguments_are_rejected() -> None:
@@ -165,20 +165,18 @@ def test_invalid_arguments_are_rejected() -> None:
         measure_projective_rho(BELL, 0, N=3)
 
 
-def test_observables_share_the_readout_interface() -> None:
-    """Les observables sont des Readout : measure renvoie <O> et rho intact."""
-    obs = SingleObservable({"observable": "Z"})
-    assert isinstance(obs, Readout)
-    result = obs.measure(BELL)
-    np.testing.assert_allclose(result.values, [0, 0], atol=1e-12)
-    assert result.rho is BELL
+def test_observables_are_not_readouts() -> None:
+    """Observables (ce qu'on mesure) et readouts (comment on mesure) sont séparés."""
+    assert not issubclass(SingleObservable, Readout)
+    assert not issubclass(DoubleObservable, Readout)
+    assert issubclass(ProjectiveMeasurement, Readout)
 
 
 def test_registry_and_config() -> None:
     """get_readout et from_config retrouvent chaque type de readout."""
     assert get_readout("projective_measurement") is ProjectiveMeasurement
-    assert get_readout("double_observable") is DoubleObservable
-    with pytest.raises(KeyError, match="Unknown readout"):
-        get_readout("weak")
+    for name in ("weak", "single_observable"):
+        with pytest.raises(KeyError, match="Unknown readout"):
+            get_readout(name)
     cfg = OmegaConf.create({"projective_measurement": {"qubits": [1]}})
     assert ProjectiveMeasurement.from_config(cfg).qubits == [1]

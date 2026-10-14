@@ -1,4 +1,9 @@
-"""Physics building blocks: operators, readouts and measurements."""
+"""Physics building blocks.
+
+Readouts (:class:`Readout`) are ways of measuring the state, such as
+projective measurement. Observables (:class:`Observables`) are what is
+computed from the state, such as ``Tr(Z_i rho)`` on every qubit.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +12,6 @@ from QELM.physics.projective import ProjectiveMeasurement, measure_projective_rh
 from QELM.physics.readout import Readout, ReadoutResult
 
 _READOUTS: dict[str, type[Readout]] = {
-    SingleObservable.name: SingleObservable,
-    DoubleObservable.name: DoubleObservable,
     ProjectiveMeasurement.name: ProjectiveMeasurement,
 }
 
@@ -17,8 +20,7 @@ def get_readout(name: str) -> type[Readout]:
     """Return the readout class for a config key.
 
     Args:
-        name: Readout name such as ``"single_observable"`` or
-            ``"projective_measurement"``.
+        name: Readout name such as ``"projective_measurement"``.
 
     Returns:
         The matching :class:`Readout` subclass.

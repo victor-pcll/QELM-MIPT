@@ -1,11 +1,13 @@
-"""Common interface for every way of reading the reservoir state.
+"""Common interface for the ways of measuring the reservoir state.
 
-A readout takes a density matrix ``rho`` and returns a
-:class:`ReadoutResult`: the measured values and the state after the
-measurement. Expectation values (:mod:`QELM.physics.observables`) leave
-``rho`` unchanged. Projective measurements
-(:mod:`QELM.physics.projective`) draw a random outcome and collapse
-``rho``.
+A readout is a measurement scheme: projective measurement
+(:mod:`QELM.physics.projective`), and later weak measurement. It acts on a
+density matrix ``rho`` and returns a :class:`ReadoutResult`: the random
+outcomes and the state after the measurement back-action.
+
+Readouts are distinct from observables (:mod:`QELM.physics.observables`),
+which say *what* is computed from a state, such as ``Tr(Z_i rho)`` on every
+qubit, without disturbing it.
 """
 
 from __future__ import annotations
@@ -23,18 +25,18 @@ class ReadoutResult:
     """Output of one readout.
 
     Attributes:
-        values: Real array of shape ``(n_values,)``: expectation values or
-            measurement outcomes.
-        rho: Density matrix of shape ``(2**N, 2**N)`` after the readout.
-            It is the input ``rho`` when the readout does not disturb it.
+        outcomes: Real array of shape ``(n_outcomes,)``, one entry per
+            measurement performed.
+        rho: Density matrix of shape ``(2**N, 2**N)`` after the
+            measurement back-action.
     """
 
-    values: np.ndarray
+    outcomes: np.ndarray
     rho: np.ndarray
 
 
 class Readout:
-    """Base class for readouts configured from a Hydra block.
+    """Base class for measurement schemes configured from a Hydra block.
 
     Attributes:
         name: Config key for this readout; ``from_config`` reads
@@ -79,16 +81,16 @@ class Readout:
     def measure(
         self, rho: np.ndarray, rng: np.random.Generator | None = None
     ) -> ReadoutResult:
-        """Read ``rho``.
+        """Measure ``rho`` and apply the back-action.
 
         Args:
             rho: Density matrix of shape ``(2**N, 2**N)``.
-            rng: Random generator for stochastic readouts. ``None`` uses
-                the global ``numpy.random`` state seeded by
-                :func:`QELM.seed.set_seed`. Deterministic readouts ignore it.
+            rng: Random generator for the outcomes. ``None`` uses the
+                global ``numpy.random`` state seeded by
+                :func:`QELM.seed.set_seed`.
 
         Returns:
-            The measured values and the post-measurement state.
+            The outcomes and the post-measurement state.
 
         Raises:
             NotImplementedError: In this base class.
