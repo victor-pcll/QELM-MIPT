@@ -6,7 +6,6 @@ from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
-import scipy
 
 from QELM.models.base import HamiltonianModel
 from QELM.physics.operators import X, Z, get_site_operator
@@ -57,5 +56,5 @@ class TransverseFieldIsingModel(HamiltonianModel):
                 Xj = get_site_operator(X, j, self.N)
                 H += self.J_matrix[i, j] * (Xi @ Xj)
 
-        self._H = scipy.sparse.csr_matrix(H)
+        self._H = H
         return H
