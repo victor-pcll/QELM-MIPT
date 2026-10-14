@@ -8,9 +8,18 @@ defaults:
 # Scalar seed applied once at startup. Override with seed=0 on the command line.
 seed: 42
 
-test:
-  dt: 0.01
-  n_steps: 100
+# The evolution block (test.t, test.dt, test.n_steps) depends on the
+# Hamiltonian, so it lives in conf/sim_type/ next to it.
+
+# Samples. Not read by the pipeline yet.
+samples:
+  L: 10000 # number of samples
+  train_fraction: 0.7
+  train_size: ${int:${mul:${samples.train_fraction},${samples.L}}} # int(0.7 * L)
+
+# Dynamic readout. Not read by the pipeline yet.
+dynamic_readout:
+  p: 0.01
 
 # Checkpoint written at the end of every run. No secrets belong here.
 # dir: null uses Hydra's timestamped run directory when a job is active,
