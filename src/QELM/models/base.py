@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any, Self, TypedDict
 
 import numpy as np
+import scipy.linalg
 from omegaconf import DictConfig, OmegaConf
 
 
@@ -108,3 +109,41 @@ class HamiltonianModel:
             "n_steps": n_steps,
             "status": "scaffold",
         }
+
+    def propagator(self, *, dt: float) -> np.ndarray:
+        """Return the unitary ``U(dt) = exp(-i H dt)``, with ``hbar = 1``.
+
+        Args:
+            dt: Scalar evolution time.
+
+        Returns:
+            Complex unitary matrix of shape ``(dim, dim)``.
+        """
+        H = self._H if self._H is not None else self.hamiltonian()
+        return np.asarray(scipy.linalg.expm(-1j * dt * H))
+
+    def evolve_state(self, *, dt: float, psi: np.ndarray) -> np.ndarray:
+        """Evolve a pure state: ``psi(dt) = U(dt) psi``.
+
+        Args:
+            dt: Scalar evolution time.
+            psi: State vector of shape ``(dim,)``, or several states as the
+                columns of an array of shape ``(dim, n_states)``.
+
+        Returns:
+            Evolved state(s), with the same shape as ``psi``.
+        """
+        return self.propagator(dt=dt) @ psi
+
+    def evolve_density(self, *, dt: float, rho: np.ndarray) -> np.ndarray:
+        """Evolve a density matrix: ``rho(dt) = U(dt) rho U(dt)^dagger``.
+
+        Args:
+            dt: Scalar evolution time.
+            rho: Density matrix of shape ``(dim, dim)``.
+
+        Returns:
+            Evolved density matrix of shape ``(dim, dim)``.
+        """
+        U = self.propagator(dt=dt)
+        return U @ rho @ U.conj().T
