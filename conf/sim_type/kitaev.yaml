@@ -5,3 +5,8 @@
 sim_type: kitaev
 kitaev:
   N: 4
+
+# Evolution step and step count passed to evolve.
+test:
+  dt: 0.01
+  n_steps: 100

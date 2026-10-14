@@ -2,9 +2,21 @@
 
 # Transverse-field Ising model: H = h * sum_i Z_i + sum_{i<j} J_ij X_i X_j,
 # with J_ij uniform in [-J/2, J/2]. Add another file in this directory to add a sim type.
+# ${mul:...}, ${div:...} and ${int:...} are defined in src/QELM/resolvers.py.
+# Derived values follow their source (TFIM.J=2 rescales h, t and dt) and can
+# still be overridden directly (TFIM.h=5).
 sim_type: TFIM
+
+# Hamiltonian
 TFIM:
   N: 10 # number of qubits
-  J: 1.0 # coupling scale
-  h: 1.0 # transverse field
+  J: 1.0 # coupling scale Js, the energy unit
+  h: ${mul:10.0,${TFIM.J}} # transverse field, h = 10 Js
+  R: 10 # number of random Hamiltonians (disorder realisations)
   learning_rate: 1.0e-3
+
+# Unitary evolution, read by the pipeline as evolve(dt, n_steps).
+test:
+  t: ${div:10.0,${TFIM.J}} # total evolution time, t = 10 / Js
+  n_steps: ${mul:4,${TFIM.N}} # d, number of time cuts, d = 4 N
+  dt: ${div:${test.t},${test.n_steps}} # step, dt = t / d

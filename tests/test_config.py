@@ -43,8 +43,8 @@ def test_config_loads_and_cli_overrides_apply() -> None:
     default = _compose()
     chosen = _compose(OVERRIDES)
 
-    assert set(chosen.TFIM.keys()) == {"N", "J", "h", "learning_rate"}
-    assert set(chosen.test.keys()) == {"dt", "n_steps"}
+    assert set(chosen.TFIM.keys()) == {"N", "J", "h", "R", "learning_rate"}
+    assert set(chosen.test.keys()) == {"t", "n_steps", "dt"}
     assert chosen.sim_type == "TFIM"
     assert chosen.TFIM.N == 12
     assert chosen.test.dt == 0.05
@@ -52,7 +52,8 @@ def test_config_loads_and_cli_overrides_apply() -> None:
     assert chosen.test.dt != default.test.dt
     assert chosen.TFIM.J == default.TFIM.J
     assert chosen.TFIM.learning_rate == default.TFIM.learning_rate
-    assert chosen.test.n_steps == default.test.n_steps
+    # n_steps = 4 N follows the TFIM.N override.
+    assert chosen.test.n_steps == 4 * chosen.TFIM.N
 
     text = format_selection(chosen)
     assert "sim_type=TFIM" in text
