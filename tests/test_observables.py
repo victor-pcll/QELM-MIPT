@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from omegaconf import OmegaConf
 
-from QELM.physics.observables import DoubleObservable, SingleObservable
+from QELM.training.readout import DoubleObservable, SingleObservable
 
 
 def _product_state(single: np.ndarray, N: int) -> np.ndarray:

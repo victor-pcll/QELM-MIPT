@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from omegaconf import OmegaConf
 
-from QELM.physics import (
+from QELM.training import (
     DoubleObservable,
     ProjectiveMeasurement,
     Readout,

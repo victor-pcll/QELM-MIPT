@@ -6,7 +6,7 @@ from hydra.core.global_hydra import GlobalHydra
 from QELM.evaluation import evaluate
 from QELM.models import KitaevModel, TransverseFieldIsingModel
 from QELM.pipeline import resolve_pipeline, run_pipeline
-from QELM.training import Readout, RidgeRegression
+from QELM.training import LinearReadout, RidgeRegression
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_DIR = REPO_ROOT / "conf"
@@ -36,7 +36,7 @@ def test_dispatcher_resolves_config_to_modules() -> None:
 
     kitaev = resolve_pipeline(_compose(["sim_type=kitaev", "training=readout"]))
     assert kitaev.model is KitaevModel
-    assert kitaev.trainer is Readout
+    assert kitaev.trainer is LinearReadout
     assert kitaev.evaluator is evaluate
 
 
