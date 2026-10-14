@@ -85,3 +85,29 @@ class Trainer:
             Mapping whose ``weights`` entry is the trainable state.
         """
         return {"weights": np.zeros((0,), dtype=np.float64)}
+
+class Observables:
+    """Scaffold for recording observables.
+
+    Attributes:
+        name: Config key for this observable.
+    """
+
+    name: str
+
+    def __init__(self) -> None:
+        """No state is stored in the scaffold."""
+        pass
+
+    @classmethod
+    def from_config(cls, cfg: DictConfig) -> Self:
+        """Build the observable from the Hydra block named ``cls.name``.
+
+        Args:
+            cfg: Composed Hydra config. ``cfg[cls.name]`` is a mapping of
+                scalar parameters.
+
+        Returns:
+            An instance of this observable class.
+        """
+        return cls()
