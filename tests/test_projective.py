@@ -50,11 +50,11 @@ def test_collapsed_state_is_a_density_matrix(seed: int, qubit: int) -> None:
 
 @pytest.mark.parametrize("seed", range(3))
 def test_collapse_projects_the_measured_qubit(seed: int) -> None:
-    """<Z_q> vaut -mi après la mesure (outcome 0 <-> |0>, Z=+1 ; mi=-1)."""
+    """<Z_q> vaut mi après la mesure : mi est la valeur propre de Z obtenue."""
     rho = _random_rho(3, seed)
     out, mi = measure_projective_rho(rho, 1, rng=np.random.default_rng(seed))
     z1 = SingleObservable({"observable": "Z"}).expectation(out)[1]
-    np.testing.assert_allclose(z1, -mi, atol=1e-12)
+    np.testing.assert_allclose(z1, mi, atol=1e-12)
 
 
 def test_remeasuring_gives_the_same_outcome() -> None:
@@ -69,9 +69,9 @@ def test_remeasuring_gives_the_same_outcome() -> None:
 
 
 def test_basis_states_are_deterministic() -> None:
-    """|0> donne toujours mi=-1 et |1> toujours mi=+1, sans changer l'état."""
+    """|0> donne toujours mi=+1 et |1> toujours mi=-1, sans changer l'état."""
     rng = np.random.default_rng(0)
-    for rho, expected in ((ZERO, -1), (ONE, 1)):
+    for rho, expected in ((ZERO, 1), (ONE, -1)):
         for _ in range(50):
             out, mi = measure_projective_rho(rho, 0, rng=rng)
             assert mi == expected
@@ -82,13 +82,14 @@ def test_basis_states_are_deterministic() -> None:
     readout = ProjectiveMeasurement({})
     for _ in range(20):
         result = readout.measure(rho, rng)
-        np.testing.assert_array_equal(result.outcomes, [-1, 1, -1])
+        np.testing.assert_array_equal(result.outcomes, [1, -1, 1])
         np.testing.assert_allclose(result.rho, rho)
 
 
 def _frequency_of_one(rho: np.ndarray, qubit: int, n: int, seed: int) -> float:
+    """Fréquence du résultat |1>, soit mi = -1."""
     rng = np.random.default_rng(seed)
-    hits = sum(measure_projective_rho(rho, qubit, rng=rng)[1] == 1 for _ in range(n))
+    hits = sum(measure_projective_rho(rho, qubit, rng=rng)[1] == -1 for _ in range(n))
     return hits / n
 
 
@@ -109,6 +110,19 @@ def test_tilted_state_follows_born_rule() -> None:
     assert abs(_frequency_of_one(rho, 0, n, seed=4) - p1) < 5 * sigma
 
 
+@pytest.mark.parametrize("seed", range(2))
+def test_mean_outcome_matches_z_expectation(seed: int) -> None:
+    """La moyenne des mi sur n tirages tend vers <Z_i> = Tr(Z_i rho)."""
+    rho = _random_rho(2, seed)
+    z = SingleObservable({"observable": "Z"}).expectation(rho)
+    n = 20000
+    rng = np.random.default_rng(seed)
+    readout = ProjectiveMeasurement({})
+    mean = np.mean([readout.measure(rho, rng).outcomes for _ in range(n)], axis=0)
+    # Var(mi) = 1 - <Z>^2 <= 1, donc sigma <= 1 / sqrt(n) ; tolérance 5 sigma.
+    np.testing.assert_allclose(mean, z, atol=5 / np.sqrt(n))
+
+
 def test_bell_state_outcomes_are_correlated() -> None:
     """Bell : chaque qubit 50/50, et les deux résultats toujours égaux."""
     n = 5000
@@ -123,7 +137,7 @@ def test_bell_state_outcomes_are_correlated() -> None:
 def test_bell_collapse_gives_product_state() -> None:
     """Mesurer le qubit 0 d'un Bell laisse |00> ou |11>."""
     out, mi = measure_projective_rho(BELL, 0, rng=np.random.default_rng(0))
-    expected = _pure([1, 0, 0, 0]) if mi == -1 else _pure([0, 0, 0, 1])
+    expected = _pure([1, 0, 0, 0]) if mi == 1 else _pure([0, 0, 0, 1])
     np.testing.assert_allclose(out, expected, atol=1e-12)
 
 
@@ -155,7 +169,7 @@ def test_selected_qubits_are_measured_in_order() -> None:
     result = ProjectiveMeasurement({"qubits": [2, 0]}).measure(
         _pure(psi), np.random.default_rng(0)
     )
-    np.testing.assert_array_equal(result.outcomes, [1, -1])
+    np.testing.assert_array_equal(result.outcomes, [-1, 1])
 
 
 def test_invalid_arguments_are_rejected() -> None:

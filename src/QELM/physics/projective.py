@@ -35,7 +35,9 @@ def measure_projective_rho(
 
     Returns:
         ``(rho_collapsed, mi)``: the post-measurement density matrix of the
-        same shape, and ``mi = -1`` for outcome 0, ``mi = +1`` for outcome 1.
+        same shape, and the Z eigenvalue of the outcome: ``mi = +1`` for
+        ``|0>`` and ``mi = -1`` for ``|1>``, so the mean of ``mi`` is
+        ``<Z_i>``.
 
     Raises:
         ValueError: If ``rho`` is not a qubit density matrix, ``N`` does not
@@ -65,10 +67,10 @@ def measure_projective_rho(
     rho_collapsed = np.zeros_like(rho)
     if outcome == 0:
         rho_collapsed[np.ix_(mask_0, mask_0)] = rho[np.ix_(mask_0, mask_0)] / p0
-        mi = -1
+        mi = 1  # Z|0> = +|0>
     else:
         rho_collapsed[np.ix_(mask_1, mask_1)] = rho[np.ix_(mask_1, mask_1)] / p1
-        mi = 1
+        mi = -1  # Z|1> = -|1>
 
     return rho_collapsed, mi
 
@@ -104,7 +106,7 @@ class ProjectiveMeasurement(Readout):
                 ``numpy.random`` state.
 
         Returns:
-            Outcomes ``mi`` in ``{-1, +1}`` of shape ``(n_measured,)`` as
+            Z eigenvalues ``mi`` in ``{-1, +1}`` of shape ``(n_measured,)`` as
             ``float64``, and the state after every collapse.
         """
         N = n_qubits(rho)
