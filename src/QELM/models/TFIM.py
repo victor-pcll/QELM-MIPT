@@ -59,11 +59,3 @@ class TransverseFieldIsingModel(HamiltonianModel):
 
         self._H = scipy.sparse.csr_matrix(H)
         return H
-
-    def evolve_density(self, *, dt, rho):
-        U = scipy.linalg.expm(-1j * self.hamiltonian() * dt)
-        return U @ rho @ U.conj().T
-    
-    def evolve_state(self, *, dt, psi):
-        U = scipy.linalg.expm(-1j * self.hamiltonian() * dt)
-        return U @ psi
