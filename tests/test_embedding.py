@@ -15,18 +15,23 @@ from QELM.embedding import (
     charge_sector_state,
     get_embedding,
 )
+from QELM.models import TransverseFieldIsingModel
 
 NS = [2, 3, 4, 5, 6]
 
 
-def _rho_R(rho: np.ndarray, N: int) -> np.ndarray:
+# N total : 1 ancilla + N_S = N - 1 qubits de système.
+NS_TOTAL = [3, 4, 5, 6, 7]
+
+
+def _rho_R(rho: np.ndarray, N_S: int) -> np.ndarray:
     """Trace partielle sur S : état réduit de l'ancilla (site 0)."""
-    return np.einsum("aibi->ab", rho.reshape(2, 2**N, 2, 2**N))
+    return np.einsum("aibi->ab", rho.reshape(2, 2**N_S, 2, 2**N_S))
 
 
-def _rho_S(rho: np.ndarray, N: int) -> np.ndarray:
+def _rho_S(rho: np.ndarray, N_S: int) -> np.ndarray:
     """Trace partielle sur R : état réduit du système."""
-    return np.einsum("aiaj->ij", rho.reshape(2, 2**N, 2, 2**N))
+    return np.einsum("aiaj->ij", rho.reshape(2, 2**N_S, 2, 2**N_S))
 
 
 @pytest.mark.parametrize("N", NS)
@@ -51,14 +56,15 @@ def test_charge_sector_state_normalized(N: int) -> None:
     assert np.isclose(np.linalg.norm(charge_sector_state(N, N // 2)), 1.0)
 
 
-@pytest.mark.parametrize("N", NS)
+@pytest.mark.parametrize("N", NS_TOTAL)
 def test_ancilla_state_physical(N: int) -> None:
     emb = AncillaChargeSectorEmbedding({"N": N})
     psi = emb.state()
     rho = emb.density_matrix()
-    assert emb.n_qubits == N + 1
-    assert psi.shape == (2 ** (N + 1),)
-    assert rho.shape == (2 ** (N + 1), 2 ** (N + 1))
+    assert emb.N_S == N - 1
+    assert emb.dim == 2**N
+    assert psi.shape == (2**N,)
+    assert rho.shape == (2**N, 2**N)
     assert np.isclose(np.linalg.norm(psi), 1.0)
     assert np.isclose(np.trace(rho), 1.0)
     assert np.allclose(rho, rho.conj().T)
@@ -66,47 +72,49 @@ def test_ancilla_state_physical(N: int) -> None:
     assert np.all(np.linalg.eigvalsh(rho) > -1e-12)
 
 
-@pytest.mark.parametrize("N", NS)
+@pytest.mark.parametrize("N", NS_TOTAL)
 def test_ancilla_components_in_right_sector(N: int) -> None:
-    emb = AncillaChargeSectorEmbedding({"N": N})
-    psi = emb.state()
+    N_S = N - 1
+    psi = AncillaChargeSectorEmbedding({"N": N}).state()
     nonzero = np.flatnonzero(np.abs(psi) > 1e-12)
     for i in nonzero:
-        ancilla, system = divmod(int(i), 2**N)
-        expected = N // 2 if ancilla == 0 else N // 2 - 1
+        ancilla, system = divmod(int(i), 2**N_S)
+        expected = N_S // 2 if ancilla == 0 else N_S // 2 - 1
         assert bin(system).count("1") == expected
     # Chaque branche porte exactement le poids 1/2.
-    assert np.isclose(np.sum(np.abs(psi[: 2**N]) ** 2), 0.5)
-    assert np.isclose(np.sum(np.abs(psi[2**N :]) ** 2), 0.5)
-    assert nonzero.size == comb(N, N // 2) + comb(N, N // 2 - 1)
+    assert np.isclose(np.sum(np.abs(psi[: 2**N_S]) ** 2), 0.5)
+    assert np.isclose(np.sum(np.abs(psi[2**N_S :]) ** 2), 0.5)
+    assert nonzero.size == comb(N_S, N_S // 2) + comb(N_S, N_S // 2 - 1)
 
 
-@pytest.mark.parametrize("N", NS)
+@pytest.mark.parametrize("N", NS_TOTAL)
 def test_ancilla_reduced_states(N: int) -> None:
-    emb = AncillaChargeSectorEmbedding({"N": N})
-    rho = emb.density_matrix()
-    assert np.allclose(_rho_R(rho, N), np.eye(2) / 2)
-    q1 = charge_sector_state(N, N // 2)
-    q2 = charge_sector_state(N, N // 2 - 1)
+    N_S = N - 1
+    rho = AncillaChargeSectorEmbedding({"N": N}).density_matrix()
+    assert np.allclose(_rho_R(rho, N_S), np.eye(2) / 2)
+    q1 = charge_sector_state(N_S, N_S // 2)
+    q2 = charge_sector_state(N_S, N_S // 2 - 1)
     expected_S = (np.outer(q1, q1.conj()) + np.outer(q2, q2.conj())) / 2
-    assert np.allclose(_rho_S(rho, N), expected_S)
+    assert np.allclose(_rho_S(rho, N_S), expected_S)
 
 
-def test_ancilla_known_values_N2() -> None:
+def test_ancilla_known_values_N3() -> None:
+    # N = 3 : ancilla + 2 qubits de système.
     # (|0>(|01> + |10>)/sqrt(2) + |1>|00>) / sqrt(2)
-    psi = AncillaChargeSectorEmbedding({"N": 2}).state()
+    psi = AncillaChargeSectorEmbedding({"N": 3}).state()
     expected = np.zeros(8, dtype=complex)
     expected[[0b001, 0b010]] = 0.5
     expected[0b100] = 1 / np.sqrt(2)
     assert np.allclose(psi, expected)
 
 
-def test_ancilla_odd_N_charges() -> None:
-    emb = AncillaChargeSectorEmbedding({"N": 5})
-    assert (emb.Q1, emb.Q2) == (2, 1)
+def test_ancilla_odd_system_charges() -> None:
+    # N = 6 : N_S = 5, charges 2 et 1.
+    emb = AncillaChargeSectorEmbedding({"N": 6})
+    assert (emb.N_S, emb.Q1, emb.Q2) == (5, 2, 1)
 
 
-@pytest.mark.parametrize("N", [0, 1])
+@pytest.mark.parametrize("N", [0, 1, 2])
 def test_ancilla_rejects_small_N(N: int) -> None:
     with pytest.raises(ValueError):
         AncillaChargeSectorEmbedding({"N": N})
@@ -123,7 +131,7 @@ def test_from_config_and_registry() -> None:
     assert cls is AncillaChargeSectorEmbedding
     emb = cls.from_config(cfg)
     assert isinstance(emb, Embedding)
-    assert emb.N == 4 and emb.dim == 32
+    assert (emb.N, emb.N_S, emb.dim) == (4, 3, 16)
 
 
 def test_from_config_rejects_scalar() -> None:
@@ -137,8 +145,16 @@ def test_unknown_embedding() -> None:
         get_embedding("nope")
 
 
-def test_base_state_not_implemented() -> None:
+def test_base_without_ancilla() -> None:
     emb = Embedding({"N": 2})
-    assert emb.n_qubits == 2 and emb.dim == 4
+    assert (emb.N, emb.N_S, emb.dim) == (2, 2, 4)
     with pytest.raises(NotImplementedError):
         emb.state()
+
+
+def test_same_dimension_as_model() -> None:
+    # Le même N dans la config donne la même dimension que le modèle.
+    model = TransverseFieldIsingModel({"N": 4, "J": 1.0, "h": 0.5})
+    emb = AncillaChargeSectorEmbedding({"N": model.N})
+    assert emb.dim == model.dim
+    assert model.hamiltonian().shape == emb.density_matrix().shape
