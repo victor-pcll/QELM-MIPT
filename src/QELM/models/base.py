@@ -90,7 +90,7 @@ class HamiltonianModel:
         """
         raise NotImplementedError(f"{self.name} Hamiltonian is not implemented.")
 
-    def evolve(self, *, dt: float, n_steps: int) -> EvolutionState:
+    def evolve_state(self, *, dt: float, n_steps: int) -> EvolutionState:
         """Record a requested evolution without integrating it.
 
         Args:
