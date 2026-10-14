@@ -17,8 +17,8 @@ import numpy as np
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig
 
-from qrc_env_template.models.base import EvolutionState, HamiltonianModel
-from qrc_env_template.training.base import Trainer
+from QELM.models.base import EvolutionState, HamiltonianModel
+from QELM.training.base import Trainer
 
 _UNSET = frozenset({"", "null", "none", "???"})
 

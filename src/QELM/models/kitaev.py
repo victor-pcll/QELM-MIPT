@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from qrc_env_template.models.base import HamiltonianModel
+from QELM.models.base import HamiltonianModel
 
 
 class KitaevModel(HamiltonianModel):

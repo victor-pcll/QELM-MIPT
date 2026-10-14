@@ -1,15 +1,15 @@
-"""Linear readout scaffold."""
+"""Ridge regression scaffold."""
 
 from __future__ import annotations
 
-from qrc_env_template.training.base import Trainer
+from QELM.training.base import Trainer
 
 
-class Readout(Trainer):
-    """Reservoir readout.
+class RidgeRegression(Trainer):
+    """Ridge regression readout.
 
     ``fit`` accepts features of shape ``(n_samples, n_features)`` and does
     not estimate a weight vector.
     """
 
-    name = "readout"
+    name = "ridge"

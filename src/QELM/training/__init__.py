@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from qrc_env_template.training.base import Trainer
-from qrc_env_template.training.readout import Readout
-from qrc_env_template.training.ridge import RidgeRegression
+from QELM.training.base import Trainer
+from QELM.training.readout import Readout
+from QELM.training.ridge import RidgeRegression
 
 _TRAINERS: dict[str, type[Trainer]] = {
     Readout.name: Readout,

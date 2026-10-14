@@ -1,4 +1,4 @@
-from qrc_env_template import hello
+from QELM import hello
 
 
 def test_hello() -> None:

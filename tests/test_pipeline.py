@@ -3,10 +3,10 @@ from pathlib import Path
 from hydra import compose, initialize_config_dir
 from hydra.core.global_hydra import GlobalHydra
 
-from qrc_env_template.evaluation import evaluate
-from qrc_env_template.models import IsingModel, KitaevModel
-from qrc_env_template.pipeline import resolve_pipeline, run_pipeline
-from qrc_env_template.training import Readout, RidgeRegression
+from QELM.evaluation import evaluate
+from QELM.models import IsingModel, KitaevModel
+from QELM.pipeline import resolve_pipeline, run_pipeline
+from QELM.training import Readout, RidgeRegression
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_DIR = REPO_ROOT / "conf"

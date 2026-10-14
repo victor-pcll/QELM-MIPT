@@ -15,9 +15,9 @@ from __future__ import annotations
 import hydra
 from omegaconf import DictConfig
 
-from qrc_env_template.pipeline import run_pipeline
-from qrc_env_template.seed import set_seed
-from qrc_env_template.selection import format_selection, load_secrets
+from QELM.pipeline import run_pipeline
+from QELM.seed import set_seed
+from QELM.selection import format_selection, load_secrets
 
 
 @hydra.main(version_base="1.3", config_path="conf", config_name="config")

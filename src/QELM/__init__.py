@@ -1,7 +1,7 @@
 """QRC environment template."""
 
-from qrc_env_template.pipeline import resolve_pipeline, run_pipeline
-from qrc_env_template.seed import set_seed
+from QELM.pipeline import resolve_pipeline, run_pipeline
+from QELM.seed import set_seed
 
 
 def hello() -> str:

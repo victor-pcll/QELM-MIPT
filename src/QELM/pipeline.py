@@ -6,10 +6,10 @@ from dataclasses import dataclass
 
 from omegaconf import DictConfig
 
-from qrc_env_template.checkpoint import save_checkpoint
-from qrc_env_template.evaluation import Evaluator, get_evaluator
-from qrc_env_template.models import HamiltonianModel, get_model
-from qrc_env_template.training import Trainer, get_trainer
+from QELM.checkpoint import save_checkpoint
+from QELM.evaluation import Evaluator, get_evaluator
+from QELM.models import HamiltonianModel, get_model
+from QELM.training import Trainer, get_trainer
 
 
 @dataclass(frozen=True)
