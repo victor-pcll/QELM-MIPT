@@ -1,5 +1,5 @@
 defaults:
-  - sim_type: ising
+  - sim_type: TFIM
   - training: ridge
   - evaluation: default
   - _self_

@@ -12,7 +12,7 @@ from QELM.selection import format_selection
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_DIR = REPO_ROOT / "conf"
-OVERRIDES = ["sim_type=ising", "ising.N=12", "test.dt=0.05"]
+OVERRIDES = ["sim_type=TFIM", "TFIM.N=12", "test.dt=0.05"]
 
 
 def setup_function() -> None:
@@ -43,20 +43,20 @@ def test_config_loads_and_cli_overrides_apply() -> None:
     default = _compose()
     chosen = _compose(OVERRIDES)
 
-    assert set(chosen.ising.keys()) == {"N", "J", "h", "learning_rate"}
+    assert set(chosen.TFIM.keys()) == {"N", "J", "h", "learning_rate"}
     assert set(chosen.test.keys()) == {"dt", "n_steps"}
-    assert chosen.sim_type == "ising"
-    assert chosen.ising.N == 12
+    assert chosen.sim_type == "TFIM"
+    assert chosen.TFIM.N == 12
     assert chosen.test.dt == 0.05
-    assert chosen.ising.N != default.ising.N
+    assert chosen.TFIM.N != default.TFIM.N
     assert chosen.test.dt != default.test.dt
-    assert chosen.ising.J == default.ising.J
-    assert chosen.ising.learning_rate == default.ising.learning_rate
+    assert chosen.TFIM.J == default.TFIM.J
+    assert chosen.TFIM.learning_rate == default.TFIM.learning_rate
     assert chosen.test.n_steps == default.test.n_steps
 
     text = format_selection(chosen)
-    assert "sim_type=ising" in text
-    assert "ising.N=12" in text
+    assert "sim_type=TFIM" in text
+    assert "TFIM.N=12" in text
     assert "test.dt=0.05" in text
 
 
@@ -77,6 +77,6 @@ def test_main_cli_override(tmp_path: Path) -> None:
         env=env,
     )
     assert result.returncode == 0, result.stderr
-    assert "ising.N=12" in result.stdout
+    assert "TFIM.N=12" in result.stdout
     assert "test.dt=0.05" in result.stdout
     assert (tmp_path / "checkpoint.npz").is_file()

@@ -26,13 +26,13 @@ def _compose(overrides: list[str] | None = None):
 
 
 def test_dispatcher_resolves_config_to_modules() -> None:
-    ising = resolve_pipeline(
-        _compose(["sim_type=ising", "training=ridge", "evaluation=default"])
+    tfim = resolve_pipeline(
+        _compose(["sim_type=TFIM", "training=ridge", "evaluation=default"])
     )
-    assert ising.sim_type == "ising"
-    assert ising.model is TransverseFieldIsingModel
-    assert ising.trainer is RidgeRegression
-    assert ising.evaluator is evaluate
+    assert tfim.sim_type == "TFIM"
+    assert tfim.model is TransverseFieldIsingModel
+    assert tfim.trainer is RidgeRegression
+    assert tfim.evaluator is evaluate
 
     kitaev = resolve_pipeline(_compose(["sim_type=kitaev", "training=readout"]))
     assert kitaev.model is KitaevModel
@@ -44,8 +44,8 @@ def test_run_pipeline_uses_cli_overrides(tmp_path: Path) -> None:
     report = run_pipeline(
         _compose(
             [
-                "sim_type=ising",
-                "ising.N=12",
+                "sim_type=TFIM",
+                "TFIM.N=12",
                 "test.dt=0.05",
                 "training=readout",
                 f"checkpoint.dir={tmp_path}",
@@ -54,7 +54,7 @@ def test_run_pipeline_uses_cli_overrides(tmp_path: Path) -> None:
             ]
         )
     )
-    assert "model=ising" in report
+    assert "model=TFIM" in report
     assert "training=readout" in report
     assert "dt=0.05" in report
     assert "status=scaffold" in report

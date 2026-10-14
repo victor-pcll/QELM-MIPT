@@ -17,7 +17,7 @@ class PipelinePlan:
     """Classes and callables selected for one config.
 
     Attributes:
-        sim_type: Config key, such as ``"ising"`` or ``"kitaev"``.
+        sim_type: Config key, such as ``"TFIM"`` or ``"kitaev"``.
         model: Hamiltonian class for that simulation.
         trainer: Training class named by ``cfg.training.name``.
         evaluator: Callable named by ``cfg.evaluation.name``.

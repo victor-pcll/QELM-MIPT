@@ -76,7 +76,7 @@ def test_hamiltonian_determinism_and_fixed_disorder(
 
 def test_from_config_instantiation():
     """Vérifie que le constructeur alternatif from_config fonctionne avec OmegaConf."""
-    cfg = OmegaConf.create({"ising": {"N": 4, "J": 0.8, "h": 0.2}})
+    cfg = OmegaConf.create({"TFIM": {"N": 4, "J": 0.8, "h": 0.2}})
 
     model = TransverseFieldIsingModel.from_config(cfg)
     assert model.N == 4
@@ -86,7 +86,7 @@ def test_from_config_instantiation():
 
 def test_from_config_invalid_type_raises_error():
     """Vérifie qu'une erreur de type est levée si la sous-clé n'est pas un mapping."""
-    cfg = OmegaConf.create({"ising": "not_a_dictionary"})
+    cfg = OmegaConf.create({"TFIM": "not_a_dictionary"})
 
     with pytest.raises(TypeError, match="config must be a mapping"):
         TransverseFieldIsingModel.from_config(cfg)
@@ -115,8 +115,8 @@ def test_base_class_evolve_scaffold():
     assert state["status"] == "scaffold"
 
 
-def test_ising_yaml_builds_tfim_with_field():
-    """Le fichier conf/sim_type/ising.yaml construit un TFIM avec ``h``."""
+def test_tfim_yaml_builds_model_with_field():
+    """Le fichier conf/sim_type/TFIM.yaml construit un TFIM avec ``h``."""
     from pathlib import Path
 
     from hydra import compose, initialize_config_dir
@@ -127,7 +127,7 @@ def test_ising_yaml_builds_tfim_with_field():
     GlobalHydra.instance().clear()
     conf = Path(__file__).resolve().parents[1] / "conf"
     with initialize_config_dir(version_base="1.3", config_dir=str(conf)):
-        cfg = compose(config_name="config", overrides=["ising.N=3", "ising.h=0.7"])
+        cfg = compose(config_name="config", overrides=["TFIM.N=3", "TFIM.h=0.7"])
     GlobalHydra.instance().clear()
 
     model = get_model(str(cfg.sim_type)).from_config(cfg)

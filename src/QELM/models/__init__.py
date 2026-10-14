@@ -16,7 +16,7 @@ def get_model(sim_type: str) -> type[HamiltonianModel]:
     """Return the model class for a ``sim_type`` config value.
 
     Args:
-        sim_type: Scalar name such as ``"ising"`` or ``"kitaev"``.
+        sim_type: Scalar name such as ``"TFIM"`` or ``"kitaev"``.
 
     Returns:
         The matching :class:`HamiltonianModel` subclass.

@@ -36,10 +36,10 @@ Scientific parameters live in `conf/` and can be overridden from the command lin
 
 ```bash
 cp .env.example .env
-uv run python main.py sim_type=ising ising.N=12 test.dt=0.05
+uv run python main.py sim_type=TFIM TFIM.N=12 test.dt=0.05
 ```
 
-`sim_type=ising` selects `conf/sim_type/ising.yaml` and the Ising model. `training=ridge` (default) or `training=readout` selects the trainer. `N`, `J`, `learning_rate`, and `dt` stay in YAML or CLI overrides.
+`sim_type=TFIM` selects `conf/sim_type/TFIM.yaml` and the transverse-field Ising model. `training=ridge` (default) or `training=readout` selects the trainer. `N`, `J`, `learning_rate`, and `dt` stay in YAML or CLI overrides.
 
 ## Notebook
 
