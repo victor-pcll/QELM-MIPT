@@ -38,3 +38,16 @@ model = TransverseFieldIsingModel.from_config(cfg)
 ```
 
 From the repository root, run `uv sync`, then open `notebooks/series.ipynb`. When `data/series.npy` is a 1D or 2D numeric array, the notebook writes `outputs/series.png`. Both paths are gitignored. That figure is the local file. The pipeline still records the evolution as a scaffold, so that figure is not a plot of the dynamics.
+
+### Experimenting without blocking `git pull`
+
+The notebooks in `notebooks/` are templates tracked by git. To experiment, copy one into `notebooks/scratch/`, which is gitignored, and edit the copy:
+
+```bash
+mkdir -p notebooks/scratch
+cp notebooks/01-QELM-MIPT.ipynb notebooks/scratch/
+```
+
+`git pull` never touches that folder, so there is nothing to stash. Code changes in `src/` go on their own branch and become a pull request; `main` stays clean.
+
+The template notebooks start with `%load_ext autoreload` and `%autoreload 2`. `uv sync` installs `QELM` in editable mode, so after `git pull && uv sync` the running kernel picks up the new code in `src/` without a restart.
