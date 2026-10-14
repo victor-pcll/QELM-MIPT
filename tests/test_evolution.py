@@ -47,45 +47,33 @@ def test_propagator_composes(model: TransverseFieldIsingModel) -> None:
 def test_single_qubit_known_phase() -> None:
     """N=1 : H = h Z, donc |0> prend la phase exp(-i h dt)."""
     model = TransverseFieldIsingModel({"N": 1, "J": 1.0, "h": 0.5})
-    psi = model.evolve_state(dt=2.0, psi=np.array([1, 0], dtype=complex))
+    psi = model.evolve(dt=2.0, state=np.array([1, 0], dtype=complex))
     np.testing.assert_allclose(psi, [np.exp(-1j * 0.5 * 2.0), 0], atol=1e-12)
 
 
-def test_evolve_state_preserves_norm_and_energy(
+def test_evolve_psi_preserves_norm_and_energy(
     model: TransverseFieldIsingModel,
 ) -> None:
     """La norme et <H> sont conservées par l'évolution unitaire."""
     H = model.hamiltonian()
     psi0 = _random_state(model.dim)
-    psi = model.evolve_state(dt=1.3, psi=psi0)
+    psi = model.evolve(dt=1.3, state=psi0)
     assert psi.shape == psi0.shape
     assert np.linalg.norm(psi) == pytest.approx(1.0)
     assert np.vdot(psi, H @ psi).real == pytest.approx(np.vdot(psi0, H @ psi0).real)
 
 
-def test_evolve_state_accepts_columns_of_states(
-    model: TransverseFieldIsingModel,
-) -> None:
-    """Plusieurs états en colonnes évoluent chacun comme seuls."""
-    states = np.stack([_random_state(model.dim, s) for s in (1, 2)], axis=1)
-    evolved = model.evolve_state(dt=0.5, psi=states)
-    for k in range(2):
-        np.testing.assert_allclose(
-            evolved[:, k], model.evolve_state(dt=0.5, psi=states[:, k]), atol=1e-12
-        )
-
-
-def test_evolve_density_matches_pure_state(
+def test_evolve_rho_matches_pure_state(
     model: TransverseFieldIsingModel,
 ) -> None:
     """Pour rho = |psi><psi|, U rho U^dagger = |U psi><U psi|."""
     psi0 = _random_state(model.dim)
-    rho = model.evolve_density(dt=0.9, rho=np.outer(psi0, psi0.conj()))
-    psi = model.evolve_state(dt=0.9, psi=psi0)
+    rho = model.evolve(dt=0.9, state=np.outer(psi0, psi0.conj()))
+    psi = model.evolve(dt=0.9, state=psi0)
     np.testing.assert_allclose(rho, np.outer(psi, psi.conj()), atol=1e-12)
 
 
-def test_evolve_density_stays_a_density_matrix(
+def test_evolve_rho_stays_a_density_matrix(
     model: TransverseFieldIsingModel,
 ) -> None:
     """Trace 1, hermitienne et positive après évolution d'un état mixte."""
@@ -96,7 +84,42 @@ def test_evolve_density_stays_a_density_matrix(
             weights, (_random_state(model.dim, 1), _random_state(model.dim, 2))
         )
     )
-    rho = model.evolve_density(dt=1.1, rho=rho0)
+    rho = model.evolve(dt=1.1, state=rho0)
     assert np.trace(rho).real == pytest.approx(1.0)
     np.testing.assert_allclose(rho, rho.conj().T, atol=1e-12)
     assert np.linalg.eigvalsh(rho).min() > -1e-12
+
+
+def test_evolve_returns_the_kind_it_receives(
+    model: TransverseFieldIsingModel,
+) -> None:
+    """Un psi de forme (dim,) donne un psi, un rho de forme (dim, dim) un rho."""
+    psi0 = _random_state(model.dim)
+    psi = model.evolve(dt=0.4, state=psi0)
+    rho = model.evolve(dt=0.4, state=np.outer(psi0, psi0.conj()))
+    assert psi.shape == (model.dim,)
+    assert rho.shape == (model.dim, model.dim)
+    assert np.iscomplexobj(psi) and np.iscomplexobj(rho)
+
+
+def test_evolve_accepts_real_input(model: TransverseFieldIsingModel) -> None:
+    """Un |0...0> réel est promu en complexe, comme un psi complexe."""
+    psi0 = np.zeros(model.dim)
+    psi0[0] = 1.0
+    np.testing.assert_allclose(
+        model.evolve(dt=0.6, state=psi0),
+        model.evolve(dt=0.6, state=psi0.astype(complex)),
+        atol=1e-12,
+    )
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [(4,), (9,), (8, 1), (8, 3), (4, 4), (8, 8, 1), ()],
+)
+def test_evolve_rejects_wrong_shape(
+    model: TransverseFieldIsingModel, shape: tuple[int, ...]
+) -> None:
+    """Ni (dim,) ni (dim, dim) : erreur claire qui donne les formes attendues."""
+    with pytest.raises(ValueError, match=r"\(8,\).*\(8, 8\).*got shape"):
+        model.evolve(dt=0.1, state=np.zeros(shape, dtype=complex))

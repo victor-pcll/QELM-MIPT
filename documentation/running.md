@@ -37,4 +37,4 @@ set_seed(cfg)
 model = TransverseFieldIsingModel.from_config(cfg)
 ```
 
-From the repository root, run `uv sync`, then open `notebooks/series.ipynb`. When `data/series.npy` is a 1D or 2D numeric array, the notebook writes `outputs/series.png`. Both paths are gitignored. That figure is the local file. `evolve` stays a scaffold and is not a plot of the dynamics.
+From the repository root, run `uv sync`, then open `notebooks/series.ipynb`. When `data/series.npy` is a 1D or 2D numeric array, the notebook writes `outputs/series.png`. Both paths are gitignored. That figure is the local file. The pipeline still records the evolution as a scaffold, so that figure is not a plot of the dynamics.

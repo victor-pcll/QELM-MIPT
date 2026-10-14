@@ -84,25 +84,22 @@ def test_propagator_matches_dense(N: int) -> None:
 
 @pytest.mark.parametrize("dt", [0.0, 0.3, 2.5])
 @pytest.mark.parametrize("N", [2, 4, 6])
-def test_evolve_state_matches_dense(N: int, dt: float) -> None:
+def test_evolve_psi_matches_dense(N: int, dt: float) -> None:
     """expm_multiply sur H creux = expm(-i H_dense dt) @ psi."""
     model = _model(N)
     U = scipy.linalg.expm(-1j * dt * _dense_reference(model))
-    psi = _random_state(model.dim)
-    np.testing.assert_allclose(model.evolve_state(dt=dt, psi=psi), U @ psi, atol=1e-12)
-    states = np.stack([_random_state(model.dim, s) for s in (2, 3, 4)], axis=1)
-    np.testing.assert_allclose(
-        model.evolve_state(dt=dt, psi=states), U @ states, atol=1e-12
-    )
+    for seed in (1, 2, 3, 4):
+        psi = _random_state(model.dim, seed)
+        np.testing.assert_allclose(model.evolve(dt=dt, state=psi), U @ psi, atol=1e-12)
 
 
 @pytest.mark.parametrize("N", [2, 4, 6])
-def test_evolve_density_matches_dense(N: int) -> None:
+def test_evolve_rho_matches_dense(N: int) -> None:
     """U rho U^dagger sans former U = la version dense, état mixte inclus."""
     model = _model(N)
     U = scipy.linalg.expm(-1j * 1.1 * _dense_reference(model))
     p1, p2 = _random_state(model.dim, 1), _random_state(model.dim, 2)
     rho = 0.6 * np.outer(p1, p1.conj()) + 0.4 * np.outer(p2, p2.conj())
     np.testing.assert_allclose(
-        model.evolve_density(dt=1.1, rho=rho), U @ rho @ U.conj().T, atol=1e-12
+        model.evolve(dt=1.1, state=rho), U @ rho @ U.conj().T, atol=1e-12
     )

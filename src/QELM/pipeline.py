@@ -9,6 +9,7 @@ from omegaconf import DictConfig
 from QELM.checkpoint import save_checkpoint
 from QELM.evaluation import Evaluator, get_evaluator
 from QELM.models import HamiltonianModel, get_model
+from QELM.models.base import evolution_request
 from QELM.training import Trainer, get_trainer
 
 
@@ -65,7 +66,9 @@ def run_pipeline(cfg: DictConfig) -> str:
     plan = resolve_pipeline(cfg)
     model = plan.model.from_config(cfg)
     trainer = plan.trainer.from_config(cfg)
-    evolution = model.evolve(dt=float(cfg.test.dt), n_steps=int(cfg.test.n_steps))
+    evolution = evolution_request(
+        model, dt=float(cfg.test.dt), n_steps=int(cfg.test.n_steps)
+    )
     training_status = trainer.fit(features=None, targets=None)
     report = plan.evaluator(
         evolution=evolution,

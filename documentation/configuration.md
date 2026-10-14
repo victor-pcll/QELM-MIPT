@@ -27,7 +27,7 @@ Group files:
 | `conf/training/readout.yaml` | `name: readout` |
 | `conf/evaluation/default.yaml` | `name: default`, a list of metric names, and a plot name |
 
-`test.dt` and `test.n_steps` are passed to `evolve`. `TFIM.R` is not read by the code yet.
+`test.dt` and `test.n_steps` are recorded by `evolution_request` in the pipeline. `TFIM.R` is not read by the code yet.
 
 ## Derived values
 

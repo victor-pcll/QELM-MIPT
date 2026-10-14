@@ -11,6 +11,7 @@ from hydra.core.hydra_config import HydraConfig
 
 from QELM.checkpoint import save_checkpoint
 from QELM.models import TransverseFieldIsingModel
+from QELM.models.base import evolution_request
 from QELM.training import RidgeRegression
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -33,7 +34,9 @@ def _compose(overrides: list[str] | None = None):
 def _save(cfg):
     model = TransverseFieldIsingModel.from_config(cfg)
     trainer = RidgeRegression.from_config(cfg)
-    evolution = model.evolve(dt=float(cfg.test.dt), n_steps=int(cfg.test.n_steps))
+    evolution = evolution_request(
+        model, dt=float(cfg.test.dt), n_steps=int(cfg.test.n_steps)
+    )
     return save_checkpoint(
         cfg,
         model=model,
