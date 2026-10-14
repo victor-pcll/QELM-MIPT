@@ -61,7 +61,7 @@ def test_checkpoint_writer_creates_file_in_tmp_path(tmp_path: Path) -> None:
         metadata = json.loads(str(archive["metadata"].item()))
     assert metadata["seed"] == int(cfg.seed)
     assert metadata["sim_type"] == str(cfg.sim_type)
-    assert metadata["params"] == {key: cfg.ising[key] for key in cfg.ising}
+    assert metadata["params"] == {key: cfg.TFIM[key] for key in cfg.TFIM}
     assert metadata["evolution"]["dt"] == float(cfg.test.dt)
     assert metadata["evolution"]["n_steps"] == int(cfg.test.n_steps)
     assert "wandb" not in metadata

@@ -10,7 +10,7 @@ Scientific parameters and secrets live in different files.
 
 | Key | Role |
 | --- | --- |
-| `defaults` | `sim_type: ising`, `training: ridge`, `evaluation: default` |
+| `defaults` | `sim_type: TFIM`, `training: ridge`, `evaluation: default` |
 | `seed` | Integer passed to NumPy at startup. See [Code quality](code-quality.md). |
 | `test.dt`, `test.n_steps` | Scalar step size and step count passed to `evolve` |
 | `checkpoint` | Where the run writes its `.npz`. See [Checkpoints and local data](checkpoints.md). |
@@ -20,7 +20,7 @@ Group files:
 
 | File | Contents |
 | --- | --- |
-| `conf/sim_type/ising.yaml` | `sim_type: ising` and the `ising` block: `N`, `J`, `h`, `learning_rate` |
+| `conf/sim_type/TFIM.yaml` | `sim_type: TFIM` and the `TFIM` block: `N`, `J`, `h`, `learning_rate` |
 | `conf/sim_type/kitaev.yaml` | `sim_type: kitaev` and a `kitaev` block with only `N`. No other Hamiltonian parameters are defined there |
 | `conf/training/ridge.yaml` | `name: ridge` |
 | `conf/training/readout.yaml` | `name: readout` |

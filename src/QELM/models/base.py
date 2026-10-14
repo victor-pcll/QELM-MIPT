@@ -13,7 +13,7 @@ class EvolutionState(TypedDict):
     """Record of a requested evolution. No trajectory tensor is stored.
 
     Attributes:
-        model: Simulation name, such as ``"ising"``.
+        model: Simulation name, such as ``"TFIM"``.
         dt: Scalar integration step.
         n_steps: Scalar number of requested steps.
         status: ``"scaffold"`` until integration is implemented.
@@ -66,7 +66,7 @@ class HamiltonianModel:
             TypeError: If the config block is not a mapping.
         """
         node = cfg[cls.name]
-        # A scalar such as ``ising: 3`` is not a config node, and
+        # A scalar such as ``TFIM: 3`` is not a config node, and
         # ``to_container`` would raise a ValueError on it.
         raw = (
             OmegaConf.to_container(node, resolve=True)

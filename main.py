@@ -7,7 +7,7 @@ local paths) are loaded from ``.env`` when present.
 
 Run from the repository root:
 
-    uv run python main.py sim_type=ising ising.N=12 test.dt=0.05
+    uv run python main.py sim_type=TFIM TFIM.N=12 test.dt=0.05
 """
 
 from __future__ import annotations
