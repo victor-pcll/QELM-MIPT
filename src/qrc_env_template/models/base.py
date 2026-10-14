@@ -41,8 +41,14 @@ class HamiltonianModel:
 
         Args:
             params: Parameter names mapped to scalar values from YAML.
+            N: Number of qubits.
+            dim: dimension of the Hilbert space, equal to ``2**N``. 
+            _H: Hamiltonian matrix of shape ``(dim, dim)``. 
         """
         self.params: dict[str, Any] = dict(params)
+        self.N: int = int(params["N"])
+        self.dim: int = 2**self.N
+        self._H: np.ndarray | None = None
 
     @classmethod
     def from_config(cls, cfg: DictConfig) -> Self:
@@ -94,3 +100,4 @@ class HamiltonianModel:
             "n_steps": n_steps,
             "status": "scaffold",
         }
+
