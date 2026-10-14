@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from omegaconf import OmegaConf
 
-from QELM.physics import (
+from QELM.training import (
     DoubleObservable,
     ProjectiveMeasurement,
     Readout,
@@ -81,7 +81,7 @@ def test_basis_states_are_deterministic() -> None:
     rho = _pure(psi)
     readout = ProjectiveMeasurement({})
     for _ in range(20):
-        result = readout.measure(rho, rng)
+        result = readout.measure(rho, rng=rng)
         np.testing.assert_array_equal(result.outcomes, [1, -1, 1])
         np.testing.assert_allclose(result.rho, rho)
 
@@ -118,7 +118,7 @@ def test_mean_outcome_matches_z_expectation(seed: int) -> None:
     n = 20000
     rng = np.random.default_rng(seed)
     readout = ProjectiveMeasurement({})
-    mean = np.mean([readout.measure(rho, rng).outcomes for _ in range(n)], axis=0)
+    mean = np.mean([readout.measure(rho, rng=rng).outcomes for _ in range(n)], axis=0)
     # Var(mi) = 1 - <Z>^2 <= 1, donc sigma <= 1 / sqrt(n) ; tolérance 5 sigma.
     np.testing.assert_allclose(mean, z, atol=5 / np.sqrt(n))
 
@@ -128,7 +128,7 @@ def test_bell_state_outcomes_are_correlated() -> None:
     n = 5000
     rng = np.random.default_rng(5)
     readout = ProjectiveMeasurement({})
-    outcomes = np.array([readout.measure(BELL, rng).outcomes for _ in range(n)])
+    outcomes = np.array([readout.measure(BELL, rng=rng).outcomes for _ in range(n)])
     np.testing.assert_array_equal(outcomes[:, 0], outcomes[:, 1])
     frac = np.mean(outcomes[:, 0] == 1)
     assert abs(frac - 0.5) < 5 * np.sqrt(0.25 / n)
@@ -145,8 +145,8 @@ def test_same_seed_gives_same_outcomes() -> None:
     """Deux Generator de même seed donnent la même suite de résultats."""
     rho = _random_rho(4, 7)
     readout = ProjectiveMeasurement({})
-    a = readout.measure(rho, np.random.default_rng(42))
-    b = readout.measure(rho, np.random.default_rng(42))
+    a = readout.measure(rho, rng=np.random.default_rng(42))
+    b = readout.measure(rho, rng=np.random.default_rng(42))
     np.testing.assert_array_equal(a.outcomes, b.outcomes)
     np.testing.assert_array_equal(a.rho, b.rho)
 
@@ -167,7 +167,7 @@ def test_selected_qubits_are_measured_in_order() -> None:
     psi = np.zeros(8)
     psi[0b011] = 1  # |011>
     result = ProjectiveMeasurement({"qubits": [2, 0]}).measure(
-        _pure(psi), np.random.default_rng(0)
+        _pure(psi), rng=np.random.default_rng(0)
     )
     np.testing.assert_array_equal(result.outcomes, [-1, 1])
 
@@ -194,3 +194,99 @@ def test_registry_and_config() -> None:
             get_readout(name)
     cfg = OmegaConf.create({"projective_measurement": {"qubits": [1]}})
     assert ProjectiveMeasurement.from_config(cfg).qubits == [1]
+
+
+# --- Probabilité de mesure p (issue #16) ---
+
+
+def test_p_one_is_the_default_and_draws_nothing_extra() -> None:
+    """p=1 mesure tout et donne exactement les mêmes tirages qu'avant p."""
+    rho = _random_rho(4, 11)
+    readout = ProjectiveMeasurement({})
+    default = readout.measure(rho, rng=np.random.default_rng(5))
+    explicit = readout.measure(rho, p=1.0, rng=np.random.default_rng(5))
+    np.testing.assert_array_equal(default.outcomes, explicit.outcomes)
+    np.testing.assert_array_equal(default.rho, explicit.rho)
+    assert not np.any(np.isnan(default.outcomes))
+
+    # Même suite que des appels directs à measure_projective_rho.
+    rng = np.random.default_rng(5)
+    out = rho
+    expected = []
+    for q in range(4):
+        out, mi = measure_projective_rho(out, q, rng=rng)
+        expected.append(mi)
+    np.testing.assert_array_equal(default.outcomes, expected)
+    np.testing.assert_array_equal(default.rho, out)
+
+
+def test_p_zero_measures_nothing() -> None:
+    """p=0 : aucun qubit mesuré, rho inchangé, que des nan."""
+    rho = _random_rho(3, 12)
+    result = ProjectiveMeasurement({}).measure(rho, p=0.0, rng=np.random.default_rng(0))
+    assert result.outcomes.shape == (3,)
+    assert np.all(np.isnan(result.outcomes))
+    np.testing.assert_array_equal(result.rho, rho)
+
+
+@pytest.mark.parametrize("p", [0.2, 0.5, 0.8])
+def test_fraction_of_measured_qubits_matches_p(p: float) -> None:
+    """La fraction de qubits mesurés suit p (tolérance 5 sigma)."""
+    rho = _random_rho(3, 13)
+    readout = ProjectiveMeasurement({})
+    rng = np.random.default_rng(14)
+    n = 3000
+    outcomes = np.array([readout.measure(rho, p=p, rng=rng).outcomes for _ in range(n)])
+    measured = ~np.isnan(outcomes)
+    sigma = np.sqrt(p * (1 - p) / n)
+    for q in range(3):
+        assert abs(measured[:, q].mean() - p) < 5 * sigma
+    assert set(np.unique(outcomes[measured])) <= {-1.0, 1.0}
+
+
+def test_unmeasured_qubits_keep_their_state() -> None:
+    """Un qubit non mesuré n'est pas effondré ; un qubit mesuré l'est."""
+    plus = np.array([1, 1]) / np.sqrt(2)
+    rho = _pure(np.kron(np.kron(plus, plus), plus))
+    readout = ProjectiveMeasurement({})
+    rng = np.random.default_rng(15)
+    for _ in range(50):
+        result = readout.measure(rho, p=0.5, rng=rng)
+        for q, mi in enumerate(result.outcomes):
+            X_q = np.eye(1)
+            for k in range(3):
+                X_q = np.kron(X_q, np.array([[0, 1], [1, 0]]) if k == q else np.eye(2))
+            Z_q = np.eye(1)
+            for k in range(3):
+                Z_q = np.kron(Z_q, np.diag([1, -1]) if k == q else np.eye(2))
+            if np.isnan(mi):
+                # |+> intact : <X_q> = 1.
+                assert np.trace(result.rho @ X_q).real == pytest.approx(1.0)
+            else:
+                # Effondré sur le résultat : <Z_q> = mi et <X_q> = 0.
+                assert np.trace(result.rho @ Z_q).real == pytest.approx(mi)
+                assert np.trace(result.rho @ X_q).real == pytest.approx(0.0, abs=1e-12)
+        assert np.trace(result.rho).real == pytest.approx(1.0)
+
+
+def test_p_is_reproducible_with_seed() -> None:
+    """Même seed, même p : mêmes qubits mesurés et mêmes résultats."""
+    rho = _random_rho(4, 16)
+    readout = ProjectiveMeasurement({})
+    a = readout.measure(rho, p=0.4, rng=np.random.default_rng(3))
+    b = readout.measure(rho, p=0.4, rng=np.random.default_rng(3))
+    np.testing.assert_array_equal(a.outcomes, b.outcomes)
+    np.testing.assert_array_equal(a.rho, b.rho)
+
+
+@pytest.mark.parametrize("p", [-0.1, 1.5, float("nan"), True, "0.5"])
+def test_invalid_p_is_rejected(p: object) -> None:
+    with pytest.raises(ValueError, match="probability"):
+        ProjectiveMeasurement({}).measure(BELL, p=p)  # type: ignore[arg-type]
+
+
+def test_numpy_scalar_p_is_accepted() -> None:
+    result = ProjectiveMeasurement({}).measure(
+        BELL, p=np.float64(1.0), rng=np.random.default_rng(0)
+    )
+    assert not np.any(np.isnan(result.outcomes))

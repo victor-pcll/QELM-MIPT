@@ -51,3 +51,44 @@ def get_site_operator_sparse(op: np.ndarray, site: int, N: int) -> sp.csr_matrix
     left = sp.identity(2**site, dtype=complex, format="csr")
     right = sp.identity(2 ** (N - site - 1), dtype=complex, format="csr")
     return sp.csr_matrix(sp.kron(sp.kron(left, sp.csr_matrix(op)), right, "csr"))
+
+
+PAULIS: dict[str, np.ndarray] = {"X": X, "Y": Y, "Z": Z}
+
+
+def pauli(label: str) -> np.ndarray:
+    """Return the 2x2 Pauli matrix named ``label``.
+
+    Args:
+        label: ``"X"``, ``"Y"`` or ``"Z"``.
+
+    Returns:
+        Complex matrix of shape ``(2, 2)``.
+
+    Raises:
+        ValueError: If ``label`` is not a Pauli label.
+    """
+    try:
+        return PAULIS[label]
+    except KeyError as exc:
+        known = ", ".join(PAULIS)
+        raise ValueError(f"Unknown observable {label!r}. Known: {known}.") from exc
+
+
+def n_qubits(rho: np.ndarray) -> int:
+    """Return ``N`` for a density matrix of shape ``(2**N, 2**N)``.
+
+    Args:
+        rho: Density matrix.
+
+    Returns:
+        Number of qubits.
+
+    Raises:
+        ValueError: If ``rho`` is not square with a power-of-two side.
+    """
+    dim = rho.shape[0]
+    N = dim.bit_length() - 1
+    if rho.shape != (dim, dim) or dim < 2 or 2**N != dim:
+        raise ValueError(f"rho must have shape (2**N, 2**N), got {rho.shape}.")
+    return N
