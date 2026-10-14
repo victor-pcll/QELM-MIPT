@@ -9,6 +9,7 @@
 | `src/QELM/evaluation/` | Metric and plot scaffolds |
 | `src/QELM/pipeline.py` | Routes sim type to a model, a trainer, and an evaluator, then saves a checkpoint |
 | `src/QELM/checkpoint.py` | Writes the `.npz` checkpoint |
+| `src/QELM/config.py` | `load_config` composes `conf/` with overrides, from any working directory |
 | `src/QELM/seed.py` | Reads `seed` from the composed config |
 | `src/QELM/selection.py` | Loads `.env` and formats the selection line |
 | `data/` | Local datasets. Gitignored, and not created by the package |
