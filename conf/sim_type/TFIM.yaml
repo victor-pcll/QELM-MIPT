@@ -15,7 +15,7 @@ TFIM:
   R: 10 # number of random Hamiltonians (disorder realisations)
   learning_rate: 1.0e-3
 
-# Unitary evolution, read by the pipeline as evolve(dt, n_steps).
+# Unitary evolution step and step count, recorded by the pipeline (evolution_request).
 test:
   t: ${div:10.0,${TFIM.J}} # total evolution time, t = 10 / Js
   n_steps: ${mul:4,${TFIM.N}} # d, number of time cuts, d = 4 N

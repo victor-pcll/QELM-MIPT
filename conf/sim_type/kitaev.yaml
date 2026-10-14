@@ -6,7 +6,7 @@ sim_type: kitaev
 kitaev:
   N: 4
 
-# Evolution step and step count passed to evolve.
+# Evolution step and step count, recorded by the pipeline (evolution_request).
 test:
   dt: 0.01
   n_steps: 100
