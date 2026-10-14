@@ -9,12 +9,12 @@ correlators ``<A_i B_j>`` for ``i < j``. Operators are Pauli labels
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Self
+from typing import Any
 
 import numpy as np
-from omegaconf import DictConfig, OmegaConf
 
 from QELM.physics.operators import X, Y, Z, get_site_operator
+from QELM.physics.readout import Readout, ReadoutResult
 
 PAULIS: dict[str, np.ndarray] = {"X": X, "Y": Y, "Z": Z}
 
@@ -57,8 +57,10 @@ def n_qubits(rho: np.ndarray) -> int:
     return N
 
 
-class Observables:
+class Observables(Readout):
     """Set of operators whose expectation values are the QELM features.
+
+    The readout is deterministic and leaves ``rho`` unchanged.
 
     Attributes:
         name: Config key for this observable set; ``from_config`` reads
@@ -67,38 +69,6 @@ class Observables:
     """
 
     name: str = "base"
-
-    def __init__(self, params: Mapping[str, Any]) -> None:
-        """Store the parameters.
-
-        Args:
-            params: Parameter names mapped to scalar values from YAML.
-        """
-        self.params: dict[str, Any] = dict(params)
-
-    @classmethod
-    def from_config(cls, cfg: DictConfig) -> Self:
-        """Build the observable set from the Hydra block named ``cls.name``.
-
-        Args:
-            cfg: Composed Hydra config. ``cfg[cls.name]`` is a mapping of
-                scalar parameters.
-
-        Returns:
-            An instance of this class.
-
-        Raises:
-            TypeError: If the config block is not a mapping.
-        """
-        node = cfg[cls.name]
-        raw = (
-            OmegaConf.to_container(node, resolve=True)
-            if OmegaConf.is_config(node)
-            else node
-        )
-        if not isinstance(raw, dict):
-            raise TypeError(f"{cls.name} config must be a mapping.")
-        return cls({str(key): value for key, value in raw.items()})
 
     def operators(self, N: int) -> list[np.ndarray]:
         """Return the measured operators on ``N`` qubits.
@@ -126,6 +96,20 @@ class Observables:
         ops = self.operators(n_qubits(rho))
         # Tr(rho O) = sum_ij rho_ij O_ji; real because rho and O are Hermitian.
         return np.array([np.einsum("ij,ji->", rho, op).real for op in ops])
+
+    def measure(
+        self, rho: np.ndarray, rng: np.random.Generator | None = None
+    ) -> ReadoutResult:
+        """Return :meth:`expectation` as values and ``rho`` unchanged.
+
+        Args:
+            rho: Density matrix of shape ``(2**N, 2**N)``.
+            rng: Ignored; expectation values are deterministic.
+
+        Returns:
+            Values of shape ``(n_features,)`` and the input ``rho``.
+        """
+        return ReadoutResult(values=self.expectation(rho), rho=rho)
 
 
 class SingleObservable(Observables):

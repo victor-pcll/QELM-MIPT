@@ -5,6 +5,7 @@
 | `conf/` | Hydra YAML: `config.yaml` plus groups `sim_type`, `training`, and `evaluation` |
 | `main.py` | Entrypoint. Seeds NumPy, loads `.env`, prints the selection, and runs the pipeline |
 | `src/QELM/models/` | `TransverseFieldIsingModel` (dense TFIM Hamiltonian), the `KitaevModel` scaffold, and the time-evolution stub |
+| `src/QELM/physics/` | Pauli operators and the readouts of the reservoir state. Every readout subclasses `Readout` (`readout.py`) and implements `measure(rho, rng) -> ReadoutResult(values, rho)`: `SingleObservable` / `DoubleObservable` return expectation values and leave `rho` unchanged; `ProjectiveMeasurement` draws Z-basis outcomes and collapses `rho`. `get_readout(name)` returns the class for a config key |
 | `src/QELM/training/` | Trainer scaffolds (`RidgeRegression`, `Readout`) |
 | `src/QELM/evaluation/` | Metric and plot scaffolds |
 | `src/QELM/pipeline.py` | Routes sim type to a model, a trainer, and an evaluator, then saves a checkpoint |

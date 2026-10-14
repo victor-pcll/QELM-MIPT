@@ -1,0 +1,96 @@
+"""Common interface for every way of reading the reservoir state.
+
+A readout takes a density matrix ``rho`` and returns a
+:class:`ReadoutResult`: the measured values and the state after the
+measurement. Expectation values (:mod:`QELM.physics.observables`) leave
+``rho`` unchanged. Projective measurements
+(:mod:`QELM.physics.projective`) draw a random outcome and collapse
+``rho``.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any, Self
+
+import numpy as np
+from omegaconf import DictConfig, OmegaConf
+
+
+@dataclass(frozen=True)
+class ReadoutResult:
+    """Output of one readout.
+
+    Attributes:
+        values: Real array of shape ``(n_values,)``: expectation values or
+            measurement outcomes.
+        rho: Density matrix of shape ``(2**N, 2**N)`` after the readout.
+            It is the input ``rho`` when the readout does not disturb it.
+    """
+
+    values: np.ndarray
+    rho: np.ndarray
+
+
+class Readout:
+    """Base class for readouts configured from a Hydra block.
+
+    Attributes:
+        name: Config key for this readout; ``from_config`` reads
+            ``cfg[name]``.
+        params: Scalar parameters from the matching YAML block.
+    """
+
+    name: str = "base"
+
+    def __init__(self, params: Mapping[str, Any]) -> None:
+        """Store the parameters.
+
+        Args:
+            params: Parameter names mapped to scalar values from YAML.
+        """
+        self.params: dict[str, Any] = dict(params)
+
+    @classmethod
+    def from_config(cls, cfg: DictConfig) -> Self:
+        """Build the readout from the Hydra block named ``cls.name``.
+
+        Args:
+            cfg: Composed Hydra config. ``cfg[cls.name]`` is a mapping of
+                scalar parameters.
+
+        Returns:
+            An instance of this class.
+
+        Raises:
+            TypeError: If the config block is not a mapping.
+        """
+        node = cfg[cls.name]
+        raw = (
+            OmegaConf.to_container(node, resolve=True)
+            if OmegaConf.is_config(node)
+            else node
+        )
+        if not isinstance(raw, dict):
+            raise TypeError(f"{cls.name} config must be a mapping.")
+        return cls({str(key): value for key, value in raw.items()})
+
+    def measure(
+        self, rho: np.ndarray, rng: np.random.Generator | None = None
+    ) -> ReadoutResult:
+        """Read ``rho``.
+
+        Args:
+            rho: Density matrix of shape ``(2**N, 2**N)``.
+            rng: Random generator for stochastic readouts. ``None`` uses
+                the global ``numpy.random`` state seeded by
+                :func:`QELM.seed.set_seed`. Deterministic readouts ignore it.
+
+        Returns:
+            The measured values and the post-measurement state.
+
+        Raises:
+            NotImplementedError: In this base class.
+        """
+        raise NotImplementedError(f"{self.name} measure is not implemented.")
