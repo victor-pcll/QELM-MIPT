@@ -43,7 +43,7 @@ def test_config_loads_and_cli_overrides_apply() -> None:
     default = _compose()
     chosen = _compose(OVERRIDES)
 
-    assert set(chosen.ising.keys()) == {"N", "J", "learning_rate"}
+    assert set(chosen.ising.keys()) == {"N", "J", "h", "learning_rate"}
     assert set(chosen.test.keys()) == {"dt", "n_steps"}
     assert chosen.sim_type == "ising"
     assert chosen.ising.N == 12

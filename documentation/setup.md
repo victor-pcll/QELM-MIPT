@@ -21,3 +21,12 @@ uv sync
 `uv sync` creates `.venv`, installs the package, and installs the `dev` group (Ruff, Mypy, pytest, ipykernel, and Matplotlib). Run project commands with `uv run` so they use that environment. The series notebook uses that kernel; see [Running](running.md).
 
 Add a dependency with `uv add`.
+
+## After moving or renaming the folder
+
+`.venv` stores the absolute path of `src/`. If the repository folder is moved or renamed, imports such as `import QELM` fail with `ModuleNotFoundError`. Rebuild the environment:
+
+```bash
+rm -rf .venv
+uv sync
+```

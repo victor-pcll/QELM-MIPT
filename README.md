@@ -1,4 +1,4 @@
-# qrc-env-template
+# QELM-MIPT
 
 A Python library managed with [uv](https://docs.astral.sh/uv/). Requires Python 3.12 or newer.
 
@@ -24,9 +24,9 @@ uv sync
 | --- | --- |
 | `conf/` | Hydra YAML: `config.yaml` plus groups `sim_type`, `training`, `evaluation` |
 | `data/` | Local time series and training datasets (gitignored) |
-| `src/qrc_env_template/models/` | Hamiltonians and time evolution (Ising, Kitaev scaffolds) |
-| `src/qrc_env_template/training/` | Training algorithms (Readout, Ridge scaffolds) |
-| `src/qrc_env_template/evaluation/` | Metrics and plot scaffolds |
+| `src/QELM/models/` | Hamiltonians and time evolution (transverse-field Ising model, Kitaev scaffold) |
+| `src/QELM/training/` | Training algorithms (Readout, Ridge scaffolds) |
+| `src/QELM/evaluation/` | Metrics and plot scaffolds |
 | `notebooks/series.ipynb` | Plot a local series from `data/`; the library call stays a scaffold |
 | `main.py` | Entrypoint. Routes sim type → model → training → evaluation |
 
@@ -80,5 +80,4 @@ Ruff formats and lints. Mypy typechecks the package and `main.py`. At startup, `
 
 ## Develop
 
-Package code lives in `src/qrc_env_template`. Import it as `qrc_env_template`. Add a dependency with `uv add`.
-# QRC-MIPT
+Package code lives in `src/QELM`. Import it as `QELM`. Add a dependency with `uv add`.

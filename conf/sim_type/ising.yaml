@@ -1,8 +1,10 @@
 # @package _global_
 
-# Placeholders for an Ising run. Add another file in this directory to add a sim type.
+# Transverse-field Ising model: H = h * sum_i Z_i + sum_{i<j} J_ij X_i X_j,
+# with J_ij uniform in [-J/2, J/2]. Add another file in this directory to add a sim type.
 sim_type: ising
 ising:
-  N: 10
-  J: 1.0
+  N: 10 # number of qubits
+  J: 1.0 # coupling scale
+  h: 1.0 # transverse field
   learning_rate: 1.0e-3

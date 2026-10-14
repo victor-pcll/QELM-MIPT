@@ -20,8 +20,8 @@ Group files:
 
 | File | Contents |
 | --- | --- |
-| `conf/sim_type/ising.yaml` | `sim_type: ising` and the `ising` block: `N`, `J`, `learning_rate` |
-| `conf/sim_type/kitaev.yaml` | `sim_type: kitaev` and an empty `kitaev` block. No Hamiltonian parameters are defined there |
+| `conf/sim_type/ising.yaml` | `sim_type: ising` and the `ising` block: `N`, `J`, `h`, `learning_rate` |
+| `conf/sim_type/kitaev.yaml` | `sim_type: kitaev` and a `kitaev` block with only `N`. No other Hamiltonian parameters are defined there |
 | `conf/training/ridge.yaml` | `name: ridge` |
 | `conf/training/readout.yaml` | `name: readout` |
 | `conf/evaluation/default.yaml` | `name: default`, a list of metric names, and a plot name |
