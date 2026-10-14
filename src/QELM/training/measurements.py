@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from numbers import Real
 from typing import Any, Self
 
 import numpy as np
@@ -35,7 +36,7 @@ class ReadoutResult:
 
     Attributes:
         outcomes: Real array of shape ``(n_outcomes,)``, one entry per
-            measurement performed.
+            target qubit; ``np.nan`` marks a qubit that was not measured.
         rho: Density matrix of shape ``(2**N, 2**N)`` after the
             measurement back-action.
     """
@@ -88,12 +89,16 @@ class Readout:
         return cls({str(key): value for key, value in raw.items()})
 
     def measure(
-        self, rho: np.ndarray, rng: np.random.Generator | None = None
+        self,
+        rho: np.ndarray,
+        p: float = 1.0,
+        rng: np.random.Generator | None = None,
     ) -> ReadoutResult:
         """Measure ``rho`` and apply the back-action.
 
         Args:
             rho: Density matrix of shape ``(2**N, 2**N)``.
+            p: Probability of measuring each target qubit, in ``[0, 1]``.
             rng: Random generator for the outcomes. ``None`` uses the
                 global ``numpy.random`` state seeded by
                 :func:`QELM.seed.set_seed`.
@@ -185,22 +190,45 @@ class ProjectiveMeasurement(Readout):
         self.qubits: list[int] | None = None if raw is None else [int(q) for q in raw]
 
     def measure(
-        self, rho: np.ndarray, rng: np.random.Generator | None = None
+        self,
+        rho: np.ndarray,
+        p: float = 1.0,
+        rng: np.random.Generator | None = None,
     ) -> ReadoutResult:
-        """Measure each qubit with :func:`measure_projective_rho`.
+        """Measure each target qubit projectively with probability ``p``.
+
+        Each target qubit, in order, is measured with probability ``p`` and
+        left untouched otherwise. With ``p = 1`` every qubit is measured and
+        no extra random number is drawn, so the outcomes are the same as
+        before ``p`` existed for a given seed. For ``0 < p < 1`` one uniform
+        number decides whether a qubit is measured, then a second one (only
+        if it is) draws the outcome.
 
         Args:
             rho: Density matrix of shape ``(2**N, 2**N)``.
-            rng: Random generator for the outcomes. ``None`` uses the global
-                ``numpy.random`` state.
+            p: Probability of measuring each target qubit, in ``[0, 1]``
+                (default 1.0).
+            rng: Random generator for the choices and outcomes. ``None`` uses
+                the global ``numpy.random`` state.
 
         Returns:
-            Z eigenvalues ``mi`` in ``{-1, +1}`` of shape ``(n_measured,)`` as
-            ``float64``, and the state after every collapse.
+            Outcomes of shape ``(n_targets,)`` as ``float64``: the Z
+            eigenvalue ``mi`` in ``{-1, +1}`` for a measured qubit and
+            ``np.nan`` for an unmeasured one; and the state after every
+            collapse.
+
+        Raises:
+            ValueError: If ``p`` is not a number in ``[0, 1]``.
         """
+        if isinstance(p, bool) or not isinstance(p, Real) or not 0 <= p <= 1:
+            raise ValueError(f"p must be a probability in [0, 1], got {p!r}.")
         N = n_qubits(rho)
         qubits = list(range(N)) if self.qubits is None else self.qubits
-        outcomes = np.empty(len(qubits), dtype=np.float64)
+        outcomes = np.full(len(qubits), np.nan, dtype=np.float64)
         for k, q in enumerate(qubits):
+            if p < 1:
+                u = rng.random() if rng is not None else np.random.random()
+                if u >= p:
+                    continue
             rho, outcomes[k] = measure_projective_rho(rho, q, N, rng)
         return ReadoutResult(outcomes=outcomes, rho=rho)
