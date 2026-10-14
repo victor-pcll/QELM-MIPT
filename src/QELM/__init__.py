@@ -1,5 +1,6 @@
-"""QRC environment template."""
+"""QELM: quantum extreme learning machine and the MIPT."""
 
+from QELM.models import TransverseFieldIsingModel
 from QELM.pipeline import resolve_pipeline, run_pipeline
 from QELM.seed import set_seed
 
@@ -10,7 +11,13 @@ def hello() -> str:
     Returns:
         The fixed greeting string.
     """
-    return "Hello from qrc-env-template!"
+    return "Hello from QELM!"
 
 
-__all__ = ["hello", "resolve_pipeline", "run_pipeline", "set_seed"]
+__all__ = [
+    "TransverseFieldIsingModel",
+    "hello",
+    "resolve_pipeline",
+    "run_pipeline",
+    "set_seed",
+]

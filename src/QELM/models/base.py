@@ -1,4 +1,4 @@
-"""Hamiltonian models. Physics is not implemented; these types are routing stubs."""
+"""Base class for Hamiltonian models selected by ``sim_type``."""
 
 from __future__ import annotations
 
@@ -29,21 +29,22 @@ class HamiltonianModel:
     """Time-evolution model selected by ``sim_type``.
 
     Attributes:
-        name: Config key for this model.
+        name: Config key for this model. Subclasses override it with their
+            ``sim_type`` value; ``from_config`` reads ``cfg[name]``.
         params: Scalar parameters from the matching YAML block, such as
             ``N`` and ``J``.
+        N: Number of qubits.
+        dim: Hilbert-space dimension, ``2**N``.
     """
 
-    name: str
+    name: str = "base"
 
     def __init__(self, params: Mapping[str, Any]) -> None:
         """Store scalar Hamiltonian parameters.
 
         Args:
             params: Parameter names mapped to scalar values from YAML.
-            N: Number of qubits.
-            dim: dimension of the Hilbert space, equal to ``2**N``. 
-            _H: Hamiltonian matrix of shape ``(dim, dim)``. 
+                ``N`` is required.
         """
         self.params: dict[str, Any] = dict(params)
         self.N: int = int(params["N"])
@@ -64,7 +65,14 @@ class HamiltonianModel:
         Raises:
             TypeError: If the config block is not a mapping.
         """
-        raw = OmegaConf.to_container(cfg[cls.name], resolve=True)
+        node = cfg[cls.name]
+        # A scalar such as ``ising: 3`` is not a config node, and
+        # ``to_container`` would raise a ValueError on it.
+        raw = (
+            OmegaConf.to_container(node, resolve=True)
+            if OmegaConf.is_config(node)
+            else node
+        )
         if not isinstance(raw, dict):
             raise TypeError(f"{cls.name} config must be a mapping.")
         params = {str(key): value for key, value in raw.items()}
@@ -100,4 +108,3 @@ class HamiltonianModel:
             "n_steps": n_steps,
             "status": "scaffold",
         }
-

@@ -1,6 +1,6 @@
 # Documentation
 
-Notes for this repository. Scientific parameters stay in Hydra YAML under `conf/`. Secrets stay in `.env`. The model, training, and evaluation code are scaffolds: they route a config and record a status string. They do not build a Hamiltonian, integrate a trajectory, or compute a score.
+Notes for this repository. Scientific parameters stay in Hydra YAML under `conf/`. Secrets stay in `.env`. Most of the pipeline is still a scaffold: it routes a config and records a status string. The transverse-field Ising Hamiltonian is built (`TransverseFieldIsingModel.hamiltonian`). Time evolution, training, and scoring are not implemented yet.
 
 - [Setup](setup.md) — install uv and sync the project
 - [Configuration](configuration.md) — Hydra YAML versus `.env` secrets

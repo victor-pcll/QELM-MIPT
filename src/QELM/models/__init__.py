@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from QELM.models.base import HamiltonianModel
-from QELM.models.ising import IsingModel
 from QELM.models.kitaev import KitaevModel
+from QELM.models.TFIM import TransverseFieldIsingModel
 
 _MODELS: dict[str, type[HamiltonianModel]] = {
-    IsingModel.name: IsingModel,
+    TransverseFieldIsingModel.name: TransverseFieldIsingModel,
     KitaevModel.name: KitaevModel,
 }
 
@@ -31,4 +31,4 @@ def get_model(sim_type: str) -> type[HamiltonianModel]:
         raise KeyError(f"Unknown sim_type {sim_type!r}. Known: {known}.") from exc
 
 
-__all__ = ["HamiltonianModel", "IsingModel", "KitaevModel", "get_model"]
+__all__ = ["HamiltonianModel", "KitaevModel", "TransverseFieldIsingModel", "get_model"]
