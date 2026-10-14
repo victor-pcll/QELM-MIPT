@@ -6,9 +6,10 @@ from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
+import scipy.sparse as sp
 
 from QELM.models.base import HamiltonianModel
-from QELM.physics.operators import X, Z, get_site_operator
+from QELM.physics.operators import X, Z, get_site_operator_sparse
 
 
 class TransverseFieldIsingModel(HamiltonianModel):
@@ -38,23 +39,27 @@ class TransverseFieldIsingModel(HamiltonianModel):
             -self.J / 2, self.J / 2, size=(self.N, self.N)
         )
 
-    def hamiltonian(self) -> np.ndarray:
-        """Build the dense Hamiltonian.
+    def hamiltonian(self) -> sp.csr_matrix:
+        """Build the Hamiltonian as a sparse CSR matrix.
+
+        Every term is a product of Pauli matrices, with one non-zero entry
+        per row, so ``H`` has at most ``2**N * (1 + N(N-1)/2)`` non-zero
+        entries instead of ``4**N``. Use ``H.toarray()`` for a dense copy.
 
         Returns:
-            Complex Hermitian matrix of shape ``(2**N, 2**N)``. It is also
-            stored in ``self._H``.
+            Complex Hermitian CSR matrix of shape ``(2**N, 2**N)``. It is
+            also stored in ``self._H``.
         """
-        H = np.zeros((self.dim, self.dim), dtype=complex)
+        H: sp.csr_matrix = sp.csr_matrix((self.dim, self.dim), dtype=np.complex128)
 
         for i in range(self.N):
-            H += self.h * get_site_operator(Z, i, self.N)
+            H = H + self.h * get_site_operator_sparse(Z, i, self.N)
 
         for i in range(self.N):
-            Xi = get_site_operator(X, i, self.N)
+            Xi = get_site_operator_sparse(X, i, self.N)
             for j in range(i + 1, self.N):
-                Xj = get_site_operator(X, j, self.N)
-                H += self.J_matrix[i, j] * (Xi @ Xj)
+                Xj = get_site_operator_sparse(X, j, self.N)
+                H = H + self.J_matrix[i, j] * (Xi @ Xj)
 
-        self._H = H
-        return H
+        self._H = H.tocsr()
+        return H.tocsr()
