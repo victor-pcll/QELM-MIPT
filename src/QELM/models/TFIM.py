@@ -6,7 +6,6 @@ from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
-import scipy.linalg
 
 from QELM.models.base import HamiltonianModel
 from QELM.physics.operators import X, Z, get_site_operator
@@ -59,11 +58,3 @@ class TransverseFieldIsingModel(HamiltonianModel):
 
         self._H = H
         return H
-
-    def evolve_density(self, *, dt, rho):
-        U = scipy.linalg.expm(-1j * self.hamiltonian() * dt)
-        return U @ rho @ U.conj().T
-    
-    def evolve_state(self, *, dt, psi):
-        U = scipy.linalg.expm(-1j * self.hamiltonian() * dt)
-        return U @ psi
