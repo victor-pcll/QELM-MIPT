@@ -49,7 +49,7 @@ def test_hamiltonian_hermiticity(
     ising_model: TransverseFieldIsingModel,
 ):
     """Vérifie la propriété physique fondamentale : H est Hermitien (H = H^dagger)."""
-    H = ising_model.hamiltonian()
+    H = ising_model.hamiltonian().toarray()
     H_dagger = H.conj().T
 
     # Vérification numérique stricte sur matrices complexes
@@ -66,7 +66,7 @@ def test_hamiltonian_determinism_and_fixed_disorder(
     H_first = ising_model.hamiltonian()
     H_second = ising_model.hamiltonian()
 
-    np.testing.assert_array_equal(H_first, H_second)
+    np.testing.assert_array_equal(H_first.toarray(), H_second.toarray())
 
 
 # =====================================================================

@@ -7,6 +7,8 @@ from typing import Any, Self, TypedDict
 
 import numpy as np
 import scipy.linalg
+import scipy.sparse as sp
+import scipy.sparse.linalg
 from omegaconf import DictConfig, OmegaConf
 
 
@@ -50,7 +52,7 @@ class HamiltonianModel:
         self.params: dict[str, Any] = dict(params)
         self.N: int = int(params["N"])
         self.dim: int = 2**self.N
-        self._H: np.ndarray | None = None
+        self._H: sp.csr_matrix | None = None
 
     @classmethod
     def from_config(cls, cfg: DictConfig) -> Self:
@@ -79,12 +81,13 @@ class HamiltonianModel:
         params = {str(key): value for key, value in raw.items()}
         return cls(params)
 
-    def hamiltonian(self) -> np.ndarray:
+    def hamiltonian(self) -> sp.csr_matrix:
         """Return the Hamiltonian matrix for ``self.params``.
 
         Returns:
-            Not built by this scaffold. A later implementation would return
-            an operator of shape ``(dim, dim)``.
+            Not built by this scaffold. A later implementation returns a
+            sparse CSR matrix of shape ``(dim, dim)`` and stores it in
+            ``self._H``.
 
         Raises:
             NotImplementedError: Always, until the operator is defined.
@@ -110,8 +113,19 @@ class HamiltonianModel:
             "status": "scaffold",
         }
 
+    def _cached_hamiltonian(self) -> sp.csr_matrix:
+        """Return ``self._H``, building it on first use."""
+        if self._H is None:
+            self._H = sp.csr_matrix(self.hamiltonian())
+        return self._H
+
     def propagator(self, *, dt: float) -> np.ndarray:
         """Return the unitary ``U(dt) = exp(-i H dt)``, with ``hbar = 1``.
+
+        ``U`` is dense in general, even when ``H`` is sparse, so this builds
+        a ``(dim, dim)`` matrix. :meth:`evolve_state` and
+        :meth:`evolve_density` do not call it: they apply ``U`` to their
+        argument directly from the sparse ``H``.
 
         Args:
             dt: Scalar evolution time.
@@ -119,11 +133,15 @@ class HamiltonianModel:
         Returns:
             Complex unitary matrix of shape ``(dim, dim)``.
         """
-        H = self._H if self._H is not None else self.hamiltonian()
+        H = self._cached_hamiltonian().toarray()
         return np.asarray(scipy.linalg.expm(-1j * dt * H))
 
     def evolve_state(self, *, dt: float, psi: np.ndarray) -> np.ndarray:
         """Evolve a pure state: ``psi(dt) = U(dt) psi``.
+
+        Uses ``scipy.sparse.linalg.expm_multiply``, which computes
+        ``exp(-i H dt) psi`` from products ``H @ psi`` (a truncated Taylor
+        series), without ever forming ``U``.
 
         Args:
             dt: Scalar evolution time.
@@ -133,10 +151,16 @@ class HamiltonianModel:
         Returns:
             Evolved state(s), with the same shape as ``psi``.
         """
-        return self.propagator(dt=dt) @ psi
+        A = (-1j * dt) * self._cached_hamiltonian()
+        return np.asarray(
+            scipy.sparse.linalg.expm_multiply(A, np.asarray(psi, dtype=complex))
+        )
 
     def evolve_density(self, *, dt: float, rho: np.ndarray) -> np.ndarray:
         """Evolve a density matrix: ``rho(dt) = U(dt) rho U(dt)^dagger``.
+
+        Computed as ``U (U rho^dagger)^dagger``, i.e. two applications of
+        ``U`` to the columns of a matrix, so ``U`` is never formed.
 
         Args:
             dt: Scalar evolution time.
@@ -145,5 +169,6 @@ class HamiltonianModel:
         Returns:
             Evolved density matrix of shape ``(dim, dim)``.
         """
-        U = self.propagator(dt=dt)
-        return U @ rho @ U.conj().T
+        # (U rho^dagger)^dagger = rho U^dagger, then U (rho U^dagger).
+        U_rho_dag = self.evolve_state(dt=dt, psi=np.asarray(rho).conj().T)
+        return self.evolve_state(dt=dt, psi=U_rho_dag.conj().T)
