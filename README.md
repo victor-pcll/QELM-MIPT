@@ -25,6 +25,7 @@ uv sync
 | `conf/` | Hydra YAML: `config.yaml` plus groups `sim_type`, `training`, `evaluation` |
 | `data/` | Local time series and training datasets (gitignored) |
 | `src/QELM/models/` | Hamiltonians and time evolution (transverse-field Ising model, Kitaev scaffold) |
+| `src/QELM/embedding/` | Initial-state embeddings (`Embedding` base, ancilla + charge-sector state) |
 | `src/QELM/training/` | Training algorithms (Readout, Ridge scaffolds) |
 | `src/QELM/evaluation/` | Metrics and plot scaffolds |
 | `notebooks/series.ipynb` | Plot a local series from `data/`; the library call stays a scaffold |
