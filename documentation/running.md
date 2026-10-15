@@ -61,3 +61,13 @@ uv run python experiments/run_experiment.py models=TFIM TFIM.N=6
 ```
 
 Write temporary outputs (arrays, logs, plots) to `experiments/scratch/`, available in the script as `SCRATCH`. Git ignores everything in that folder except `.gitkeep`, so nothing written there is committed. Copy the script to start a new experiment and keep the template unchanged.
+
+### Bash scripts
+
+`experiments/scripts/` holds bash scripts that launch a set of runs from the terminal. The test experiment sweeps `TFIM.N` and `seed` through `main.py` and writes each run to its own folder under `experiments/scratch/`:
+
+```bash
+./experiments/scripts/test_experiment.sh
+```
+
+Copy it to write your own sweep. [`experiments/scripts/README.md`](../experiments/scripts/README.md) explains how.
