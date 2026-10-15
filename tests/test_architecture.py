@@ -24,13 +24,42 @@ def test_physics_only_exposes_primitives() -> None:
 
 
 def test_training_modules_split_by_role() -> None:
-    """Each class lives in the module named after its role."""
-    assert training.ProjectiveMeasurement.__module__ == "QELM.training.measurements"
-    assert training.ReadoutResult.__module__ == "QELM.training.measurements"
-    assert training.SingleObservable.__module__ == "QELM.training.readout"
-    assert training.DoubleObservable.__module__ == "QELM.training.readout"
-    assert training.LinearReadout.__module__ == "QELM.training.regression"
-    assert training.RidgeRegression.__module__ == "QELM.training.regression"
+    """Each class lives in its domain subpackage: parent in base.py (#29)."""
+    expected = {
+        training.Readout: "QELM.training.measurements.base",
+        training.ReadoutResult: "QELM.training.measurements.base",
+        training.ProjectiveMeasurement: "QELM.training.measurements.projective",
+        training.Observables: "QELM.training.readout.base",
+        training.SingleObservable: "QELM.training.readout.single",
+        training.DoubleObservable: "QELM.training.readout.double",
+        training.Trainer: "QELM.training.regression.base",
+        training.LinearReadout: "QELM.training.regression.linear",
+        training.RidgeRegression: "QELM.training.regression.ridge",
+    }
+    for cls, module in expected.items():
+        assert cls.__module__ == module, cls
+
+
+def test_children_inherit_from_their_base() -> None:
+    assert issubclass(training.ProjectiveMeasurement, training.Readout)
+    assert issubclass(training.SingleObservable, training.Observables)
+    assert issubclass(training.DoubleObservable, training.Observables)
+    assert issubclass(training.LinearReadout, training.Trainer)
+    assert issubclass(training.RidgeRegression, training.Trainer)
+
+
+def test_subpackage_imports_still_work() -> None:
+    """Imports by domain keep working, as before the split."""
+    from QELM.training.measurements import ProjectiveMeasurement, Readout
+    from QELM.training.readout import DoubleObservable, SingleObservable
+    from QELM.training.regression import RidgeRegression, Trainer
+
+    assert ProjectiveMeasurement is training.ProjectiveMeasurement
+    assert Readout is training.Readout
+    assert SingleObservable is training.SingleObservable
+    assert DoubleObservable is training.DoubleObservable
+    assert RidgeRegression is training.RidgeRegression
+    assert Trainer is training.Trainer
 
 
 def test_trainer_and_readout_registries() -> None:
