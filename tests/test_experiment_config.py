@@ -12,13 +12,17 @@ def teardown_function() -> None:
 
 
 def test_default_experiment_values() -> None:
+    """Valeurs par défaut. Celles qui dépendent de N sont vérifiées par leur
+    formule, pour que le test reste vrai si on change TFIM.N (issue #54)."""
     cfg = load_config()
+    N = cfg.TFIM.N
+    assert isinstance(N, int) and N >= 3
     assert cfg.TFIM.J == 1.0
     assert cfg.TFIM.h == pytest.approx(10.0)
     assert cfg.TFIM.RUNS == 10
     assert cfg.evolution.t == pytest.approx(10.0)
-    assert cfg.evolution.n_steps == 40
-    assert cfg.evolution.dt == pytest.approx(0.25)
+    assert cfg.evolution.n_steps == 4 * N
+    assert cfg.evolution.dt == pytest.approx(10.0 / (4 * N))
     assert cfg.samples.L == 10000
     assert cfg.samples.train_size == 7000
     assert cfg.dynamic_readout.p == 0.01

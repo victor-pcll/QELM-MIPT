@@ -41,7 +41,7 @@ def get_trainer(name: str) -> type[Trainer]:
     """Return the trainer class for a ``training.name`` config value.
 
     Args:
-        name: Scalar trainer name such as ``"ridge"`` or ``"readout"``.
+        name: Scalar trainer name such as ``"ridge"`` or ``"linear"``.
 
     Returns:
         The matching :class:`Trainer` subclass.

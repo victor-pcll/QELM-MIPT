@@ -166,10 +166,19 @@ def test_same_dimension_as_model() -> None:
 
 
 def test_from_full_config_follows_the_model() -> None:
-    """La config par défaut contient le bloc, et N suit le modèle choisi."""
+    """La config par défaut contient le bloc, et N suit le modèle choisi.
+
+    Le N par défaut est lu dans la config plutôt que codé en dur, pour que
+    le test reste vrai si on change ``TFIM.N`` dans ``conf/`` (issue #54).
+    """
     from QELM import load_config
 
-    for overrides, N in (([], 10), (["TFIM.N=6"], 6), (["sim_type=kitaev"], 4)):
+    default_N = int(load_config().TFIM.N)
+    for overrides, N in (
+        ([], default_N),
+        (["TFIM.N=5"], 5),
+        (["sim_type=kitaev"], 4),
+    ):
         cfg = load_config(overrides)
         emb = AncillaChargeSectorEmbedding.from_config(cfg)
         assert emb.N == N
