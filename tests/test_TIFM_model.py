@@ -8,6 +8,7 @@ from omegaconf import OmegaConf
 
 from QELM.models.base import EvolutionState, HamiltonianModel, evolution_request
 from QELM.models.TFIM import TransverseFieldIsingModel
+from sparse_checks import assert_sparse_hermitian
 
 # =====================================================================
 # 1. FIXTURES (Données et modèles réutilisables)
@@ -49,11 +50,8 @@ def test_hamiltonian_hermiticity(
     ising_model: TransverseFieldIsingModel,
 ):
     """Vérifie la propriété physique fondamentale : H est Hermitien (H = H^dagger)."""
-    H = ising_model.hamiltonian().toarray()
-    H_dagger = H.conj().T
-
-    # Vérification numérique stricte sur matrices complexes
-    np.testing.assert_allclose(H, H_dagger, atol=1e-12)
+    # Vérification stricte sans copie dense (voir tests/sparse_checks.py)
+    assert_sparse_hermitian(ising_model.hamiltonian(), atol=1e-12)
 
 
 def test_hamiltonian_determinism_and_fixed_disorder(
