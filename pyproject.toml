@@ -51,7 +51,7 @@ known-first-party = ["QELM"]
 [tool.mypy]
 python_version = "3.12"
 mypy_path = "src"
-files = ["src/QELM", "main.py"]
+files = ["src/QELM", "main.py", "experiments/run_experiment.py"]
 disallow_untyped_defs = true
 warn_unused_ignores = true
 explicit_package_bases = true
