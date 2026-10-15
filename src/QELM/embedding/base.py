@@ -144,3 +144,30 @@ class Embedding:
             return sp.csr_matrix(psi_sp @ psi_sp.conj().T)
         psi = self.state(x)
         return np.outer(psi, psi.conj())
+
+    @overload
+    def rho(
+        self, x: np.ndarray | None = None, sparse: Literal[False] = False
+    ) -> np.ndarray: ...
+    @overload
+    def rho(
+        self, x: np.ndarray | None = None, *, sparse: Literal[True]
+    ) -> sp.csr_matrix: ...
+    def rho(
+        self, x: np.ndarray | None = None, sparse: bool = False
+    ) -> np.ndarray | sp.csr_matrix:
+        """Return the initial density matrix ``rho = |psi><psi|``.
+
+        Short name for :meth:`density_matrix`, inherited by every embedding.
+
+        Args:
+            x: Input data, passed to :meth:`state`.
+            sparse: ``True`` for a CSR matrix, ``False`` (default) for a
+                NumPy array.
+
+        Returns:
+            Complex density matrix of shape ``(2**N, 2**N)``.
+        """
+        if sparse:
+            return self.density_matrix(x, sparse=True)
+        return self.density_matrix(x)
