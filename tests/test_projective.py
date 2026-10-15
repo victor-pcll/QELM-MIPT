@@ -296,13 +296,14 @@ def test_numpy_scalar_p_is_accepted() -> None:
 
 
 def test_from_full_config() -> None:
-    """La config composée contient le bloc : tous les qubits sont mesurés."""
+    """La config composée : n_ancilla = 1, seuls les qubits système sont mesurés."""
     from QELM import load_config
 
     readout = ProjectiveMeasurement.from_config(load_config())
     assert readout.qubits is None
+    assert readout.n_ancilla == 1
     result = readout.measure(_random_rho(3, 21), rng=np.random.default_rng(0))
-    assert result.outcomes.shape == (3,)
+    assert result.outcomes.shape == (2,)
 
 
 @pytest.mark.parametrize("cfg", [{"seed": 0}, {"projective_measurement": None}])
@@ -360,3 +361,62 @@ def test_full_config_sets_p() -> None:
     assert ProjectiveMeasurement.from_config(load_config()).p == 1.0
     cfg = load_config(["projective_measurement.p=0.25"])
     assert ProjectiveMeasurement.from_config(cfg).p == 0.25
+
+
+# --- Ancillas exclues par défaut (issue #62) ---
+
+
+def _ancilla_plus_system(bits: str) -> np.ndarray:
+    """rho de |+>_R |bits>_S : l'ancilla (qubit 0) en superposition."""
+    system = np.zeros(2 ** len(bits))
+    system[int(bits, 2)] = 1
+    return _pure(np.kron([1, 1], system))
+
+
+def test_default_targets_skip_the_ancillas() -> None:
+    """N = 4, n_ancilla = 1 : mesure des qubits 1, 2, 3 seulement."""
+    rho = _ancilla_plus_system("011")
+    readout = ProjectiveMeasurement({"n_ancilla": 1})
+    for seed in range(10):
+        result = readout.measure(rho, rng=np.random.default_rng(seed))
+        np.testing.assert_array_equal(result.outcomes, [1, -1, -1])
+        # L'ancilla n'est pas effondrée : la cohérence |0><1| reste 1/2.
+        np.testing.assert_allclose(result.rho, rho, atol=1e-12)
+
+
+def test_several_ancillas_are_skipped() -> None:
+    """n_ancilla = 2 sur N = 4 : seuls les qubits 2 et 3 sont mesurés."""
+    psi = np.zeros(16)
+    psi[0b1101] = 1
+    result = ProjectiveMeasurement({"n_ancilla": 2}).measure(
+        _pure(psi), rng=np.random.default_rng(0)
+    )
+    np.testing.assert_array_equal(result.outcomes, [1, -1])
+
+
+def test_explicit_qubits_override_n_ancilla() -> None:
+    """qubits = [0, 2] est mesuré tel quel, ancilla comprise."""
+    psi = np.zeros(16)
+    psi[0b1010] = 1
+    result = ProjectiveMeasurement({"qubits": [0, 2], "n_ancilla": 1}).measure(
+        _pure(psi), rng=np.random.default_rng(0)
+    )
+    np.testing.assert_array_equal(result.outcomes, [-1, -1])
+
+
+@pytest.mark.parametrize("params", [{}, {"n_ancilla": None}, {"n_ancilla": 0}])
+def test_without_n_ancilla_every_qubit_is_measured(params: dict) -> None:
+    """Sans n_ancilla (ou 0), tous les qubits 0 .. N-1 sont mesurés."""
+    readout = ProjectiveMeasurement(params)
+    assert readout.n_ancilla == 0
+    result = readout.measure(_random_rho(4, 3), rng=np.random.default_rng(0))
+    assert result.outcomes.shape == (4,)
+    assert not np.any(np.isnan(result.outcomes))
+
+
+def test_invalid_n_ancilla_is_rejected() -> None:
+    """n_ancilla négatif ou plus grand que N : ValueError."""
+    with pytest.raises(ValueError, match="n_ancilla must be >= 0"):
+        ProjectiveMeasurement({"n_ancilla": -1})
+    with pytest.raises(ValueError):
+        ProjectiveMeasurement({"n_ancilla": 3}).measure(BELL)
