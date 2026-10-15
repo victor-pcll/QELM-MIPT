@@ -1,9 +1,10 @@
 """Feature extraction: observables measured on the final reservoir state.
 
-A single observable ``O`` gives the ``N`` features ``<O_i> = Tr(rho O_i)``.
-A double observable ``(A, B)`` gives the ``N (N - 1) / 2`` two-point
+Each single observable ``O`` gives the ``N`` features ``<O_i> = Tr(rho O_i)``.
+Each double observable ``(A, B)`` gives the ``N (N - 1) / 2`` two-point
 correlators ``<A_i B_j>`` for ``i < j``. Operators are Pauli labels
-(``"X"``, ``"Y"`` or ``"Z"``) from YAML.
+(``"X"``, ``"Y"`` or ``"Z"``) from YAML. A set can hold several observables
+(or pairs), or none.
 """
 
 from __future__ import annotations
@@ -40,9 +41,12 @@ class Observables:
     def from_config(cls, cfg: DictConfig) -> Self:
         """Build the observable set from the Hydra block named ``cls.name``.
 
+        A missing or empty block gives a set without observables, whose
+        :meth:`expectation` returns no features.
+
         Args:
             cfg: Composed Hydra config. ``cfg[cls.name]`` is a mapping of
-                scalar parameters.
+                parameters, or is absent.
 
         Returns:
             An instance of this class.
@@ -50,7 +54,9 @@ class Observables:
         Raises:
             TypeError: If the config block is not a mapping.
         """
-        node = cfg[cls.name]
+        node = OmegaConf.select(cfg, cls.name)
+        if node is None:
+            return cls({})
         raw = (
             OmegaConf.to_container(node, resolve=True)
             if OmegaConf.is_config(node)
@@ -88,62 +94,118 @@ class Observables:
         return np.array([np.einsum("ij,ji->", rho, op).real for op in ops])
 
 
+def _labels(raw: Any, key: str) -> list[str]:
+    """Return a list of checked Pauli labels from a YAML value.
+
+    Args:
+        raw: A label such as ``"Z"``, a list of labels, or ``None``.
+        key: Parameter name, for the error message.
+
+    Returns:
+        The labels, possibly empty.
+
+    Raises:
+        ValueError: If a label is not a Pauli label.
+        TypeError: If ``raw`` is neither a string nor a list.
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list | tuple):
+        raise TypeError(f"{key} must be a Pauli label or a list of them, got {raw!r}.")
+    labels = [str(label) for label in raw]
+    for label in labels:
+        pauli(label)
+    return labels
+
+
 class SingleObservable(Observables):
-    """One-site expectation values ``<O_i>`` for ``i = 0 .. N-1``.
+    """One-site expectation values ``<O_i>`` for each ``O`` and ``i = 0 .. N-1``.
+
+    YAML: ``single_observable: {observables: [Z, X]}``. The legacy form
+    ``{observable: Z}`` is still read. Features come observable by
+    observable: ``<O_0>, ..., <O_{N-1}>`` for the first, then the next.
 
     Attributes:
-        observable: Pauli label of ``O``, from ``params["observable"]``.
+        observables: Pauli labels, possibly empty.
     """
 
     name: str = "single_observable"
 
     def __init__(self, params: Mapping[str, Any]) -> None:
-        """Store and check the Pauli label.
+        """Store and check the Pauli labels.
 
         Args:
-            params: ``observable`` is required, such as ``"Z"``.
+            params: ``observables`` (a label or a list of labels) and/or the
+                legacy ``observable``. Both are optional.
         """
         super().__init__(params)
-        self.observable: str = str(params["observable"])
-        pauli(self.observable)
+        self.observables: list[str] = _labels(
+            params.get("observable"), "observable"
+        ) + _labels(params.get("observables"), "observables")
 
     def operators(self, N: int) -> list[np.ndarray]:
-        """Return ``[O_0, ..., O_{N-1}]``, so ``N`` features."""
-        P = pauli(self.observable)
-        return [get_site_operator(P, i, N) for i in range(N)]
+        """Return ``O_i`` for each observable, then each site: ``len * N`` features."""
+        return [
+            get_site_operator(pauli(label), i, N)
+            for label in self.observables
+            for i in range(N)
+        ]
 
 
 class DoubleObservable(Observables):
-    """Two-point correlators ``<A_i B_j>`` for every pair ``i < j``.
+    """Two-point correlators ``<A_i B_j>`` for each pair ``(A, B)`` and ``i < j``.
+
+    YAML: ``double_observable: {pairs: [[Z, Z], [X, X]]}``. The legacy form
+    ``{observable_1: Z, observable_2: Z}`` is still read. Features come pair
+    by pair, each in lexicographic site order.
 
     Attributes:
-        observable_1: Pauli label of ``A``, from ``params["observable_1"]``.
-        observable_2: Pauli label of ``B``, from ``params["observable_2"]``.
+        pairs: ``(A, B)`` Pauli label pairs, possibly empty.
     """
 
     name: str = "double_observable"
 
     def __init__(self, params: Mapping[str, Any]) -> None:
-        """Store and check the two Pauli labels.
+        """Store and check the Pauli label pairs.
 
         Args:
-            params: ``observable_1`` and ``observable_2`` are required.
+            params: ``pairs`` (a list of two-label lists) and/or the legacy
+                ``observable_1`` and ``observable_2``. All are optional.
+
+        Raises:
+            ValueError: If a pair does not have two labels, or only one of
+                ``observable_1`` / ``observable_2`` is given.
         """
         super().__init__(params)
-        self.observable_1: str = str(params["observable_1"])
-        self.observable_2: str = str(params["observable_2"])
-        pauli(self.observable_1)
-        pauli(self.observable_2)
+        self.pairs: list[tuple[str, str]] = []
+        first, second = params.get("observable_1"), params.get("observable_2")
+        if (first is None) != (second is None):
+            raise ValueError("observable_1 and observable_2 must be given together.")
+        if first is not None:
+            self.pairs.append((str(first), str(second)))
+        for pair in params.get("pairs") or []:
+            labels = _labels(list(pair), "pairs")
+            if len(labels) != 2:
+                raise ValueError(f"Each pair must have two labels, got {pair!r}.")
+            self.pairs.append((labels[0], labels[1]))
+        for a, b in self.pairs:
+            pauli(a)
+            pauli(b)
 
     def operators(self, N: int) -> list[np.ndarray]:
-        """Return ``A_i B_j`` for ``i < j`` in lexicographic order.
+        """Return ``A_i B_j`` for each pair, then each ``i < j``.
 
-        That is ``N (N - 1) / 2`` features: ``(0, 1), (0, 2), ..., (N-2, N-1)``.
+        That is ``N (N - 1) / 2`` features per pair: ``(0, 1), (0, 2), ...,
+        (N-2, N-1)``.
         """
-        A = pauli(self.observable_1)
-        B = pauli(self.observable_2)
-        return [
-            get_site_operator(A, i, N) @ get_site_operator(B, j, N)
-            for i in range(N)
-            for j in range(i + 1, N)
-        ]
+        ops = []
+        for a, b in self.pairs:
+            A, B = pauli(a), pauli(b)
+            ops += [
+                get_site_operator(A, i, N) @ get_site_operator(B, j, N)
+                for i in range(N)
+                for j in range(i + 1, N)
+            ]
+        return ops

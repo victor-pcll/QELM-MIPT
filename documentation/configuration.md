@@ -13,6 +13,7 @@ Scientific parameters and secrets live in different files.
 | `defaults` | `sim_type: TFIM`, `training: ridge`, `evaluation: default` |
 | `seed` | Integer passed to NumPy at startup. See [Code quality](code-quality.md). |
 | `samples.L`, `samples.train_fraction`, `samples.train_size` | Number of samples and training split, `train_size = int(0.7 * L)`. Not read by the pipeline yet |
+| `single_observable.observables`, `double_observable.pairs` | Features measured on the final state: `<O_i>` for each label (default `[Z]`), `<A_i B_j>` for each pair (default `[[Z, Z]]`). Several entries allowed; `[]` or a missing block gives no feature. Read by `SingleObservable.from_config(cfg)` / `DoubleObservable.from_config(cfg)` |
 | `dynamic_readout.p` | Dynamic readout parameter `p`. Not read by the pipeline yet |
 | `checkpoint` | Where the run writes its `.npz`. See [Checkpoints and local data](checkpoints.md). |
 | `hydra.run.dir` | `outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}` |

@@ -115,6 +115,90 @@ def test_from_config_reads_its_block() -> None:
             "double_observable": {"observable_1": "Z", "observable_2": "X"},
         }
     )
-    assert SingleObservable.from_config(cfg).observable == "X"
+    assert SingleObservable.from_config(cfg).observables == ["X"]
+    assert DoubleObservable.from_config(cfg).pairs == [("Z", "X")]
+
+
+# --- Blocs absents ou multiples (issue #24) ---
+
+
+def test_full_config_has_both_blocks() -> None:
+    """La config composée contient les deux blocs : <Z_i> et <Z_i Z_j>."""
+    from QELM import load_config
+
+    cfg = load_config()
+    single = SingleObservable.from_config(cfg)
     double = DoubleObservable.from_config(cfg)
-    assert (double.observable_1, double.observable_2) == ("Z", "X")
+    assert single.observables == ["Z"]
+    assert double.pairs == [("Z", "Z")]
+    rho = _product_state(ZERO, 3)
+    np.testing.assert_allclose(single.expectation(rho), [1, 1, 1])
+    np.testing.assert_allclose(double.expectation(rho), [1, 1, 1])
+
+
+@pytest.mark.parametrize(
+    "cfg",
+    [
+        {"seed": 0},
+        {"single_observable": None, "double_observable": None},
+        {"single_observable": {}, "double_observable": {}},
+        {"single_observable": {"observables": []}, "double_observable": {"pairs": []}},
+    ],
+)
+def test_missing_or_empty_block_gives_no_features(cfg: dict) -> None:
+    """Bloc absent ou vide : aucune observable, aucun ConfigKeyError."""
+    conf = OmegaConf.create(cfg)
+    OmegaConf.set_struct(conf, True)
+    rho = _product_state(ZERO, 3)
+    single = SingleObservable.from_config(conf)
+    double = DoubleObservable.from_config(conf)
+    assert single.observables == [] and double.pairs == []
+    assert single.expectation(rho).shape == (0,)
+    assert double.expectation(rho).shape == (0,)
+
+
+def test_several_single_observables() -> None:
+    """[Z, X] donne N features <Z_i> puis N features <X_i>."""
+    N = 3
+    plus = np.array([1, 1], dtype=complex) / np.sqrt(2)
+    rho = _product_state(plus, N)
+    features = SingleObservable({"observables": ["Z", "X"]}).expectation(rho)
+    assert features.shape == (2 * N,)
+    np.testing.assert_allclose(features[:N], 0, atol=1e-12)
+    np.testing.assert_allclose(features[N:], 1)
+
+
+def test_several_double_pairs() -> None:
+    """[[Z, Z], [X, X]] donne N(N-1)/2 features par paire, paire par paire."""
+    N = 4
+    n_pairs = N * (N - 1) // 2
+    bell = np.zeros(4, dtype=complex)
+    bell[[0, 3]] = 1 / np.sqrt(2)
+    rho = np.kron(np.outer(bell, bell.conj()), _product_state(ZERO, 2))
+    double = DoubleObservable({"pairs": [["Z", "Z"], ["X", "X"]]})
+    features = double.expectation(rho)
+    assert features.shape == (2 * n_pairs,)
+    zz = DoubleObservable({"pairs": [["Z", "Z"]]}).expectation(rho)
+    xx = DoubleObservable({"pairs": [["X", "X"]]}).expectation(rho)
+    np.testing.assert_allclose(features, np.concatenate([zz, xx]))
+    assert xx[0] == pytest.approx(1.0)  # <X_0 X_1> = 1 sur |00> + |11>
+
+
+def test_legacy_and_list_forms_add_up() -> None:
+    single = SingleObservable({"observable": "Z", "observables": ["X"]})
+    assert single.observables == ["Z", "X"]
+    double = DoubleObservable(
+        {"observable_1": "Z", "observable_2": "Z", "pairs": [["X", "Y"]]}
+    )
+    assert double.pairs == [("Z", "Z"), ("X", "Y")]
+
+
+def test_bad_pair_or_label_is_rejected() -> None:
+    with pytest.raises(ValueError, match="two labels"):
+        DoubleObservable({"pairs": [["Z"]]})
+    with pytest.raises(ValueError, match="together"):
+        DoubleObservable({"observable_1": "Z"})
+    with pytest.raises(ValueError, match="Unknown observable"):
+        DoubleObservable({"pairs": [["Z", "W"]]})
+    with pytest.raises(ValueError, match="Unknown observable"):
+        SingleObservable({"observables": ["Z", "W"]})
