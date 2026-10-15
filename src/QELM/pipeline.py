@@ -53,9 +53,9 @@ def run_pipeline(cfg: DictConfig) -> str:
     """Build the selected blocks and return a scaffold status line.
 
     Args:
-        cfg: Composed Hydra config. ``cfg.test.dt`` is a scalar step size
-            and ``cfg.test.n_steps`` is a scalar step count. ``N``, ``J``,
-            and ``learning_rate`` stay on the simulation block.
+        cfg: Composed Hydra config. ``cfg.evolution.dt`` is a scalar step size
+            and ``cfg.evolution.n_steps`` is a scalar step count. ``N`` and ``J``
+            stay on the simulation block.
 
     Returns:
         One status line naming the model, trainer, ``dt``, ``n_steps``,
@@ -67,7 +67,7 @@ def run_pipeline(cfg: DictConfig) -> str:
     model = plan.model.from_config(cfg)
     trainer = plan.trainer.from_config(cfg)
     evolution = evolution_request(
-        model, dt=float(cfg.test.dt), n_steps=int(cfg.test.n_steps)
+        model, dt=float(cfg.evolution.dt), n_steps=int(cfg.evolution.n_steps)
     )
     training_status = trainer.fit(features=None, targets=None)
     report = plan.evaluator(

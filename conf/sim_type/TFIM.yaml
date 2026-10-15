@@ -12,11 +12,10 @@ TFIM:
   N: 10 # number of qubits
   J: 1.0 # coupling scale Js, the energy unit
   h: ${mul:10.0,${TFIM.J}} # transverse field, h = 10 Js
-  R: 10 # number of random Hamiltonians (disorder realisations)
-  learning_rate: 1.0e-3
+  RUNS: 10 # number of random Hamiltonians (disorder realisations)
 
 # Unitary evolution step and step count, recorded by the pipeline (evolution_request).
-test:
+evolution:
   t: ${div:10.0,${TFIM.J}} # total evolution time, t = 10 / Js
   n_steps: ${mul:4,${TFIM.N}} # d, number of time cuts, d = 4 N
-  dt: ${div:${test.t},${test.n_steps}} # step, dt = t / d
+  dt: ${div:${evolution.t},${evolution.n_steps}} # step, dt = t / d

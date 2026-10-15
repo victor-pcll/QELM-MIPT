@@ -144,7 +144,6 @@ def _metadata(
         "trainer": trainer.name,
         "seed": int(cfg.seed),
         "training_status": training_status,
-        "learning_rate": trainer.learning_rate,
         "evolution": _jsonable(dict(evolution)),
         "params": _jsonable(model.params),
     }

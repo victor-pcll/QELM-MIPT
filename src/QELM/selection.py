@@ -15,12 +15,12 @@ def load_secrets() -> None:
 
 
 def format_selection(cfg: DictConfig) -> str:
-    """Format the chosen simulation and test values.
+    """Format the chosen simulation and evolution values.
 
     Args:
         cfg: Composed Hydra config. The active simulation block is
             ``cfg[cfg.sim_type]``. Each exposed value is a scalar
-            (``N``, ``J``, ``learning_rate``, ``dt``, ``n_steps``).
+            (``N``, ``J``, ``dt``, ``n_steps``).
 
     Returns:
         One line of ``key=value`` pairs, starting with ``sim_type``.
@@ -29,5 +29,5 @@ def format_selection(cfg: DictConfig) -> str:
     sim = cfg[sim_type]
     parts = [f"sim_type={sim_type}"]
     parts.extend(f"{sim_type}.{key}={value}" for key, value in sim.items())
-    parts.extend(f"test.{key}={value}" for key, value in cfg.test.items())
+    parts.extend(f"evolution.{key}={value}" for key, value in cfg.evolution.items())
     return " ".join(parts)

@@ -13,35 +13,25 @@ class Trainer:
 
     Attributes:
         name: Config key for this trainer.
-        learning_rate: Scalar step size from the simulation block, or
-            ``None`` when that block does not define one.
     """
 
     name: str
 
-    def __init__(self, learning_rate: float | None = None) -> None:
-        """Store the scalar learning rate.
-
-        Args:
-            learning_rate: Optimizer step size, or ``None`` if unset.
-        """
-        self.learning_rate = learning_rate
-
     @classmethod
     def from_config(cls, cfg: DictConfig) -> Self:
-        """Read ``learning_rate`` from the selected simulation block.
+        """Build the trainer from the composed config.
+
+        Trainers take no config parameter: ridge regression uses the
+        closed-form solution, so there is no learning rate.
 
         Args:
-            cfg: Composed Hydra config. ``cfg[cfg.sim_type]`` may contain a
-                scalar ``learning_rate``.
+            cfg: Composed Hydra config. Not read yet; kept so every
+                component is built the same way.
 
         Returns:
             An instance of this trainer class.
         """
-        sim = cfg[str(cfg.sim_type)]
-        raw_learning_rate = sim.get("learning_rate")
-        learning_rate = None if raw_learning_rate is None else float(raw_learning_rate)
-        return cls(learning_rate=learning_rate)
+        return cls()
 
     def fit(
         self,

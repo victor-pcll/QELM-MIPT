@@ -35,7 +35,7 @@ def _save(cfg):
     model = TransverseFieldIsingModel.from_config(cfg)
     trainer = RidgeRegression.from_config(cfg)
     evolution = evolution_request(
-        model, dt=float(cfg.test.dt), n_steps=int(cfg.test.n_steps)
+        model, dt=float(cfg.evolution.dt), n_steps=int(cfg.evolution.n_steps)
     )
     return save_checkpoint(
         cfg,
@@ -65,8 +65,8 @@ def test_checkpoint_writer_creates_file_in_tmp_path(tmp_path: Path) -> None:
     assert metadata["seed"] == int(cfg.seed)
     assert metadata["sim_type"] == str(cfg.sim_type)
     assert metadata["params"] == {key: cfg.TFIM[key] for key in cfg.TFIM}
-    assert metadata["evolution"]["dt"] == float(cfg.test.dt)
-    assert metadata["evolution"]["n_steps"] == int(cfg.test.n_steps)
+    assert metadata["evolution"]["dt"] == float(cfg.evolution.dt)
+    assert metadata["evolution"]["n_steps"] == int(cfg.evolution.n_steps)
     assert "wandb" not in metadata
     uuid.UUID(metadata["run_id"])
 
