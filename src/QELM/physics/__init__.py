@@ -12,7 +12,6 @@ from QELM.physics.operators import (
     Y,
     Z,
     get_site_operator,
-    get_site_operator_sparse,
     n_qubits,
     pauli,
 )
@@ -24,7 +23,6 @@ __all__ = [
     "Y",
     "Z",
     "get_site_operator",
-    "get_site_operator_sparse",
     "n_qubits",
     "pauli",
 ]
