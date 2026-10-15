@@ -21,6 +21,11 @@ samples:
 dynamic_readout:
   p: 0.01
 
+# Projective measurement in the Z basis (QELM.training.measurements).
+# qubits: list of measured sites in order, or null for every qubit.
+projective_measurement:
+  qubits: null
+
 # Checkpoint written at the end of every run. No secrets belong here.
 # dir: null uses Hydra's timestamped run directory when a job is active,
 # otherwise <fallback_root>/<uuid>/.

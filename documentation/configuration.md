@@ -14,6 +14,7 @@ Scientific parameters and secrets live in different files.
 | `seed` | Integer passed to NumPy at startup. See [Code quality](code-quality.md). |
 | `samples.L`, `samples.train_fraction`, `samples.train_size` | Number of samples and training split, `train_size = int(0.7 * L)`. Not read by the pipeline yet |
 | `dynamic_readout.p` | Dynamic readout parameter `p`. Not read by the pipeline yet |
+| `projective_measurement.qubits` | Sites measured by `ProjectiveMeasurement`, in order; `null` (default) measures every qubit. Read by `ProjectiveMeasurement.from_config(cfg)`, which also works without the block |
 | `checkpoint` | Where the run writes its `.npz`. See [Checkpoints and local data](checkpoints.md). |
 | `hydra.run.dir` | `outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}` |
 
