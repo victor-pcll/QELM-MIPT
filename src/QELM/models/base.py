@@ -60,6 +60,8 @@ class HamiltonianModel:
             ``N`` and ``J``.
         N: Number of qubits.
         dim: Hilbert-space dimension, ``2**N``.
+        dt: Default step used by :meth:`evolve` when no ``dt`` is passed.
+            ``from_config`` sets it from ``evolution.dt``; ``None`` otherwise.
     """
 
     name: str = "base"
@@ -74,6 +76,7 @@ class HamiltonianModel:
         self.params: dict[str, Any] = dict(params)
         self.N: int = int(params["N"])
         self.dim: int = 2**self.N
+        self.dt: float | None = None
         self._H: sp.csr_matrix | None = None
 
     @classmethod
@@ -85,7 +88,8 @@ class HamiltonianModel:
                 scalar parameters.
 
         Returns:
-            An instance of this model class.
+            An instance of this model class, with ``dt`` set from
+            ``cfg.evolution.dt`` when that key exists.
 
         Raises:
             TypeError: If the config block is not a mapping.
@@ -101,7 +105,11 @@ class HamiltonianModel:
         if not isinstance(raw, dict):
             raise TypeError(f"{cls.name} config must be a mapping.")
         params = {str(key): value for key, value in raw.items()}
-        return cls(params)
+        model = cls(params)
+        dt = OmegaConf.select(cfg, "evolution.dt")
+        if dt is not None:
+            model.dt = float(dt)
+        return model
 
     def hamiltonian(self) -> sp.csr_matrix:
         """Return the Hamiltonian matrix for ``self.params``.
@@ -138,7 +146,7 @@ class HamiltonianModel:
         H = self._cached_hamiltonian().toarray()
         return np.asarray(scipy.linalg.expm(-1j * dt * H))
 
-    def evolve(self, *, dt: float, state: np.ndarray) -> np.ndarray:
+    def evolve(self, state: np.ndarray, dt: float | None = None) -> np.ndarray:
         """Evolve a pure state or a density matrix by ``U(dt) = exp(-i H dt)``.
 
         The kind of ``state`` is read from its shape:
@@ -153,16 +161,25 @@ class HamiltonianModel:
         ``U (U rho^dagger)^dagger``.
 
         Args:
-            dt: Scalar evolution time.
             state: State vector of shape ``(dim,)`` or density matrix of
                 shape ``(dim, dim)``.
+            dt: Scalar evolution time. ``None`` uses ``self.dt``, set from
+                ``evolution.dt`` by :meth:`from_config`.
 
         Returns:
             The evolved state, with the same shape as ``state``.
 
         Raises:
-            ValueError: If ``state`` has any other shape.
+            ValueError: If ``state`` has any other shape, or if ``dt`` is
+                ``None`` and ``self.dt`` is not set.
         """
+        if dt is None:
+            if self.dt is None:
+                raise ValueError(
+                    "evolve needs dt: pass dt=..., or build the model with "
+                    "from_config (reads evolution.dt) or set model.dt."
+                )
+            dt = self.dt
         state = np.asarray(state, dtype=complex)
         if state.shape == (self.dim,):
             return self._apply_propagator(dt, state)

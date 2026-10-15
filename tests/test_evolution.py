@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
+from hydra import compose, initialize_config_dir
 
 from QELM.models.TFIM import TransverseFieldIsingModel
+from QELM.resolvers import register_resolvers
 
 
 @pytest.fixture
@@ -123,3 +127,38 @@ def test_evolve_rejects_wrong_shape(
     """Ni (dim,) ni (dim, dim) : erreur claire qui donne les formes attendues."""
     with pytest.raises(ValueError, match=r"\(8,\).*\(8, 8\).*got shape"):
         model.evolve(dt=0.1, state=np.zeros(shape, dtype=complex))
+
+
+def test_evolve_accepts_state_positionally(model: TransverseFieldIsingModel) -> None:
+    """evolve(state, dt) donne le même résultat que les arguments nommés."""
+    psi0 = _random_state(model.dim)
+    np.testing.assert_allclose(
+        model.evolve(psi0, 0.5), model.evolve(state=psi0, dt=0.5), atol=1e-12
+    )
+
+
+def test_evolve_uses_model_dt_by_default(model: TransverseFieldIsingModel) -> None:
+    """Sans dt, evolve utilise model.dt ; un dt explicite le remplace."""
+    psi0 = _random_state(model.dim)
+    model.dt = 0.3
+    np.testing.assert_allclose(
+        model.evolve(psi0), model.evolve(psi0, dt=0.3), atol=1e-12
+    )
+    assert not np.allclose(model.evolve(psi0, dt=0.5), model.evolve(psi0))
+
+
+def test_evolve_without_dt_raises(model: TransverseFieldIsingModel) -> None:
+    """Sans dt ni model.dt, l'erreur le dit."""
+    with pytest.raises(ValueError, match="evolve needs dt"):
+        model.evolve(_random_state(model.dim))
+
+
+def test_from_config_reads_evolution_dt() -> None:
+    """from_config prend dt dans evolution.dt, résolveurs compris."""
+    register_resolvers()
+    conf_dir = str(Path(__file__).resolve().parents[1] / "conf")
+    with initialize_config_dir(config_dir=conf_dir, version_base="1.3"):
+        cfg = compose(config_name="config", overrides=["TFIM.N=3"])
+    model = TransverseFieldIsingModel.from_config(cfg)
+    assert model.dt == pytest.approx(float(cfg.evolution.dt))
+    assert model.dt == pytest.approx(10.0 / 12)
