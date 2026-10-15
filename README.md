@@ -41,7 +41,7 @@ cp .env.example .env
 uv run python main.py sim_type=TFIM TFIM.N=12 evolution.dt=0.05
 ```
 
-`sim_type=TFIM` selects `conf/sim_type/TFIM.yaml` and the transverse-field Ising model. `training=ridge` (default) or `training=readout` selects the trainer. `N`, `J`, and `dt` stay in YAML or CLI overrides.
+`sim_type=TFIM` selects `conf/sim_type/TFIM.yaml` and the transverse-field Ising model. `training=ridge` (default) or `training=linear` selects the trainer. `N`, `J`, and `dt` stay in YAML or CLI overrides.
 
 ## Notebook
 

@@ -9,7 +9,7 @@ class LinearReadout(Trainer):
     """Linear readout trained on the reservoir features.
 
     ``fit`` accepts features of shape ``(n_samples, n_features)`` and does
-    not estimate a weight vector. Selected with ``training=readout``.
+    not estimate a weight vector. Selected with ``training=linear``.
     """
 
-    name = "readout"
+    name = "linear"
