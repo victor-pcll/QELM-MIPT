@@ -8,6 +8,12 @@ defaults:
 # Scalar seed applied once at startup. Override with seed=0 on the command line.
 seed: 42
 
+# Initial state of the reservoir (QELM.embedding). N is the total number of
+# qubits, ancilla included; it follows the selected Hamiltonian so that the
+# state and the model have the same size.
+ancilla_charge_sector:
+  N: ${${sim_type}.N}
+
 # The evolution block (test.t, test.dt, test.n_steps) depends on the
 # Hamiltonian, so it lives in conf/sim_type/ next to it.
 

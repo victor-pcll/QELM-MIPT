@@ -70,9 +70,15 @@ class Embedding:
             An instance of this class.
 
         Raises:
+            ValueError: If ``cfg`` has no ``cls.name`` block.
             TypeError: If the config block is not a mapping.
         """
-        node = cfg[cls.name]
+        node = OmegaConf.select(cfg, cls.name)
+        if node is None:
+            raise ValueError(
+                f"The config has no {cls.name!r} block. Compose the full config "
+                f"with QELM.load_config(), or add `{cls.name}: {{N: ...}}`."
+            )
         raw = (
             OmegaConf.to_container(node, resolve=True)
             if OmegaConf.is_config(node)
