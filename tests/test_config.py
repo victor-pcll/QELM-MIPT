@@ -12,7 +12,7 @@ from QELM.selection import format_selection
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_DIR = REPO_ROOT / "conf"
-OVERRIDES = ["sim_type=TFIM", "TFIM.N=12", "test.dt=0.05"]
+OVERRIDES = ["sim_type=TFIM", "TFIM.N=12", "evolution.dt=0.05"]
 
 
 def setup_function() -> None:
@@ -43,22 +43,21 @@ def test_config_loads_and_cli_overrides_apply() -> None:
     default = _compose()
     chosen = _compose(OVERRIDES)
 
-    assert set(chosen.TFIM.keys()) == {"N", "J", "h", "R", "learning_rate"}
-    assert set(chosen.test.keys()) == {"t", "n_steps", "dt"}
+    assert set(chosen.TFIM.keys()) == {"N", "J", "h", "RUNS"}
+    assert set(chosen.evolution.keys()) == {"t", "n_steps", "dt"}
     assert chosen.sim_type == "TFIM"
     assert chosen.TFIM.N == 12
-    assert chosen.test.dt == 0.05
+    assert chosen.evolution.dt == 0.05
     assert chosen.TFIM.N != default.TFIM.N
-    assert chosen.test.dt != default.test.dt
+    assert chosen.evolution.dt != default.evolution.dt
     assert chosen.TFIM.J == default.TFIM.J
-    assert chosen.TFIM.learning_rate == default.TFIM.learning_rate
     # n_steps = 4 N follows the TFIM.N override.
-    assert chosen.test.n_steps == 4 * chosen.TFIM.N
+    assert chosen.evolution.n_steps == 4 * chosen.TFIM.N
 
     text = format_selection(chosen)
     assert "sim_type=TFIM" in text
     assert "TFIM.N=12" in text
-    assert "test.dt=0.05" in text
+    assert "evolution.dt=0.05" in text
 
 
 def test_main_cli_override(tmp_path: Path) -> None:
@@ -79,5 +78,5 @@ def test_main_cli_override(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert "TFIM.N=12" in result.stdout
-    assert "test.dt=0.05" in result.stdout
+    assert "evolution.dt=0.05" in result.stdout
     assert (tmp_path / "checkpoint.npz").is_file()

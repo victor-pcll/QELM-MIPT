@@ -46,7 +46,7 @@ def test_run_pipeline_uses_cli_overrides(tmp_path: Path) -> None:
             [
                 "sim_type=TFIM",
                 "TFIM.N=12",
-                "test.dt=0.05",
+                "evolution.dt=0.05",
                 "training=readout",
                 f"checkpoint.dir={tmp_path}",
                 "checkpoint.use_uuid=false",

@@ -14,7 +14,7 @@ seed: 42
 ancilla_charge_sector:
   N: ${${sim_type}.N}
 
-# The evolution block (test.t, test.dt, test.n_steps) depends on the
+# The evolution block (evolution.t, evolution.dt, evolution.n_steps) depends on the
 # Hamiltonian, so it lives in conf/sim_type/ next to it.
 
 # Samples. Not read by the pipeline yet.
