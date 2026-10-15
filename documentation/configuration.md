@@ -15,6 +15,7 @@ Scientific parameters and secrets live in different files.
 | `ancilla_charge_sector.N` | Total qubit count of the initial state, `${${sim_type}.N}`: it follows the selected Hamiltonian. Read by `AncillaChargeSectorEmbedding.from_config(cfg)` |
 | `samples.L`, `samples.train_fraction`, `samples.train_size` | Number of samples and training split, `train_size = int(0.7 * L)`. Not read by the pipeline yet |
 | `single_observable.observables`, `double_observable.pairs` | Features measured on the final state: `<O_i>` for each label (default `[Z]`), `<A_i B_j>` for each pair (default `[[Z, Z]]`). Several entries allowed; `[]` or a missing block gives no feature. Read by `SingleObservable.from_config(cfg)` / `DoubleObservable.from_config(cfg)` |
+| `single_observable.N`, `double_observable.N` | Qubit count, `${${sim_type}.N}`. `operators()` uses it when called without `N`; `operators(N=...)` overrides it |
 | `dynamic_readout.p` | Dynamic readout parameter `p`. Not read by the pipeline yet |
 | `projective_measurement.qubits` | Sites measured by `ProjectiveMeasurement`, in order; `null` (default) measures every qubit. Read by `ProjectiveMeasurement.from_config(cfg)`, which also works without the block |
 | `checkpoint` | Where the run writes its `.npz`. See [Checkpoints and local data](checkpoints.md). |
