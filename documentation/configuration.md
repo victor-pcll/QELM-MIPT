@@ -29,7 +29,7 @@ Group files:
 | `conf/sim_type/TFIM.yaml` | `sim_type: TFIM`, the `TFIM` block (`N`, `J`, `h = 10 J`, `RUNS` random Hamiltonians) and the evolution block `evolution` (`t = 10 / J`, `n_steps = d = 4 N`, `dt = t / d`) |
 | `conf/sim_type/kitaev.yaml` | `sim_type: kitaev`, a `kitaev` block with only `N`, and a fixed `evolution` block (`dt: 0.01`, `n_steps: 100`) |
 | `conf/training/ridge.yaml` | `name: ridge` |
-| `conf/training/readout.yaml` | `name: readout` |
+| `conf/training/linear.yaml` | `name: linear` |
 | `conf/evaluation/default.yaml` | `name: default`, a list of metric names, and a plot name |
 
 `evolution.dt` and `evolution.n_steps` are recorded by `evolution_request` in the pipeline. `TFIM.RUNS` is bound to `model.RUNS` (not used by the pipeline yet), and `from_config` adds `evolution.dt` to the model params as `dt`.
