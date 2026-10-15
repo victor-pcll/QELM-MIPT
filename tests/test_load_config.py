@@ -14,8 +14,8 @@ def teardown_function() -> None:
 
 
 def test_overrides_apply_and_defaults_kept() -> None:
-    cfg = load_config(["sim_type=TFIM", "TFIM.N=6"])
-    assert cfg.sim_type == "TFIM"
+    cfg = load_config(["models=TFIM", "TFIM.N=6"])
+    assert cfg.models == "TFIM"
     assert cfg.TFIM.N == 6
     assert cfg.TFIM.J == load_config().TFIM.J
     assert int(cfg.seed) == 42
@@ -37,7 +37,7 @@ def test_can_be_called_twice_without_clearing() -> None:
 
 
 def test_notebook_two_liner_builds_model() -> None:
-    cfg = load_config(["sim_type=TFIM", "TFIM.N=3"])
+    cfg = load_config(["models=TFIM", "TFIM.N=3"])
     set_seed(cfg)
     model = TransverseFieldIsingModel.from_config(cfg)
     assert (model.N, model.dim) == (3, 8)

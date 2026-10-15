@@ -18,13 +18,13 @@ class PipelinePlan:
     """Classes and callables selected for one config.
 
     Attributes:
-        sim_type: Config key, such as ``"TFIM"`` or ``"kitaev"``.
+        models: Config key, such as ``"TFIM"`` or ``"kitaev"``.
         model: Hamiltonian class for that simulation.
         trainer: Training class named by ``cfg.training.name``.
         evaluator: Callable named by ``cfg.evaluation.name``.
     """
 
-    sim_type: str
+    models: str
     model: type[HamiltonianModel]
     trainer: type[Trainer]
     evaluator: Evaluator
@@ -34,16 +34,16 @@ def resolve_pipeline(cfg: DictConfig) -> PipelinePlan:
     """Map config names to a model, trainer, and evaluator.
 
     Args:
-        cfg: Composed Hydra config. ``cfg.sim_type``, ``cfg.training.name``,
+        cfg: Composed Hydra config. ``cfg.models``, ``cfg.training.name``,
             and ``cfg.evaluation.name`` are scalar strings.
 
     Returns:
         The selected classes and evaluator. Nothing is instantiated.
     """
-    sim_type = str(cfg.sim_type)
+    model_name = str(cfg.models)
     return PipelinePlan(
-        sim_type=sim_type,
-        model=get_model(sim_type),
+        models=model_name,
+        model=get_model(model_name),
         trainer=get_trainer(str(cfg.training.name)),
         evaluator=get_evaluator(str(cfg.evaluation.name)),
     )

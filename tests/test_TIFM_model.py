@@ -117,7 +117,7 @@ def test_evolution_request_scaffold():
 
 
 def test_tfim_yaml_builds_model_with_field():
-    """Le fichier conf/sim_type/TFIM.yaml construit un TFIM avec ``h``."""
+    """Le fichier conf/models/TFIM.yaml construit un TFIM avec ``h``."""
     from pathlib import Path
 
     from hydra import compose, initialize_config_dir
@@ -131,7 +131,7 @@ def test_tfim_yaml_builds_model_with_field():
         cfg = compose(config_name="config", overrides=["TFIM.N=3", "TFIM.h=0.7"])
     GlobalHydra.instance().clear()
 
-    model = get_model(str(cfg.sim_type)).from_config(cfg)
+    model = get_model(str(cfg.models)).from_config(cfg)
     assert isinstance(model, TransverseFieldIsingModel)
     assert model.h == 0.7
     assert model.hamiltonian().shape == (8, 8)

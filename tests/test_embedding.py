@@ -177,7 +177,7 @@ def test_from_full_config_follows_the_model() -> None:
     for overrides, N in (
         ([], default_N),
         (["TFIM.N=5"], 5),
-        (["sim_type=kitaev"], 4),
+        (["models=kitaev"], 4),
     ):
         cfg = load_config(overrides)
         emb = AncillaChargeSectorEmbedding.from_config(cfg)

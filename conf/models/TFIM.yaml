@@ -1,11 +1,11 @@
 # @package _global_
 
 # Transverse-field Ising model: H = h * sum_i Z_i + sum_{i<j} J_ij X_i X_j,
-# with J_ij uniform in [-J/2, J/2]. Add another file in this directory to add a sim type.
+# with J_ij uniform in [-J/2, J/2]. Add another file in this directory to add a model.
 # ${mul:...}, ${div:...} and ${int:...} are defined in src/QELM/resolvers.py.
 # Derived values follow their source (TFIM.J=2 rescales h, t and dt) and can
 # still be overridden directly (TFIM.h=5).
-sim_type: TFIM
+models: TFIM
 
 # Hamiltonian
 TFIM:
