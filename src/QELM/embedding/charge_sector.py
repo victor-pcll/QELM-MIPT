@@ -19,9 +19,10 @@ maximally entangled with the charge of ``S``.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Literal, overload
 
 import numpy as np
+import scipy.sparse as sp
 
 from QELM.embedding.base import Embedding
 
@@ -46,20 +47,38 @@ def charge_sector_indices(N: int, Q: int) -> np.ndarray:
     return indices[popcount == Q]
 
 
-def charge_sector_state(N: int, Q: int) -> np.ndarray:
+@overload
+def charge_sector_state(N: int, Q: int, dense: Literal[True] = True) -> np.ndarray: ...
+@overload
+def charge_sector_state(N: int, Q: int, dense: Literal[False]) -> sp.csr_matrix: ...
+def charge_sector_state(
+    N: int, Q: int, dense: bool = True
+) -> np.ndarray | sp.csr_matrix:
     """Return the uniform superposition of the basis states of sector ``Q``.
 
     Args:
         N: Number of qubits.
         Q: Target charge, from 0 to ``N``.
+        dense: ``True`` for a NumPy vector, ``False`` for a sparse column.
 
     Returns:
-        Normalized complex vector of shape ``(2**N,)``.
+        Normalized complex state: a vector of shape ``(2**N,)`` if ``dense``,
+        otherwise a CSR column of shape ``(2**N, 1)`` with ``binom(N, Q)``
+        stored entries.
     """
     idx = charge_sector_indices(N, Q)
-    psi = np.zeros(2**N, dtype=complex)
-    psi[idx] = 1.0 / np.sqrt(idx.size)
-    return psi
+    amp = 1.0 / np.sqrt(idx.size)
+    if dense:
+        psi = np.zeros(2**N, dtype=complex)
+        psi[idx] = amp
+        return psi
+    return _sparse_column(idx, np.full(idx.size, amp, dtype=complex), 2**N)
+
+
+def _sparse_column(rows: np.ndarray, values: np.ndarray, dim: int) -> sp.csr_matrix:
+    """Return a CSR column of shape ``(dim, 1)`` with ``values`` at ``rows``."""
+    cols = np.zeros(rows.size, dtype=np.int64)
+    return sp.csr_matrix((values, (rows, cols)), shape=(dim, 1), dtype=complex)
 
 
 class AncillaChargeSectorEmbedding(Embedding):
@@ -94,18 +113,43 @@ class AncillaChargeSectorEmbedding(Embedding):
         self.Q1: int = self.N_S // 2
         self.Q2: int = self.N_S // 2 - 1
 
-    def state(self, x: np.ndarray | None = None) -> np.ndarray:
+    @overload
+    def state(
+        self, x: np.ndarray | None = None, dense: Literal[True] = True
+    ) -> np.ndarray: ...
+    @overload
+    def state(
+        self, x: np.ndarray | None = None, *, dense: Literal[False]
+    ) -> sp.csr_matrix: ...
+    def state(
+        self, x: np.ndarray | None = None, dense: bool = True
+    ) -> np.ndarray | sp.csr_matrix:
         """Return the entangled state on ``R + S``.
+
+        Basis index ``b`` of ``|0>_R |Q1>_S`` stays ``b``; for ``|1>_R |Q2>_S``
+        the ancilla bit adds ``2**N_S``. Both branches have amplitude
+        ``1 / sqrt(2 binom(N_S, Q))``.
 
         Args:
             x: Ignored; the state is fixed.
+            dense: ``True`` for a NumPy vector, ``False`` for a sparse column
+                built without any dense vector of size ``2**N``.
 
         Returns:
-            Normalized complex vector of shape ``(2**N,)``.
+            Normalized complex state: a vector of shape ``(2**N,)`` if
+            ``dense``, otherwise a CSR column of shape ``(2**N, 1)``.
         """
-        ket0 = np.array([1, 0], dtype=complex)
-        ket1 = np.array([0, 1], dtype=complex)
-        return (
-            np.kron(ket0, charge_sector_state(self.N_S, self.Q1))
-            + np.kron(ket1, charge_sector_state(self.N_S, self.Q2))
-        ) / np.sqrt(2)
+        idx1 = charge_sector_indices(self.N_S, self.Q1)
+        idx2 = charge_sector_indices(self.N_S, self.Q2)
+        rows = np.concatenate([idx1, idx2 + 2**self.N_S])
+        values = np.concatenate(
+            [
+                np.full(idx1.size, 1.0 / np.sqrt(2 * idx1.size), dtype=complex),
+                np.full(idx2.size, 1.0 / np.sqrt(2 * idx2.size), dtype=complex),
+            ]
+        )
+        if dense:
+            psi = np.zeros(self.dim, dtype=complex)
+            psi[rows] = values
+            return psi
+        return _sparse_column(rows, values, self.dim)

@@ -16,9 +16,10 @@ of a basis index. Ancillas come first (sites ``0 .. n_ancilla - 1``), the
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Self
+from typing import Any, Literal, Self, overload
 
 import numpy as np
+import scipy.sparse as sp
 from omegaconf import DictConfig, OmegaConf
 
 
@@ -88,15 +89,28 @@ class Embedding:
             raise TypeError(f"{cls.name} config must be a mapping.")
         return cls({str(key): value for key, value in raw.items()})
 
-    def state(self, x: np.ndarray | None = None) -> np.ndarray:
+    @overload
+    def state(
+        self, x: np.ndarray | None = None, dense: Literal[True] = True
+    ) -> np.ndarray: ...
+    @overload
+    def state(
+        self, x: np.ndarray | None = None, *, dense: Literal[False]
+    ) -> sp.csr_matrix: ...
+    def state(
+        self, x: np.ndarray | None = None, dense: bool = True
+    ) -> np.ndarray | sp.csr_matrix:
         """Return the embedded pure state.
 
         Args:
             x: Input data to encode. ``None`` for an embedding that does not
                 depend on the input.
+            dense: ``True`` (default) for a NumPy vector, ``False`` for a
+                sparse column.
 
         Returns:
-            Normalized complex vector of shape ``(dim,)``.
+            Normalized complex state: a vector of shape ``(dim,)`` if
+            ``dense``, otherwise a CSR column of shape ``(dim, 1)``.
 
         Raises:
             NotImplementedError: In this base class.

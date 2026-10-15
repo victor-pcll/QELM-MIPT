@@ -6,7 +6,9 @@ from math import comb
 
 import numpy as np
 import pytest
+import scipy.sparse as sp
 from omegaconf import OmegaConf
+from scipy.sparse.linalg import norm as sparse_norm
 
 from QELM.embedding import (
     AncillaChargeSectorEmbedding,
@@ -180,3 +182,30 @@ def test_from_config_missing_block_is_explicit() -> None:
     OmegaConf.set_struct(cfg, True)
     with pytest.raises(ValueError, match="no 'ancilla_charge_sector' block"):
         AncillaChargeSectorEmbedding.from_config(cfg)
+
+
+@pytest.mark.parametrize("N", [3, 4, 5, 6])
+def test_sparse_state_matches_dense(N: int) -> None:
+    """state(dense=False) est une colonne CSR (2**N, 1) égale à state()."""
+    emb = AncillaChargeSectorEmbedding({"N": N})
+    psi = emb.state()
+    psi_sp = emb.state(dense=False)
+    assert isinstance(psi_sp, sp.csr_matrix)
+    assert psi.shape == (2**N,)
+    assert psi_sp.shape == (2**N, 1)
+    assert psi_sp.dtype == complex
+    np.testing.assert_allclose(psi_sp.toarray().ravel(), psi, atol=1e-15)
+    # Seules les amplitudes non nulles sont stockées.
+    assert psi_sp.nnz == np.count_nonzero(psi)
+
+
+@pytest.mark.parametrize(("N", "Q"), [(3, 0), (4, 2), (5, 3)])
+def test_sparse_charge_sector_state_matches_dense(N: int, Q: int) -> None:
+    """charge_sector_state(dense=False) donne le même vecteur en CSR."""
+    psi_sp = charge_sector_state(N, Q, dense=False)
+    assert isinstance(psi_sp, sp.csr_matrix)
+    assert psi_sp.shape == (2**N, 1)
+    np.testing.assert_allclose(
+        psi_sp.toarray().ravel(), charge_sector_state(N, Q), atol=1e-15
+    )
+    assert np.isclose(sparse_norm(psi_sp), 1.0)
