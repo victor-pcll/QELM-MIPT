@@ -11,7 +11,7 @@ and one module per child class:
   :class:`SingleObservable`; ``double.py``: :class:`DoubleObservable`).
 - :mod:`QELM.training.regression`: trainers fitted on those features
   (``base.py``: :class:`Trainer`; ``linear.py``: :class:`LinearReadout`;
-  ``ridge.py``: :class:`RidgeRegression`).
+  ``ridge.py``: :class:`RidgeReadout`).
 
 Every class is importable from :mod:`QELM.training` directly.
 """
@@ -25,11 +25,11 @@ from QELM.training.measurements import (
     measure_projective_rho,
 )
 from QELM.training.readout import DoubleObservable, Observables, SingleObservable
-from QELM.training.regression import LinearReadout, RidgeRegression, Trainer
+from QELM.training.regression import LinearReadout, RidgeReadout, Trainer
 
 _TRAINERS: dict[str, type[Trainer]] = {
     LinearReadout.name: LinearReadout,
-    RidgeRegression.name: RidgeRegression,
+    RidgeReadout.name: RidgeReadout,
 }
 
 _READOUTS: dict[str, type[Readout]] = {
@@ -82,7 +82,7 @@ __all__ = [
     "ProjectiveMeasurement",
     "Readout",
     "ReadoutResult",
-    "RidgeRegression",
+    "RidgeReadout",
     "SingleObservable",
     "Trainer",
     "get_readout",

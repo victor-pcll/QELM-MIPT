@@ -6,7 +6,7 @@ from hydra.core.global_hydra import GlobalHydra
 from QELM.evaluation import evaluate
 from QELM.models import KitaevModel, TransverseFieldIsingModel
 from QELM.pipeline import resolve_pipeline, run_pipeline
-from QELM.training import LinearReadout, RidgeRegression
+from QELM.training import LinearReadout, RidgeReadout
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_DIR = REPO_ROOT / "conf"
@@ -31,7 +31,7 @@ def test_dispatcher_resolves_config_to_modules() -> None:
     )
     assert tfim.sim_type == "TFIM"
     assert tfim.model is TransverseFieldIsingModel
-    assert tfim.trainer is RidgeRegression
+    assert tfim.trainer is RidgeReadout
     assert tfim.evaluator is evaluate
 
     kitaev = resolve_pipeline(_compose(["sim_type=kitaev", "training=readout"]))
