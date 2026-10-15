@@ -142,7 +142,7 @@ def measure_projective_rho(
         ValueError: If ``rho`` is not a qubit density matrix, ``N`` does not
             match it, or ``qubit_idx`` is out of range.
     """
-    n = n_qubits(rho)
+    n, _, _ = n_qubits(rho)
     if N is not None and N != n:
         raise ValueError(f"N={N} does not match rho of shape {rho.shape}.")
     if not 0 <= qubit_idx < n:
@@ -227,7 +227,7 @@ class ProjectiveMeasurement(Readout):
         """
         if isinstance(p, bool) or not isinstance(p, Real) or not 0 <= p <= 1:
             raise ValueError(f"p must be a probability in [0, 1], got {p!r}.")
-        N = n_qubits(rho)
+        N, _, _ = n_qubits(rho)
         qubits = list(range(N)) if self.qubits is None else self.qubits
         outcomes = np.full(len(qubits), np.nan, dtype=np.float64)
         for k, q in enumerate(qubits):
