@@ -47,7 +47,7 @@ class SingleObservable(Observables):
         """
         N = self._resolve_N(N)
         return [
-            get_site_operator(pauli(label), i, N, dense=True)
+            get_site_operator(pauli(label), i, N)
             for label in self.observables
             for i in range(N)
         ]

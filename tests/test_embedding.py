@@ -186,10 +186,10 @@ def test_from_config_missing_block_is_explicit() -> None:
 
 @pytest.mark.parametrize("N", [3, 4, 5, 6])
 def test_sparse_state_matches_dense(N: int) -> None:
-    """state(dense=False) est une colonne CSR (2**N, 1) égale à state()."""
+    """state(sparse=True) est une colonne CSR (2**N, 1) égale à state()."""
     emb = AncillaChargeSectorEmbedding({"N": N})
     psi = emb.state()
-    psi_sp = emb.state(dense=False)
+    psi_sp = emb.state(sparse=True)
     assert isinstance(psi_sp, sp.csr_matrix)
     assert psi.shape == (2**N,)
     assert psi_sp.shape == (2**N, 1)
@@ -201,11 +201,31 @@ def test_sparse_state_matches_dense(N: int) -> None:
 
 @pytest.mark.parametrize(("N", "Q"), [(3, 0), (4, 2), (5, 3)])
 def test_sparse_charge_sector_state_matches_dense(N: int, Q: int) -> None:
-    """charge_sector_state(dense=False) donne le même vecteur en CSR."""
-    psi_sp = charge_sector_state(N, Q, dense=False)
+    """charge_sector_state(sparse=True) donne le même vecteur en CSR."""
+    psi_sp = charge_sector_state(N, Q, sparse=True)
     assert isinstance(psi_sp, sp.csr_matrix)
     assert psi_sp.shape == (2**N, 1)
     np.testing.assert_allclose(
         psi_sp.toarray().ravel(), charge_sector_state(N, Q), atol=1e-15
     )
     assert np.isclose(sparse_norm(psi_sp), 1.0)
+
+
+@pytest.mark.parametrize("N", [3, 4, 5])
+def test_sparse_density_matrix_matches_dense(N: int) -> None:
+    """density_matrix(sparse=True) est la CSR de density_matrix()."""
+    emb = AncillaChargeSectorEmbedding({"N": N})
+    rho = emb.density_matrix()
+    rho_sp = emb.density_matrix(sparse=True)
+    assert isinstance(rho, np.ndarray) and rho.shape == (2**N, 2**N)
+    assert isinstance(rho_sp, sp.csr_matrix) and rho_sp.shape == (2**N, 2**N)
+    np.testing.assert_allclose(rho_sp.toarray(), rho, atol=1e-15)
+    assert rho_sp.nnz == np.count_nonzero(rho)
+
+
+def test_dense_is_the_default_state() -> None:
+    """Sans argument, state() et density_matrix() sont des tableaux numpy."""
+    emb = AncillaChargeSectorEmbedding({"N": 3})
+    assert isinstance(emb.state(), np.ndarray)
+    assert isinstance(emb.density_matrix(), np.ndarray)
+    assert isinstance(charge_sector_state(3, 1), np.ndarray)
