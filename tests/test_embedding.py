@@ -158,3 +158,25 @@ def test_same_dimension_as_model() -> None:
     emb = AncillaChargeSectorEmbedding({"N": model.N})
     assert emb.dim == model.dim
     assert model.hamiltonian().shape == emb.density_matrix().shape
+
+
+# --- Config composée (issue #22) ---
+
+
+def test_from_full_config_follows_the_model() -> None:
+    """La config par défaut contient le bloc, et N suit le modèle choisi."""
+    from QELM import load_config
+
+    for overrides, N in (([], 10), (["TFIM.N=6"], 6), (["sim_type=kitaev"], 4)):
+        cfg = load_config(overrides)
+        emb = AncillaChargeSectorEmbedding.from_config(cfg)
+        assert emb.N == N
+        assert emb.state().shape == (2**N,)
+
+
+def test_from_config_missing_block_is_explicit() -> None:
+    """Sans bloc, l'erreur dit quoi ajouter au lieu d'un ConfigKeyError."""
+    cfg = OmegaConf.create({"seed": 0})
+    OmegaConf.set_struct(cfg, True)
+    with pytest.raises(ValueError, match="no 'ancilla_charge_sector' block"):
+        AncillaChargeSectorEmbedding.from_config(cfg)

@@ -12,6 +12,7 @@ Scientific parameters and secrets live in different files.
 | --- | --- |
 | `defaults` | `sim_type: TFIM`, `training: ridge`, `evaluation: default` |
 | `seed` | Integer passed to NumPy at startup. See [Code quality](code-quality.md). |
+| `ancilla_charge_sector.N` | Total qubit count of the initial state, `${${sim_type}.N}`: it follows the selected Hamiltonian. Read by `AncillaChargeSectorEmbedding.from_config(cfg)` |
 | `samples.L`, `samples.train_fraction`, `samples.train_size` | Number of samples and training split, `train_size = int(0.7 * L)`. Not read by the pipeline yet |
 | `dynamic_readout.p` | Dynamic readout parameter `p`. Not read by the pipeline yet |
 | `checkpoint` | Where the run writes its `.npz`. See [Checkpoints and local data](checkpoints.md). |
