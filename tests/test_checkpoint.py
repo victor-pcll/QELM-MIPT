@@ -63,7 +63,7 @@ def test_checkpoint_writer_creates_file_in_tmp_path(tmp_path: Path) -> None:
         assert archive["weights"].shape == (0,)
         metadata = json.loads(str(archive["metadata"].item()))
     assert metadata["seed"] == int(cfg.seed)
-    assert metadata["sim_type"] == str(cfg.sim_type)
+    assert metadata["models"] == str(cfg.models)
     assert metadata["params"] == {
         **{key: cfg.TFIM[key] for key in cfg.TFIM},
         "dt": float(cfg.evolution.dt),

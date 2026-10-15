@@ -12,7 +12,7 @@ from QELM.selection import format_selection
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_DIR = REPO_ROOT / "conf"
-OVERRIDES = ["sim_type=TFIM", "TFIM.N=12", "evolution.dt=0.05"]
+OVERRIDES = ["models=TFIM", "TFIM.N=12", "evolution.dt=0.05"]
 
 
 def setup_function() -> None:
@@ -45,7 +45,7 @@ def test_config_loads_and_cli_overrides_apply() -> None:
 
     assert set(chosen.TFIM.keys()) == {"N", "J", "h", "RUNS"}
     assert set(chosen.evolution.keys()) == {"t", "n_steps", "dt"}
-    assert chosen.sim_type == "TFIM"
+    assert chosen.models == "TFIM"
     assert chosen.TFIM.N == 12
     assert chosen.evolution.dt == 0.05
     assert chosen.TFIM.N != default.TFIM.N
@@ -55,7 +55,7 @@ def test_config_loads_and_cli_overrides_apply() -> None:
     assert chosen.evolution.n_steps == 4 * chosen.TFIM.N
 
     text = format_selection(chosen)
-    assert "sim_type=TFIM" in text
+    assert "models=TFIM" in text
     assert "TFIM.N=12" in text
     assert "evolution.dt=0.05" in text
 

@@ -26,7 +26,7 @@ def load_config(
     cell can be re-run.
 
     Args:
-        overrides: Hydra overrides, such as ``["sim_type=TFIM", "TFIM.N=6"]``.
+        overrides: Hydra overrides, such as ``["models=TFIM", "TFIM.N=6"]``.
         config_name: Primary config file in ``config_dir``, without ``.yaml``.
         config_dir: Directory to compose from. ``None`` uses the
             repository's ``conf/``.

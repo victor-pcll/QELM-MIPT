@@ -139,7 +139,7 @@ def _metadata(
 ) -> dict[str, Any]:
     return {
         "run_id": run_id,
-        "sim_type": str(cfg.sim_type),
+        "models": str(cfg.models),
         "model": model.name,
         "trainer": trainer.name,
         "seed": int(cfg.seed),

@@ -3,27 +3,27 @@
 From the repository root, after `uv sync`:
 
 ```bash
-uv run python main.py sim_type=TFIM TFIM.N=12 evolution.dt=0.05
+uv run python main.py models=TFIM TFIM.N=12 evolution.dt=0.05
 ```
 
 Hydra composes `conf/config.yaml` and applies those overrides:
 
-- `sim_type=TFIM` selects `conf/sim_type/TFIM.yaml` and `TransverseFieldIsingModel`.
+- `models=TFIM` selects `conf/models/TFIM.yaml` and `TransverseFieldIsingModel`.
 - `TFIM.N=12` overrides `N` on the TFIM block. `J` and `h` stay at the values in that YAML file.
-- `evolution.dt=0.05` overrides the evolution step. `evolution.n_steps` keeps its formula `4 * TFIM.N` from `conf/sim_type/TFIM.yaml`, so it becomes 48.
+- `evolution.dt=0.05` overrides the evolution step. `evolution.n_steps` keeps its formula `4 * TFIM.N` from `conf/models/TFIM.yaml`, so it becomes 48.
 
-The process prints two lines: the selection (`sim_type`, each key in the simulation block, and each `evolution` key), then the pipeline status. A checkpoint is written under the Hydra run directory. See [Checkpoints and local data](checkpoints.md).
+The process prints two lines: the selection (`models`, each key in the simulation block, and each `evolution` key), then the pipeline status. A checkpoint is written under the Hydra run directory. See [Checkpoints and local data](checkpoints.md).
 
 Other overrides use the same form:
 
 ```bash
-uv run python main.py sim_type=kitaev training=linear
-uv run python main.py training=ridge evaluation=default
+uv run python main.py models=kitaev training/regression=linear
+uv run python main.py training/regression=ridge evaluation=default
 uv run python main.py seed=0
 uv run python main.py checkpoint.dir=/tmp/qrc-run checkpoint.use_uuid=true
 ```
 
-`training=ridge` and `evaluation=default` match the defaults in `conf/config.yaml`. `training=linear` selects `LinearReadout`. `evaluation=default` is the only registered evaluator. An unknown `sim_type`, trainer name, or evaluator name raises `KeyError`.
+`training/regression=ridge` and `evaluation=default` match the defaults in `conf/config.yaml`. `training/regression=linear` selects `LinearReadout`. `evaluation=default` is the only registered evaluator. An unknown `models`, trainer name, or evaluator name raises `KeyError`.
 
 ## Notebook
 
@@ -32,7 +32,7 @@ In a notebook, `load_config` composes the same config as the command line. It fi
 ```python
 from QELM import TransverseFieldIsingModel, load_config, set_seed
 
-cfg = load_config(["sim_type=TFIM", "TFIM.N=6"])
+cfg = load_config(["models=TFIM", "TFIM.N=6"])
 set_seed(cfg)
 model = TransverseFieldIsingModel.from_config(cfg)
 ```

@@ -1,0 +1,7 @@
+# Single-site observables measured on the final state (QELM.training.readout):
+# <O_i> for each label in `observables`. The list can hold several entries, or
+# be empty ([]) for no such features. Placed at `single_observable` by the
+# defaults list in conf/config.yaml.
+# N follows the selected Hamiltonian; operators() uses it when no N is passed.
+N: ${${models}.N}
+observables: [Z]
