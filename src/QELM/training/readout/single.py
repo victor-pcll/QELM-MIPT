@@ -36,10 +36,18 @@ class SingleObservable(Observables):
             params.get("observable"), "observable"
         ) + _labels(params.get("observables"), "observables")
 
-    def operators(self, N: int) -> list[np.ndarray]:
-        """Return ``O_i`` for each observable, then each site: ``len * N`` features."""
+    def operators(self, N: int | None = None) -> list[np.ndarray]:
+        """Return ``O_i`` for each observable, then each site: ``len * N`` features.
+
+        Args:
+            N: Number of qubits. ``None`` uses ``self.N`` from the config.
+
+        Raises:
+            ValueError: If ``N`` is ``None`` and the config has no ``N``.
+        """
+        N = self._resolve_N(N)
         return [
-            get_site_operator(pauli(label), i, N)
+            get_site_operator(pauli(label), i, N, dense=True)
             for label in self.observables
             for i in range(N)
         ]

@@ -313,3 +313,50 @@ def test_missing_block_uses_defaults(cfg: dict) -> None:
     readout = ProjectiveMeasurement.from_config(conf)
     assert readout.qubits is None
     assert readout.measure(BELL, rng=np.random.default_rng(1)).outcomes.shape == (2,)
+
+
+# --- p lu dans la config (issue #47) ---
+
+
+def test_p_defaults_to_one_without_config() -> None:
+    """Sans p ni en argument ni en config : p = 1, tout est mesuré."""
+    readout = ProjectiveMeasurement({})
+    assert readout.p is None
+    result = readout.measure(_random_rho(3, 4), rng=np.random.default_rng(0))
+    assert not np.any(np.isnan(result.outcomes))
+
+
+def test_p_from_config_is_used() -> None:
+    """p de la config est utilisé quand measure ne reçoit pas de p."""
+    rho = _random_rho(3, 5)
+    assert np.all(np.isnan(ProjectiveMeasurement({"p": 0.0}).measure(rho).outcomes))
+    from_config = ProjectiveMeasurement({"p": 0.5}).measure(
+        rho, rng=np.random.default_rng(8)
+    )
+    explicit = ProjectiveMeasurement({}).measure(
+        rho, p=0.5, rng=np.random.default_rng(8)
+    )
+    np.testing.assert_array_equal(from_config.outcomes, explicit.outcomes)
+
+
+def test_explicit_p_overrides_config() -> None:
+    """measure(rho, p=...) l'emporte sur p de la config."""
+    readout = ProjectiveMeasurement({"p": 0.0})
+    result = readout.measure(_random_rho(3, 6), p=1.0, rng=np.random.default_rng(0))
+    assert not np.any(np.isnan(result.outcomes))
+
+
+@pytest.mark.parametrize("p", [-0.1, 1.5, True, "0.5"])
+def test_invalid_config_p_is_rejected(p: object) -> None:
+    """Un p invalide dans la config est refusé dès la construction."""
+    with pytest.raises(ValueError, match="probability"):
+        ProjectiveMeasurement({"p": p})
+
+
+def test_full_config_sets_p() -> None:
+    """La config composée lit projective_measurement.p (1.0 par défaut)."""
+    from QELM import load_config
+
+    assert ProjectiveMeasurement.from_config(load_config()).p == 1.0
+    cfg = load_config(["projective_measurement.p=0.25"])
+    assert ProjectiveMeasurement.from_config(cfg).p == 0.25

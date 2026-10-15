@@ -15,7 +15,6 @@ def test_physics_only_exposes_primitives() -> None:
         "Y",
         "Z",
         "get_site_operator",
-        "get_site_operator_sparse",
         "n_qubits",
         "pauli",
     }

@@ -25,6 +25,8 @@ class Observables:
         name: Config key for this observable set; ``from_config`` reads
             ``cfg[name]``.
         params: Scalar parameters from the matching YAML block.
+        N: Number of qubits from ``params["N"]``, used by :meth:`operators`
+            when no ``N`` is passed; ``None`` if the block has no ``N``.
     """
 
     name: str = "base"
@@ -34,8 +36,11 @@ class Observables:
 
         Args:
             params: Parameter names mapped to scalar values from YAML.
+                ``N`` (number of qubits) is optional.
         """
         self.params: dict[str, Any] = dict(params)
+        raw_N = params.get("N")
+        self.N: int | None = None if raw_N is None else int(raw_N)
 
     @classmethod
     def from_config(cls, cfg: DictConfig) -> Self:
@@ -66,11 +71,26 @@ class Observables:
             raise TypeError(f"{cls.name} config must be a mapping.")
         return cls({str(key): value for key, value in raw.items()})
 
-    def operators(self, N: int) -> list[np.ndarray]:
+    def _resolve_N(self, N: int | None) -> int:
+        """Return ``N`` if given, else ``self.N``.
+
+        Raises:
+            ValueError: If both are ``None``.
+        """
+        if N is not None:
+            return N
+        if self.N is None:
+            raise ValueError(
+                f"{self.name}: N was not passed and the config block has no N. "
+                f"Pass operators(N=...) or add N to the {self.name} block."
+            )
+        return self.N
+
+    def operators(self, N: int | None = None) -> list[np.ndarray]:
         """Return the measured operators on ``N`` qubits.
 
         Args:
-            N: Number of qubits.
+            N: Number of qubits. ``None`` uses ``self.N`` from the config.
 
         Returns:
             Operators of shape ``(2**N, 2**N)``, one per feature.

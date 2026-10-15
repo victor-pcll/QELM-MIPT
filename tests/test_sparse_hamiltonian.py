@@ -1,7 +1,7 @@
 """Le hamiltonien creux (CSR) et l'évolution creuse redonnent la version dense.
 
-La référence dense est reconstruite ici avec ``get_site_operator`` (np.kron)
-et ``scipy.linalg.expm``, comme le faisait le code avant le passage au creux.
+La référence dense est reconstruite ici avec ``np.kron`` (``_kron_site``) et
+``scipy.linalg.expm``, comme le faisait le code avant le passage au creux.
 """
 
 from __future__ import annotations
@@ -12,24 +12,26 @@ import scipy.linalg
 import scipy.sparse as sp
 
 from QELM.models.TFIM import TransverseFieldIsingModel
-from QELM.physics.operators import (
-    X,
-    Y,
-    Z,
-    get_site_operator,
-    get_site_operator_sparse,
-)
+from QELM.physics.operators import I, X, Y, Z, get_site_operator
+
+
+def _kron_site(op: np.ndarray, site: int, N: int) -> np.ndarray:
+    """Référence indépendante : produit de Kronecker dense, site 0 à gauche."""
+    out = np.eye(1, dtype=complex)
+    for k in range(N):
+        out = np.kron(out, op if k == site else I)
+    return out
 
 
 def _dense_reference(model: TransverseFieldIsingModel) -> np.ndarray:
     """H dense, construit exactement comme avant le passage au creux."""
     H = np.zeros((model.dim, model.dim), dtype=complex)
     for i in range(model.N):
-        H += model.h * get_site_operator(Z, i, model.N)
+        H += model.h * _kron_site(Z, i, model.N)
     for i in range(model.N):
-        Xi = get_site_operator(X, i, model.N)
+        Xi = _kron_site(X, i, model.N)
         for j in range(i + 1, model.N):
-            H += model.J_matrix[i, j] * (Xi @ get_site_operator(X, j, model.N))
+            H += model.J_matrix[i, j] * (Xi @ _kron_site(X, j, model.N))
     return H
 
 
@@ -49,9 +51,9 @@ def _random_state(dim: int, seed: int = 1) -> np.ndarray:
 def test_sparse_site_operator_matches_dense(op: np.ndarray, N: int) -> None:
     """Chaque opérateur à un site est identique en creux et en dense."""
     for site in range(N):
-        sparse = get_site_operator_sparse(op, site, N)
+        sparse = get_site_operator(op, site, N)
         assert sp.issparse(sparse) and sparse.format == "csr"
-        np.testing.assert_array_equal(sparse.toarray(), get_site_operator(op, site, N))
+        np.testing.assert_array_equal(sparse.toarray(), _kron_site(op, site, N))
 
 
 @pytest.mark.parametrize("N", [1, 2, 3, 5, 6])
