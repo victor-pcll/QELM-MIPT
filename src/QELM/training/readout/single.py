@@ -39,7 +39,7 @@ class SingleObservable(Observables):
     def operators(self, N: int) -> list[np.ndarray]:
         """Return ``O_i`` for each observable, then each site: ``len * N`` features."""
         return [
-            get_site_operator(pauli(label), i, N)
+            get_site_operator(pauli(label), i, N, dense=True)
             for label in self.observables
             for i in range(N)
         ]

@@ -9,7 +9,7 @@ import numpy as np
 import scipy.sparse as sp
 
 from QELM.models.base import HamiltonianModel
-from QELM.physics.operators import X, Z, get_site_operator_sparse
+from QELM.physics.operators import X, Z, get_site_operator
 
 
 class TransverseFieldIsingModel(HamiltonianModel):
@@ -53,12 +53,12 @@ class TransverseFieldIsingModel(HamiltonianModel):
         H: sp.csr_matrix = sp.csr_matrix((self.dim, self.dim), dtype=np.complex128)
 
         for i in range(self.N):
-            H = H + self.h * get_site_operator_sparse(Z, i, self.N)
+            H = H + self.h * get_site_operator(Z, i, self.N)
 
         for i in range(self.N):
-            Xi = get_site_operator_sparse(X, i, self.N)
+            Xi = get_site_operator(X, i, self.N)
             for j in range(i + 1, self.N):
-                Xj = get_site_operator_sparse(X, j, self.N)
+                Xj = get_site_operator(X, j, self.N)
                 H = H + self.J_matrix[i, j] * (Xi @ Xj)
 
         self._H = H.tocsr()
