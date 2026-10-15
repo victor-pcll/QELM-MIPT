@@ -18,6 +18,7 @@ Scientific parameters and secrets live in different files.
 | `single_observable.N`, `double_observable.N` | Qubit count, `${${sim_type}.N}`. `operators()` uses it when called without `N`; `operators(N=...)` overrides it |
 | `dynamic_readout.p` | Dynamic readout parameter `p`. Not read by the pipeline yet |
 | `projective_measurement.qubits` | Sites measured by `ProjectiveMeasurement`, in order; `null` (default) measures every qubit. Read by `ProjectiveMeasurement.from_config(cfg)`, which also works without the block |
+| `projective_measurement.p` | Probability of measuring each target qubit, default `1.0`. `measure(rho)` uses it; `measure(rho, p=...)` overrides it; without the key, `p = 1.0` |
 | `checkpoint` | Where the run writes its `.npz`. See [Checkpoints and local data](checkpoints.md). |
 | `hydra.run.dir` | `outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}` |
 

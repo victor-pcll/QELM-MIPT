@@ -19,6 +19,17 @@ from QELM.physics.operators import n_qubits
 from QELM.training.measurements.base import Readout, ReadoutResult
 
 
+def _check_p(p: Any) -> float:
+    """Return ``p`` as a float after checking it is a number in ``[0, 1]``.
+
+    Raises:
+        ValueError: If ``p`` is a bool, not a real number, or outside ``[0, 1]``.
+    """
+    if isinstance(p, bool) or not isinstance(p, Real) or not 0 <= float(p) <= 1:
+        raise ValueError(f"p must be a probability in [0, 1], got {p!r}.")
+    return float(p)
+
+
 def measure_projective_rho(
     rho: np.ndarray,
     qubit_idx: int,
@@ -82,24 +93,33 @@ class ProjectiveMeasurement(Readout):
     Attributes:
         qubits: Measured qubits in order, from ``params["qubits"]``, or
             ``None`` to measure every qubit ``0 .. N-1``.
+        p: Measurement probability from ``params["p"]``, used by
+            :meth:`measure` when no ``p`` is passed; ``None`` if the block
+            has no ``p``, in which case ``measure`` uses 1.0.
     """
 
     name: str = "projective_measurement"
 
     def __init__(self, params: Mapping[str, Any]) -> None:
-        """Store the measured qubits.
+        """Store the measured qubits and the measurement probability.
 
         Args:
-            params: ``qubits`` is an optional list of qubit indices.
+            params: ``qubits`` is an optional list of qubit indices; ``p`` is
+                an optional probability in ``[0, 1]``.
+
+        Raises:
+            ValueError: If ``p`` is given and is not a number in ``[0, 1]``.
         """
         super().__init__(params)
         raw = params.get("qubits")
         self.qubits: list[int] | None = None if raw is None else [int(q) for q in raw]
+        raw_p = params.get("p")
+        self.p: float | None = None if raw_p is None else _check_p(raw_p)
 
     def measure(
         self,
         rho: np.ndarray,
-        p: float = 1.0,
+        p: float | None = None,
         rng: np.random.Generator | None = None,
     ) -> ReadoutResult:
         """Measure each target qubit projectively with probability ``p``.
@@ -113,8 +133,9 @@ class ProjectiveMeasurement(Readout):
 
         Args:
             rho: Density matrix of shape ``(2**N, 2**N)``.
-            p: Probability of measuring each target qubit, in ``[0, 1]``
-                (default 1.0).
+            p: Probability of measuring each target qubit, in ``[0, 1]``.
+                ``None`` uses ``self.p`` from the config, or 1.0 if the
+                config has no ``p``. A value passed here wins over both.
             rng: Random generator for the choices and outcomes. ``None`` uses
                 the global ``numpy.random`` state.
 
@@ -127,8 +148,9 @@ class ProjectiveMeasurement(Readout):
         Raises:
             ValueError: If ``p`` is not a number in ``[0, 1]``.
         """
-        if isinstance(p, bool) or not isinstance(p, Real) or not 0 <= p <= 1:
-            raise ValueError(f"p must be a probability in [0, 1], got {p!r}.")
+        if p is None:
+            p = 1.0 if self.p is None else self.p
+        p = _check_p(p)
         N, _, _ = n_qubits(rho)
         qubits = list(range(N)) if self.qubits is None else self.qubits
         outcomes = np.full(len(qubits), np.nan, dtype=np.float64)
