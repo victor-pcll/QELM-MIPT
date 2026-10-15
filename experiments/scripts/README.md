@@ -35,6 +35,20 @@ Each run lands in `outputs/projective_readout/<date_time>/N<N>_seed<seed>/` with
 `projective_readout.npz` (`Phi`, `Y`, `M`, `X`, `y_test`, `y_pred`, `W`),
 `metrics.json` (NMSE, R2) and `.hydra/config.yaml`.
 
+## Run the simple QELM experiment
+
+```bash
+./experiments/scripts/exp_QELM.sh
+```
+
+It runs `experiments/exp_QELM.py` for `N=4` with `seed=42`, 200 samples and
+`training.alpha=1e-3` (`L=1000 ALPHA=1e-2 ./experiments/scripts/exp_QELM.sh`
+to change them). No measurement during the evolution: the readout learns the
+ancilla `<Z_0>` from the system observables `<Z_k>, <Y_k>, <X_k>` after
+`U(t)`. Each run lands in `outputs/exp_QELM/<date_time>/N<N>_seed<seed>/` with
+`exp_QELM.npz` (`X`, `Y`, `y_test`, `y_pred`, `W`), `metrics.json` (NMSE, R2)
+and `.hydra/config.yaml`.
+
 ## Write your own
 
 1. Copy the test script and make the copy executable:
