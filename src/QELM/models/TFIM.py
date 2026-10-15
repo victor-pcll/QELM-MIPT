@@ -17,8 +17,8 @@ class TransverseFieldIsingModel(HamiltonianModel):
 
     ``H = h * sum_i Z_i + sum_{i<j} J_ij X_i X_j``, with each ``J_ij`` drawn
     once, uniformly in ``[-J/2, J/2]``, when the model is built. ``N``, ``J``
-    and ``h`` are scalars from ``conf/sim_type/TFIM.yaml``. Selected with
-    ``sim_type=TFIM``.
+    and ``h`` are scalars from ``conf/models/TFIM.yaml``. Selected with
+    ``models=TFIM``.
     """
 
     name = "TFIM"

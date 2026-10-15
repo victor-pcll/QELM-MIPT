@@ -29,9 +29,9 @@ def test_default_experiment_values() -> None:
 
 
 def test_whole_config_resolves() -> None:
-    for sim_type in ("TFIM", "kitaev"):
+    for models in ("TFIM", "kitaev"):
         resolved = OmegaConf.to_container(
-            load_config([f"sim_type={sim_type}"]), resolve=True
+            load_config([f"models={models}"]), resolve=True
         )
         assert isinstance(resolved, dict)
 
@@ -71,7 +71,7 @@ def test_model_receives_resolved_h() -> None:
 
 
 def test_kitaev_keeps_fixed_evolution_step() -> None:
-    cfg = load_config(["sim_type=kitaev"])
+    cfg = load_config(["models=kitaev"])
     assert cfg.evolution.dt == 0.01
     assert cfg.evolution.n_steps == 100
 

@@ -12,23 +12,23 @@ _MODELS: dict[str, type[HamiltonianModel]] = {
 }
 
 
-def get_model(sim_type: str) -> type[HamiltonianModel]:
-    """Return the model class for a ``sim_type`` config value.
+def get_model(name: str) -> type[HamiltonianModel]:
+    """Return the model class for a ``models`` config value.
 
     Args:
-        sim_type: Scalar name such as ``"TFIM"`` or ``"kitaev"``.
+        name: Scalar name such as ``"TFIM"`` or ``"kitaev"``.
 
     Returns:
         The matching :class:`HamiltonianModel` subclass.
 
     Raises:
-        KeyError: If ``sim_type`` is not registered.
+        KeyError: If ``name`` is not registered.
     """
     try:
-        return _MODELS[sim_type]
+        return _MODELS[name]
     except KeyError as exc:
         known = ", ".join(sorted(_MODELS))
-        raise KeyError(f"Unknown sim_type {sim_type!r}. Known: {known}.") from exc
+        raise KeyError(f"Unknown model {name!r}. Known: {known}.") from exc
 
 
 __all__ = ["HamiltonianModel", "KitaevModel", "TransverseFieldIsingModel", "get_model"]

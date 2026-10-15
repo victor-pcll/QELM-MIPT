@@ -1,10 +1,17 @@
+# The tree under conf/ mirrors src/QELM/: models/ for QELM.models, and
+# training/{measurements,readout,regression}/ for the QELM.training subpackages.
+# Select a file with its group path, e.g. models=kitaev or
+# training/regression=linear.
 defaults:
-  - sim_type: TFIM
-  - training: ridge
+  - models: TFIM
+  - training/measurements: projective
+  - training/readout@single_observable: single
+  - training/readout@double_observable: double
+  - training/regression: ridge
   - evaluation: default
   - _self_
 
-# Shared experiment settings. Simulation-specific parameters live in conf/sim_type/.
+# Shared experiment settings. Model-specific parameters live in conf/models/.
 # Scalar seed applied once at startup. Override with seed=0 on the command line.
 seed: 42
 
@@ -12,10 +19,10 @@ seed: 42
 # qubits, ancilla included; it follows the selected Hamiltonian so that the
 # state and the model have the same size.
 ancilla_charge_sector:
-  N: ${${sim_type}.N}
+  N: ${${models}.N}
 
 # The evolution block (evolution.t, evolution.dt, evolution.n_steps) depends on the
-# Hamiltonian, so it lives in conf/sim_type/ next to it.
+# Hamiltonian, so it lives in conf/models/ next to it.
 
 # Samples. Not read by the pipeline yet.
 samples:
@@ -23,27 +30,14 @@ samples:
   train_fraction: 0.7
   train_size: ${int:${mul:${samples.train_fraction},${samples.L}}} # int(0.7 * L)
 
-# Observables measured on the final state (QELM.training.readout): <O_i> for
-# each label in `observables`, <A_i B_j> (i < j) for each pair in `pairs`.
-# A list can hold several entries, or be empty ([]) for no such features.
-# N follows the selected Hamiltonian; operators() uses it when no N is passed.
-single_observable:
-  N: ${${sim_type}.N}
-  observables: [Z]
-double_observable:
-  N: ${${sim_type}.N}
-  pairs: [[Z, Z]]
+# Observables on the final state (single_observable, double_observable) live in
+# conf/training/readout/, the projective measurement (projective_measurement) in
+# conf/training/measurements/, and the trainer (training) in
+# conf/training/regression/.
 
 # Dynamic readout. Not read by the pipeline yet.
 dynamic_readout:
   p: 0.01
-
-# Projective measurement in the Z basis (QELM.training.measurements).
-# qubits: list of measured sites in order, or null for every qubit.
-# p: probability of measuring each target qubit; measure(rho, p=...) overrides it.
-projective_measurement:
-  qubits: null
-  p: 1.0
 
 # Checkpoint written at the end of every run. No secrets belong here.
 # dir: null uses Hydra's timestamped run directory when a job is active,

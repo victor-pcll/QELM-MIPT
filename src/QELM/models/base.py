@@ -1,4 +1,4 @@
-"""Base class for Hamiltonian models selected by ``sim_type``."""
+"""Base class for Hamiltonian models selected by ``models``."""
 
 from __future__ import annotations
 
@@ -51,11 +51,11 @@ def evolution_request(
 
 
 class HamiltonianModel:
-    """Time-evolution model selected by ``sim_type``.
+    """Time-evolution model selected by ``models``.
 
     Attributes:
         name: Config key for this model. Subclasses override it with their
-            ``sim_type`` value; ``from_config`` reads ``cfg[name]``.
+            ``models`` value; ``from_config`` reads ``cfg[name]``.
         params: Scalar parameters from the matching YAML block, such as
             ``N`` and ``J``.
         N: Number of qubits.

@@ -2,7 +2,7 @@
 
 # Scaffold so the dispatcher can route to the Kitaev model.
 # N is required by every model. Other Hamiltonian parameters are not implemented yet.
-sim_type: kitaev
+models: kitaev
 kitaev:
   N: 4
 
