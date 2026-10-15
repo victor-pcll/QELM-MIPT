@@ -16,7 +16,7 @@ class RidgeReadout(Trainer):
     ``W = (Phi^T Phi + alpha I)^{-1} Phi^T y``, computed by solving the linear
     system ``(Phi^T Phi + alpha I) W = Phi^T y`` with ``numpy.linalg.solve``
     rather than inverting the matrix. No intercept is fitted: add a constant
-    column to ``Phi`` if a bias is needed. Selected with ``training=ridge``.
+    column to ``Phi`` if a bias is needed. Selected with ``training/regression=ridge``.
 
     ``alpha`` is resolved in this order: the argument of :meth:`fit`, then
     ``alpha`` in the ``training`` config block, then 1.0 (as in

@@ -10,12 +10,12 @@ Scientific parameters and secrets live in different files.
 
 | Key | Role |
 | --- | --- |
-| `defaults` | `sim_type: TFIM`, `training: ridge`, `evaluation: default` |
+| `defaults` | `models: TFIM`, `training/measurements: projective`, `training/readout@single_observable: single`, `training/readout@double_observable: double`, `training/regression: ridge`, `evaluation: default` |
 | `seed` | Integer passed to NumPy at startup. See [Code quality](code-quality.md). |
-| `ancilla_charge_sector.N` | Total qubit count of the initial state, `${${sim_type}.N}`: it follows the selected Hamiltonian. Read by `AncillaChargeSectorEmbedding.from_config(cfg)` |
+| `ancilla_charge_sector.N` | Total qubit count of the initial state, `${${models}.N}`: it follows the selected Hamiltonian. Read by `AncillaChargeSectorEmbedding.from_config(cfg)` |
 | `samples.L`, `samples.train_fraction`, `samples.train_size` | Number of samples and training split, `train_size = int(0.7 * L)`. Not read by the pipeline yet |
 | `single_observable.observables`, `double_observable.pairs` | Features measured on the final state: `<O_i>` for each label (default `[Z]`), `<A_i B_j>` for each pair (default `[[Z, Z]]`). Several entries allowed; `[]` or a missing block gives no feature. Read by `SingleObservable.from_config(cfg)` / `DoubleObservable.from_config(cfg)` |
-| `single_observable.N`, `double_observable.N` | Qubit count, `${${sim_type}.N}`. `operators()` uses it when called without `N`; `operators(N=...)` overrides it |
+| `single_observable.N`, `double_observable.N` | Qubit count, `${${models}.N}`. `operators()` uses it when called without `N`; `operators(N=...)` overrides it |
 | `dynamic_readout.p` | Dynamic readout parameter `p`. Not read by the pipeline yet |
 | `projective_measurement.qubits` | Sites measured by `ProjectiveMeasurement`, in order; `null` (default) measures every qubit. Read by `ProjectiveMeasurement.from_config(cfg)`, which also works without the block |
 | `projective_measurement.p` | Probability of measuring each target qubit, default `1.0`. `measure(rho)` uses it; `measure(rho, p=...)` overrides it; without the key, `p = 1.0` |
@@ -26,10 +26,15 @@ Group files:
 
 | File | Contents |
 | --- | --- |
-| `conf/sim_type/TFIM.yaml` | `sim_type: TFIM`, the `TFIM` block (`N`, `J`, `h = 10 J`, `RUNS` random Hamiltonians) and the evolution block `evolution` (`t = 10 / J`, `n_steps = d = 4 N`, `dt = t / d`) |
-| `conf/sim_type/kitaev.yaml` | `sim_type: kitaev`, a `kitaev` block with only `N`, and a fixed `evolution` block (`dt: 0.01`, `n_steps: 100`) |
-| `conf/training/ridge.yaml` | `name: ridge`, `alpha: 1.0` (ridge regularization; `fit(..., alpha=...)` overrides it) |
-| `conf/training/linear.yaml` | `name: linear` |
+| `conf/models/TFIM.yaml` | `models: TFIM`, the `TFIM` block (`N`, `J`, `h = 10 J`, `RUNS` random Hamiltonians) and the evolution block `evolution` (`t = 10 / J`, `n_steps = d = 4 N`, `dt = t / d`) |
+| `conf/models/kitaev.yaml` | `models: kitaev`, a `kitaev` block with only `N`, and a fixed `evolution` block (`dt: 0.01`, `n_steps: 100`) |
+| `conf/training/measurements/projective.yaml` | The `projective_measurement` block (`qubits: null`, `p: 1.0`), placed by its `# @package projective_measurement` header |
+| `conf/training/readout/single.yaml` | The `single_observable` block (`N`, `observables: [Z]`), placed by `training/readout@single_observable` in the defaults list |
+| `conf/training/readout/double.yaml` | The `double_observable` block (`N`, `pairs: [[Z, Z]]`), placed by `training/readout@double_observable` in the defaults list |
+| `conf/training/regression/ridge.yaml` | `name: ridge`, `alpha: 1.0` (ridge regularization; `fit(..., alpha=...)` overrides it), under `training` (`# @package training`) |
+| `conf/training/regression/linear.yaml` | `name: linear`, under `training` (`# @package training`) |
+
+The tree under `conf/` mirrors `src/QELM/`: `models/` for `QELM.models`, and `training/measurements/`, `training/readout/` and `training/regression/` for the `QELM.training` subpackages. The composed keys (`projective_measurement`, `single_observable`, `double_observable`, `training`) are the same as before the split, so the code reads them unchanged. Select a file with its group path: `models=kitaev`, `training/regression=linear`.
 | `conf/evaluation/default.yaml` | `name: default`, a list of metric names, and a plot name |
 
 `evolution.dt` and `evolution.n_steps` are recorded by `evolution_request` in the pipeline. `TFIM.RUNS` is bound to `model.RUNS` (not used by the pipeline yet), and `from_config` adds `evolution.dt` to the model params as `dt`.

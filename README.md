@@ -22,7 +22,7 @@ uv sync
 
 | Path | Role |
 | --- | --- |
-| `conf/` | Hydra YAML: `config.yaml` plus groups `sim_type`, `training`, `evaluation` |
+| `conf/` | Hydra YAML: `config.yaml` plus groups `models`, `training/{measurements,readout,regression}`, `evaluation`, mirroring `src/QELM/` |
 | `data/` | Local time series and training datasets (gitignored) |
 | `src/QELM/models/` | Hamiltonians and time evolution (transverse-field Ising model, Kitaev scaffold) |
 | `src/QELM/physics/` | Quantum primitives: Pauli matrices and site operators |
@@ -30,7 +30,7 @@ uv sync
 | `src/QELM/training/` | Measurements, feature extraction and readout fitting (`LinearReadout` scaffold, `RidgeReadout` closed-form ridge regression) |
 | `src/QELM/evaluation/` | Metrics and plot scaffolds |
 | `notebooks/series.ipynb` | Plot a local series from `data/`; the library call stays a scaffold |
-| `main.py` | Entrypoint. Routes sim type → model → training → evaluation |
+| `main.py` | Entrypoint. Routes `models` → model → training → evaluation |
 
 ## Run the pipeline
 
@@ -38,10 +38,10 @@ Scientific parameters live in `conf/` and can be overridden from the command lin
 
 ```bash
 cp .env.example .env
-uv run python main.py sim_type=TFIM TFIM.N=12 evolution.dt=0.05
+uv run python main.py models=TFIM TFIM.N=12 evolution.dt=0.05
 ```
 
-`sim_type=TFIM` selects `conf/sim_type/TFIM.yaml` and the transverse-field Ising model. `training=ridge` (default) or `training=linear` selects the trainer. `N`, `J`, and `dt` stay in YAML or CLI overrides.
+`models=TFIM` selects `conf/models/TFIM.yaml` and the transverse-field Ising model. `training/regression=ridge` (default) or `training/regression=linear` selects the trainer. `N`, `J`, and `dt` stay in YAML or CLI overrides.
 
 ## Notebook
 

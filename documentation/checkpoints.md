@@ -44,6 +44,6 @@ outputs/<uuid>/checkpoint.npz
 The file is a NumPy `.npz` with two entries:
 
 - `weights` — `float64` array from the trainer. The scaffold stores shape `(0,)` because `fit` does not estimate weights.
-- `metadata` — JSON text. Fields are `run_id`, `sim_type`, `model`, `trainer`, `seed`, `training_status`, `evolution` (`dt`, `n_steps`, `status`), and `params` (the simulation block).
+- `metadata` — JSON text. Fields are `run_id`, `models`, `model`, `trainer`, `seed`, `training_status`, `evolution` (`dt`, `n_steps`, `status`), and `params` (the simulation block).
 
 Nothing is uploaded.

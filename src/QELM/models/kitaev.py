@@ -8,7 +8,7 @@ from QELM.models.base import HamiltonianModel
 class KitaevModel(HamiltonianModel):
     """Kitaev Hamiltonian and time evolution.
 
-    Parameters belong in ``conf/sim_type/kitaev.yaml`` and are not
+    Parameters belong in ``conf/models/kitaev.yaml`` and are not
     implemented. The operator of shape ``(dim, dim)`` is not built.
     """
 

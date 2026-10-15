@@ -19,15 +19,15 @@ def format_selection(cfg: DictConfig) -> str:
 
     Args:
         cfg: Composed Hydra config. The active simulation block is
-            ``cfg[cfg.sim_type]``. Each exposed value is a scalar
+            ``cfg[cfg.models]``. Each exposed value is a scalar
             (``N``, ``J``, ``dt``, ``n_steps``).
 
     Returns:
-        One line of ``key=value`` pairs, starting with ``sim_type``.
+        One line of ``key=value`` pairs, starting with ``models``.
     """
-    sim_type = str(cfg.sim_type)
-    sim = cfg[sim_type]
-    parts = [f"sim_type={sim_type}"]
-    parts.extend(f"{sim_type}.{key}={value}" for key, value in sim.items())
+    model_name = str(cfg.models)
+    sim = cfg[model_name]
+    parts = [f"models={model_name}"]
+    parts.extend(f"{model_name}.{key}={value}" for key, value in sim.items())
     parts.extend(f"evolution.{key}={value}" for key, value in cfg.evolution.items())
     return " ".join(parts)

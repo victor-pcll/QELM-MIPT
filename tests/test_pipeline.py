@@ -27,14 +27,14 @@ def _compose(overrides: list[str] | None = None):
 
 def test_dispatcher_resolves_config_to_modules() -> None:
     tfim = resolve_pipeline(
-        _compose(["sim_type=TFIM", "training=ridge", "evaluation=default"])
+        _compose(["models=TFIM", "training/regression=ridge", "evaluation=default"])
     )
-    assert tfim.sim_type == "TFIM"
+    assert tfim.models == "TFIM"
     assert tfim.model is TransverseFieldIsingModel
     assert tfim.trainer is RidgeReadout
     assert tfim.evaluator is evaluate
 
-    kitaev = resolve_pipeline(_compose(["sim_type=kitaev", "training=linear"]))
+    kitaev = resolve_pipeline(_compose(["models=kitaev", "training/regression=linear"]))
     assert kitaev.model is KitaevModel
     assert kitaev.trainer is LinearReadout
     assert kitaev.evaluator is evaluate
@@ -44,10 +44,10 @@ def test_run_pipeline_uses_cli_overrides(tmp_path: Path) -> None:
     report = run_pipeline(
         _compose(
             [
-                "sim_type=TFIM",
+                "models=TFIM",
                 "TFIM.N=12",
                 "evolution.dt=0.05",
-                "training=linear",
+                "training/regression=linear",
                 f"checkpoint.dir={tmp_path}",
                 "checkpoint.use_uuid=false",
                 "checkpoint.filename=checkpoint.npz",
@@ -64,6 +64,6 @@ def test_run_pipeline_uses_cli_overrides(tmp_path: Path) -> None:
 
 
 def test_run_pipeline_kitaev_scaffold(tmp_path: Path) -> None:
-    report = run_pipeline(_compose(["sim_type=kitaev", f"checkpoint.dir={tmp_path}"]))
+    report = run_pipeline(_compose(["models=kitaev", f"checkpoint.dir={tmp_path}"]))
     assert "model=kitaev" in report
     assert (tmp_path / "checkpoint.npz").is_file()

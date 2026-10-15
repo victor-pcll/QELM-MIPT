@@ -14,7 +14,7 @@ Ruff lints and formats. `pyproject.toml` sets the target to Python 3.12, a line 
 
 Mypy typechecks `src/QELM` and `main.py` with `disallow_untyped_defs`. It does not typecheck `tests/`.
 
-pytest collects `tests/`.
+pytest collects `tests/`. `tests/sparse_checks.py` holds `assert_sparse_hermitian(H, atol=1e-8)`, the standard check that a sparse matrix is Hermitian: it compares `H - H^dagger` in sparse form and never calls `toarray()`, so it also works on matrices too large to hold dense. Import it in a test with `from sparse_checks import assert_sparse_hermitian`.
 
 GitHub Actions runs the four checks on every push and pull request: `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, and `uv run pytest`. The workflow is `.github/workflows/code-quality.yml`. It installs uv, installs the Python version in `.python-version`, syncs from `uv.lock`, and runs those commands. It does not start extra services.
 
