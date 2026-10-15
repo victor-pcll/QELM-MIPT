@@ -89,7 +89,8 @@ class Observables:
         Returns:
             Real array of shape ``(n_features,)``.
         """
-        ops = self.operators(n_qubits(rho))
+        N, _, _ = n_qubits(rho)
+        ops = self.operators(N)
         # Tr(rho O) = sum_ij rho_ij O_ji; real because rho and O are Hermitian.
         return np.array([np.einsum("ij,ji->", rho, op).real for op in ops])
 
