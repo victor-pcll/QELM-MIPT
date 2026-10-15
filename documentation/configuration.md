@@ -32,7 +32,7 @@ Group files:
 | `conf/training/readout.yaml` | `name: readout` |
 | `conf/evaluation/default.yaml` | `name: default`, a list of metric names, and a plot name |
 
-`evolution.dt` and `evolution.n_steps` are recorded by `evolution_request` in the pipeline. `TFIM.RUNS` is not read by the code yet.
+`evolution.dt` and `evolution.n_steps` are recorded by `evolution_request` in the pipeline. `TFIM.RUNS` is bound to `model.RUNS` (not used by the pipeline yet), and `from_config` adds `evolution.dt` to the model params as `dt`.
 
 ## Derived values
 
