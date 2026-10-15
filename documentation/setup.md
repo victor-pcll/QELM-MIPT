@@ -30,3 +30,18 @@ Add a dependency with `uv add`.
 rm -rf .venv
 uv sync
 ```
+
+## `No module named 'QELM'` on macOS
+
+If `uv run python main.py` fails with `ModuleNotFoundError: No module named
+'QELM'` although `.venv` is up to date, check whether macOS has marked the
+`.pth` files of the editable install as hidden. Python 3.12+ skips hidden
+`.pth` files (`python -v` prints `Skipping hidden .pth file`):
+
+```bash
+ls -lO .venv/lib/python3.12/site-packages/*.pth
+chflags nohidden .venv/lib/python3.12/site-packages/*.pth
+```
+
+The bash launchers in `experiments/scripts/` and the test suite put `src/` on
+`PYTHONPATH` themselves, so they work either way.
