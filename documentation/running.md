@@ -17,13 +17,13 @@ The process prints two lines: the selection (`sim_type`, each key in the simulat
 Other overrides use the same form:
 
 ```bash
-uv run python main.py sim_type=kitaev training=readout
+uv run python main.py sim_type=kitaev training=linear
 uv run python main.py training=ridge evaluation=default
 uv run python main.py seed=0
 uv run python main.py checkpoint.dir=/tmp/qrc-run checkpoint.use_uuid=true
 ```
 
-`training=ridge` and `evaluation=default` match the defaults in `conf/config.yaml`. `training=readout` selects `LinearReadout`. `evaluation=default` is the only registered evaluator. An unknown `sim_type`, trainer name, or evaluator name raises `KeyError`.
+`training=ridge` and `evaluation=default` match the defaults in `conf/config.yaml`. `training=linear` selects `LinearReadout`. `evaluation=default` is the only registered evaluator. An unknown `sim_type`, trainer name, or evaluator name raises `KeyError`.
 
 ## Notebook
 

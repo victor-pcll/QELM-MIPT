@@ -34,7 +34,7 @@ def test_dispatcher_resolves_config_to_modules() -> None:
     assert tfim.trainer is RidgeReadout
     assert tfim.evaluator is evaluate
 
-    kitaev = resolve_pipeline(_compose(["sim_type=kitaev", "training=readout"]))
+    kitaev = resolve_pipeline(_compose(["sim_type=kitaev", "training=linear"]))
     assert kitaev.model is KitaevModel
     assert kitaev.trainer is LinearReadout
     assert kitaev.evaluator is evaluate
@@ -47,7 +47,7 @@ def test_run_pipeline_uses_cli_overrides(tmp_path: Path) -> None:
                 "sim_type=TFIM",
                 "TFIM.N=12",
                 "evolution.dt=0.05",
-                "training=readout",
+                "training=linear",
                 f"checkpoint.dir={tmp_path}",
                 "checkpoint.use_uuid=false",
                 "checkpoint.filename=checkpoint.npz",
@@ -55,7 +55,7 @@ def test_run_pipeline_uses_cli_overrides(tmp_path: Path) -> None:
         )
     )
     assert "model=TFIM" in report
-    assert "training=readout" in report
+    assert "training=linear" in report
     assert "dt=0.05" in report
     assert "status=scaffold" in report
     checkpoint = tmp_path / "checkpoint.npz"

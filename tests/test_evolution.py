@@ -162,3 +162,23 @@ def test_from_config_reads_evolution_dt() -> None:
     model = TransverseFieldIsingModel.from_config(cfg)
     assert model.dt == pytest.approx(float(cfg.evolution.dt))
     assert model.dt == pytest.approx(10.0 / 12)
+    assert model.params["dt"] == model.dt
+    assert model.RUNS == int(cfg.TFIM.RUNS)
+
+
+def test_init_binds_runs_and_dt() -> None:
+    """RUNS et dt du dict de paramètres deviennent des attributs."""
+    model = TransverseFieldIsingModel(
+        {"N": 2, "J": 1.0, "h": 1.0, "RUNS": 10, "dt": 0.25}
+    )
+    assert model.RUNS == 10
+    assert isinstance(model.RUNS, int)
+    assert model.dt == 0.25
+    assert isinstance(model.dt, float)
+
+
+def test_init_without_runs_or_dt_defaults_to_none() -> None:
+    """Sans RUNS ni dt, les attributs valent None, sans KeyError."""
+    model = TransverseFieldIsingModel({"N": 2, "J": 1.0, "h": 1.0})
+    assert model.RUNS is None
+    assert model.dt is None
