@@ -31,7 +31,7 @@ Group files:
 | `conf/training/measurements/projective.yaml` | The `projective_measurement` block (`qubits: null`, `p: 1.0`), placed by its `# @package projective_measurement` header |
 | `conf/training/readout/single.yaml` | The `single_observable` block (`N`, `observables: [Z]`), placed by `training/readout@single_observable` in the defaults list |
 | `conf/training/readout/double.yaml` | The `double_observable` block (`N`, `pairs: [[Z, Z]]`), placed by `training/readout@double_observable` in the defaults list |
-| `conf/training/regression/ridge.yaml` | `name: ridge`, under `training` (`# @package training`) |
+| `conf/training/regression/ridge.yaml` | `name: ridge`, `alpha: 1.0` (ridge regularization; `fit(..., alpha=...)` overrides it), under `training` (`# @package training`) |
 | `conf/training/regression/linear.yaml` | `name: linear`, under `training` (`# @package training`) |
 
 The tree under `conf/` mirrors `src/QELM/`: `models/` for `QELM.models`, and `training/measurements/`, `training/readout/` and `training/regression/` for the `QELM.training` subpackages. The composed keys (`projective_measurement`, `single_observable`, `double_observable`, `training`) are the same as before the split, so the code reads them unchanged. Select a file with its group path: `models=kitaev`, `training/regression=linear`.

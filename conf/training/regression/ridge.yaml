@@ -1,2 +1,5 @@
 # @package training
 name: ridge
+# Regularization strength of the closed-form ridge regression (RidgeReadout).
+# fit(..., alpha=...) overrides it.
+alpha: 1.0

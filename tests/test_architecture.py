@@ -33,7 +33,7 @@ def test_training_modules_split_by_role() -> None:
         training.DoubleObservable: "QELM.training.readout.double",
         training.Trainer: "QELM.training.regression.base",
         training.LinearReadout: "QELM.training.regression.linear",
-        training.RidgeRegression: "QELM.training.regression.ridge",
+        training.RidgeReadout: "QELM.training.regression.ridge",
     }
     for cls, module in expected.items():
         assert cls.__module__ == module, cls
@@ -44,27 +44,27 @@ def test_children_inherit_from_their_base() -> None:
     assert issubclass(training.SingleObservable, training.Observables)
     assert issubclass(training.DoubleObservable, training.Observables)
     assert issubclass(training.LinearReadout, training.Trainer)
-    assert issubclass(training.RidgeRegression, training.Trainer)
+    assert issubclass(training.RidgeReadout, training.Trainer)
 
 
 def test_subpackage_imports_still_work() -> None:
     """Imports by domain keep working, as before the split."""
     from QELM.training.measurements import ProjectiveMeasurement, Readout
     from QELM.training.readout import DoubleObservable, SingleObservable
-    from QELM.training.regression import RidgeRegression, Trainer
+    from QELM.training.regression import RidgeReadout, Trainer
 
     assert ProjectiveMeasurement is training.ProjectiveMeasurement
     assert Readout is training.Readout
     assert SingleObservable is training.SingleObservable
     assert DoubleObservable is training.DoubleObservable
-    assert RidgeRegression is training.RidgeRegression
+    assert RidgeReadout is training.RidgeReadout
     assert Trainer is training.Trainer
 
 
 def test_trainer_and_readout_registries() -> None:
     """Config keys still select the same classes."""
     assert training.get_trainer("linear") is training.LinearReadout
-    assert training.get_trainer("ridge") is training.RidgeRegression
+    assert training.get_trainer("ridge") is training.RidgeReadout
     assert training.get_readout("projective_measurement") is (
         training.ProjectiveMeasurement
     )
