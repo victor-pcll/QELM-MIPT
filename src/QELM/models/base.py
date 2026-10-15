@@ -60,8 +60,11 @@ class HamiltonianModel:
             ``N`` and ``J``.
         N: Number of qubits.
         dim: Hilbert-space dimension, ``2**N``.
-        dt: Default step used by :meth:`evolve` when no ``dt`` is passed.
-            ``from_config`` sets it from ``evolution.dt``; ``None`` otherwise.
+        RUNS: Number of disorder realisations, from ``params["RUNS"]``;
+            ``None`` when the block has no ``RUNS``.
+        dt: Default step used by :meth:`evolve` when no ``dt`` is passed,
+            from ``params["dt"]``. ``from_config`` injects ``evolution.dt``
+            there; ``None`` when neither is set.
     """
 
     name: str = "base"
@@ -71,12 +74,14 @@ class HamiltonianModel:
 
         Args:
             params: Parameter names mapped to scalar values from YAML.
-                ``N`` is required.
+                ``N`` is required; ``RUNS`` and ``dt`` are optional and
+                default to ``None``.
         """
         self.params: dict[str, Any] = dict(params)
         self.N: int = int(params["N"])
         self.dim: int = 2**self.N
-        self.dt: float | None = None
+        self.RUNS: int | None = int(params["RUNS"]) if "RUNS" in params else None
+        self.dt: float | None = float(params["dt"]) if "dt" in params else None
         self._H: sp.csr_matrix | None = None
 
     @classmethod
@@ -88,8 +93,8 @@ class HamiltonianModel:
                 scalar parameters.
 
         Returns:
-            An instance of this model class, with ``dt`` set from
-            ``cfg.evolution.dt`` when that key exists.
+            An instance of this model class. ``cfg.evolution.dt``, when
+            that key exists, is added to the params as ``dt``.
 
         Raises:
             TypeError: If the config block is not a mapping.
@@ -105,11 +110,10 @@ class HamiltonianModel:
         if not isinstance(raw, dict):
             raise TypeError(f"{cls.name} config must be a mapping.")
         params = {str(key): value for key, value in raw.items()}
-        model = cls(params)
         dt = OmegaConf.select(cfg, "evolution.dt")
         if dt is not None:
-            model.dt = float(dt)
-        return model
+            params["dt"] = float(dt)
+        return cls(params)
 
     def hamiltonian(self) -> sp.csr_matrix:
         """Return the Hamiltonian matrix for ``self.params``.
