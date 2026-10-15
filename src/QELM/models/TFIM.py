@@ -53,12 +53,12 @@ class TransverseFieldIsingModel(HamiltonianModel):
         H: sp.csr_matrix = sp.csr_matrix((self.dim, self.dim), dtype=np.complex128)
 
         for i in range(self.N):
-            H = H + self.h * get_site_operator(Z, i, self.N)
+            H = H + self.h * get_site_operator(Z, i, self.N, sparse=True)
 
         for i in range(self.N):
-            Xi = get_site_operator(X, i, self.N)
+            Xi = get_site_operator(X, i, self.N, sparse=True)
             for j in range(i + 1, self.N):
-                Xj = get_site_operator(X, j, self.N)
+                Xj = get_site_operator(X, j, self.N, sparse=True)
                 H = H + self.J_matrix[i, j] * (Xi @ Xj)
 
         self._H = H.tocsr()

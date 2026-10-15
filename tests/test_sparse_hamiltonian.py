@@ -51,7 +51,7 @@ def _random_state(dim: int, seed: int = 1) -> np.ndarray:
 def test_sparse_site_operator_matches_dense(op: np.ndarray, N: int) -> None:
     """Chaque opérateur à un site est identique en creux et en dense."""
     for site in range(N):
-        sparse = get_site_operator(op, site, N)
+        sparse = get_site_operator(op, site, N, sparse=True)
         assert sp.issparse(sparse) and sparse.format == "csr"
         np.testing.assert_array_equal(sparse.toarray(), _kron_site(op, site, N))
 

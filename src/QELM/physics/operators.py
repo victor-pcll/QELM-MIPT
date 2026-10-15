@@ -15,39 +15,39 @@ Z = np.array([[1, 0], [0, -1]], dtype=complex)
 
 @overload
 def get_site_operator(
-    op: np.ndarray, site: int, N: int, dense: Literal[False] = False
-) -> sp.csr_matrix: ...
+    op: np.ndarray, site: int, N: int, sparse: Literal[False] = False
+) -> np.ndarray: ...
 
 
 @overload
 def get_site_operator(
-    op: np.ndarray, site: int, N: int, dense: Literal[True]
-) -> np.ndarray: ...
+    op: np.ndarray, site: int, N: int, sparse: Literal[True]
+) -> sp.csr_matrix: ...
 
 
 def get_site_operator(
-    op: np.ndarray, site: int, N: int, dense: bool = False
-) -> sp.csr_matrix | np.ndarray:
+    op: np.ndarray, site: int, N: int, sparse: bool = False
+) -> np.ndarray | sp.csr_matrix:
     """Construit l'opérateur à 1 qubit ``op`` agissant sur le qubit ``site``.
 
     Les autres qubits de la chaîne à N qubits portent l'identité :
     ``I_(2**site) ⊗ op ⊗ I_(2**(N - site - 1))``, le site 0 étant le facteur
     le plus à gauche.
 
-    Par défaut la matrice est creuse (CSR). Un produit de Kronecker de
-    matrices de Pauli n'a qu'un élément non nul par ligne, soit ``2**N``
-    éléments stockés au lieu de ``4**N`` : cela évite de saturer la mémoire
-    pour les grands ``N``. ``dense=True`` renvoie le tableau numpy.
+    Par défaut la matrice est un tableau numpy dense. ``sparse=True`` la
+    renvoie creuse (CSR) : un produit de Kronecker de matrices de Pauli n'a
+    qu'un élément non nul par ligne, soit ``2**N`` éléments stockés au lieu
+    de ``4**N``, ce qui évite de saturer la mémoire pour les grands ``N``.
 
     Args:
         op: Matrice 2x2 (ex: X, Y, Z).
         site: Indice du qubit cible (0 à N-1).
         N: Nombre total de qubits dans le système.
-        dense: ``True`` pour un ``np.ndarray`` dense, ``False`` (défaut) pour
-            une matrice creuse CSR.
+        sparse: ``True`` pour une matrice creuse CSR, ``False`` (défaut)
+            pour un ``np.ndarray`` dense.
 
     Returns:
-        Matrice de taille (2^N, 2^N), CSR ou dense selon ``dense``.
+        Matrice de taille (2^N, 2^N), CSR ou dense selon ``sparse``.
 
     Raises:
         ValueError: Si ``op`` n'est pas 2x2 ou si ``site`` n'est pas dans
@@ -63,7 +63,7 @@ def get_site_operator(
     # sp.kron passe par des blocs 2x2 (BSR) et garde les zéros de ``op`` :
     # sans ce nettoyage, X stockerait 2 * 2**N éléments au lieu de 2**N.
     out.eliminate_zeros()
-    return out.toarray() if dense else out
+    return out if sparse else out.toarray()
 
 
 PAULIS: dict[str, np.ndarray] = {"X": X, "Y": Y, "Z": Z}
