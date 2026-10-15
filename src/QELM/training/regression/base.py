@@ -1,4 +1,7 @@
-"""Training algorithms. Fit and predict are stubs."""
+"""Parent class of the regressions fitted on the QELM features.
+
+Fit and predict are stubs.
+"""
 
 from __future__ import annotations
 

@@ -1,16 +1,23 @@
 """QELM data pipeline: measurements, feature extraction and readout fitting.
 
+One subpackage per domain, each with a ``base.py`` holding the parent class
+and one module per child class:
+
 - :mod:`QELM.training.measurements`: measurement schemes with back-action
-  (:class:`Readout`, :class:`ProjectiveMeasurement`).
+  (``base.py``: :class:`Readout`; ``projective.py``:
+  :class:`ProjectiveMeasurement`).
 - :mod:`QELM.training.readout`: features computed from the final state
-  (:class:`SingleObservable`, :class:`DoubleObservable`).
+  (``base.py``: :class:`Observables`; ``single.py``:
+  :class:`SingleObservable`; ``double.py``: :class:`DoubleObservable`).
 - :mod:`QELM.training.regression`: trainers fitted on those features
-  (:class:`LinearReadout`, :class:`RidgeRegression`).
+  (``base.py``: :class:`Trainer`; ``linear.py``: :class:`LinearReadout`;
+  ``ridge.py``: :class:`RidgeRegression`).
+
+Every class is importable from :mod:`QELM.training` directly.
 """
 
 from __future__ import annotations
 
-from QELM.training.base import Trainer
 from QELM.training.measurements import (
     ProjectiveMeasurement,
     Readout,
@@ -18,7 +25,7 @@ from QELM.training.measurements import (
     measure_projective_rho,
 )
 from QELM.training.readout import DoubleObservable, Observables, SingleObservable
-from QELM.training.regression import LinearReadout, RidgeRegression
+from QELM.training.regression import LinearReadout, RidgeRegression, Trainer
 
 _TRAINERS: dict[str, type[Trainer]] = {
     LinearReadout.name: LinearReadout,
