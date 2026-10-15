@@ -88,20 +88,34 @@ def pauli(label: str) -> np.ndarray:
         raise ValueError(f"Unknown observable {label!r}. Known: {known}.") from exc
 
 
-def n_qubits(rho: np.ndarray) -> int:
-    """Return ``N`` for a density matrix of shape ``(2**N, 2**N)``.
+def n_qubits(rho: np.ndarray, n_ancilla: int = 0) -> tuple[int, int, int]:
+    """Return the qubit counts of a density matrix of shape ``(2**N, 2**N)``.
+
+    Ancillas are the first sites, as in :mod:`QELM.embedding`, so the
+    system is the last ``N - n_ancilla`` qubits.
 
     Args:
         rho: Density matrix.
+        n_ancilla: Number of ancilla qubits included in ``rho``.
 
     Returns:
-        Number of qubits.
+        ``(N, N_S, n_ancilla)``: total, system and ancilla qubit counts, with
+        ``N = N_S + n_ancilla``.
 
     Raises:
-        ValueError: If ``rho`` is not square with a power-of-two side.
+        ValueError: If ``rho`` is not square with a power-of-two side, if
+            ``n_ancilla`` is negative, or if ``rho`` has fewer qubits than
+            ``n_ancilla``.
     """
     dim = rho.shape[0]
     N = dim.bit_length() - 1
     if rho.shape != (dim, dim) or dim < 2 or 2**N != dim:
         raise ValueError(f"rho must have shape (2**N, 2**N), got {rho.shape}.")
-    return N
+    if n_ancilla < 0:
+        raise ValueError(f"n_ancilla must be >= 0, got {n_ancilla}.")
+    N_S = N - n_ancilla
+    if N_S < 0:
+        raise ValueError(
+            f"Total qubits ({N}) cannot be less than ancilla qubits ({n_ancilla})."
+        )
+    return N, N_S, n_ancilla
