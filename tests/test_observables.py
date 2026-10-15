@@ -202,3 +202,46 @@ def test_bad_pair_or_label_is_rejected() -> None:
         DoubleObservable({"pairs": [["Z", "W"]]})
     with pytest.raises(ValueError, match="Unknown observable"):
         SingleObservable({"observables": ["Z", "W"]})
+
+
+# --- N optionnel dans operators() (issue #46) ---
+
+
+@pytest.mark.parametrize("cls", [SingleObservable, DoubleObservable])
+def test_operators_uses_config_N(cls: type) -> None:
+    """Sans argument, operators() prend N dans les paramètres."""
+    params = {"N": 3, "observables": ["Z"], "pairs": [["Z", "Z"]]}
+    obs = cls(params)
+    assert obs.N == 3
+    ops = obs.operators()
+    assert all(op.shape == (8, 8) for op in ops)
+    for got, want in zip(ops, obs.operators(3), strict=True):
+        np.testing.assert_array_equal(got, want)
+
+
+@pytest.mark.parametrize("cls", [SingleObservable, DoubleObservable])
+def test_operators_explicit_N_overrides_config(cls: type) -> None:
+    """operators(N=2) l'emporte sur N=4 de la config."""
+    obs = cls({"N": 4, "observables": ["Z"], "pairs": [["Z", "Z"]]})
+    ops = obs.operators(N=2)
+    assert ops and all(op.shape == (4, 4) for op in ops)
+
+
+@pytest.mark.parametrize("cls", [SingleObservable, DoubleObservable])
+def test_operators_without_N_raises(cls: type) -> None:
+    """Ni argument ni N dans la config : ValueError explicite."""
+    obs = cls({"observables": ["Z"], "pairs": [["Z", "Z"]]})
+    assert obs.N is None
+    with pytest.raises(ValueError, match="N was not passed"):
+        obs.operators()
+
+
+def test_full_config_gives_N_to_observables() -> None:
+    """La config composée donne à chaque bloc le N du Hamiltonien."""
+    from QELM import load_config
+
+    cfg = load_config(["TFIM.N=4"])
+    assert SingleObservable.from_config(cfg).N == 4
+    assert DoubleObservable.from_config(cfg).N == 4
+    assert len(SingleObservable.from_config(cfg).operators()) == 4
+    assert len(DoubleObservable.from_config(cfg).operators()) == 6
