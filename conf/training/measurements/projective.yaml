@@ -1,0 +1,7 @@
+# @package projective_measurement
+
+# Projective measurement in the Z basis (QELM.training.measurements).
+# qubits: list of measured sites in order, or null for every qubit.
+# p: probability of measuring each target qubit; measure(rho, p=...) overrides it.
+qubits: null
+p: 1.0

@@ -9,7 +9,7 @@ class RidgeRegression(Trainer):
     """Ridge regression readout.
 
     ``fit`` accepts features of shape ``(n_samples, n_features)`` and does
-    not estimate a weight vector. Selected with ``training=ridge``.
+    not estimate a weight vector. Selected with ``training/regression=ridge``.
     """
 
     name = "ridge"

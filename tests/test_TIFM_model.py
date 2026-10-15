@@ -8,6 +8,7 @@ from omegaconf import OmegaConf
 
 from QELM.models.base import EvolutionState, HamiltonianModel, evolution_request
 from QELM.models.TFIM import TransverseFieldIsingModel
+from sparse_checks import assert_sparse_hermitian
 
 # =====================================================================
 # 1. FIXTURES (Données et modèles réutilisables)
@@ -49,11 +50,8 @@ def test_hamiltonian_hermiticity(
     ising_model: TransverseFieldIsingModel,
 ):
     """Vérifie la propriété physique fondamentale : H est Hermitien (H = H^dagger)."""
-    H = ising_model.hamiltonian().toarray()
-    H_dagger = H.conj().T
-
-    # Vérification numérique stricte sur matrices complexes
-    np.testing.assert_allclose(H, H_dagger, atol=1e-12)
+    # Vérification stricte sans copie dense (voir tests/sparse_checks.py)
+    assert_sparse_hermitian(ising_model.hamiltonian(), atol=1e-12)
 
 
 def test_hamiltonian_determinism_and_fixed_disorder(
@@ -117,7 +115,7 @@ def test_evolution_request_scaffold():
 
 
 def test_tfim_yaml_builds_model_with_field():
-    """Le fichier conf/sim_type/TFIM.yaml construit un TFIM avec ``h``."""
+    """Le fichier conf/models/TFIM.yaml construit un TFIM avec ``h``."""
     from pathlib import Path
 
     from hydra import compose, initialize_config_dir
@@ -131,7 +129,7 @@ def test_tfim_yaml_builds_model_with_field():
         cfg = compose(config_name="config", overrides=["TFIM.N=3", "TFIM.h=0.7"])
     GlobalHydra.instance().clear()
 
-    model = get_model(str(cfg.sim_type)).from_config(cfg)
+    model = get_model(str(cfg.models)).from_config(cfg)
     assert isinstance(model, TransverseFieldIsingModel)
     assert model.h == 0.7
     assert model.hamiltonian().shape == (8, 8)
