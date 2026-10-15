@@ -61,8 +61,7 @@ class DoubleObservable(Observables):
         for a, b in self.pairs:
             A, B = pauli(a), pauli(b)
             ops += [
-                get_site_operator(A, i, N, dense=True)
-                @ get_site_operator(B, j, N, dense=True)
+                get_site_operator(A, i, N) @ get_site_operator(B, j, N)
                 for i in range(N)
                 for j in range(i + 1, N)
             ]

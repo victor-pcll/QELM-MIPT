@@ -91,40 +91,56 @@ class Embedding:
 
     @overload
     def state(
-        self, x: np.ndarray | None = None, dense: Literal[True] = True
+        self, x: np.ndarray | None = None, sparse: Literal[False] = False
     ) -> np.ndarray: ...
     @overload
     def state(
-        self, x: np.ndarray | None = None, *, dense: Literal[False]
+        self, x: np.ndarray | None = None, *, sparse: Literal[True]
     ) -> sp.csr_matrix: ...
     def state(
-        self, x: np.ndarray | None = None, dense: bool = True
+        self, x: np.ndarray | None = None, sparse: bool = False
     ) -> np.ndarray | sp.csr_matrix:
         """Return the embedded pure state.
 
         Args:
             x: Input data to encode. ``None`` for an embedding that does not
                 depend on the input.
-            dense: ``True`` (default) for a NumPy vector, ``False`` for a
-                sparse column.
+            sparse: ``True`` for a CSR column, ``False`` (default) for a
+                NumPy vector.
 
         Returns:
-            Normalized complex state: a vector of shape ``(dim,)`` if
-            ``dense``, otherwise a CSR column of shape ``(dim, 1)``.
+            Normalized complex state: a CSR column of shape ``(dim, 1)`` if
+            ``sparse``, otherwise a vector of shape ``(dim,)``.
 
         Raises:
             NotImplementedError: In this base class.
         """
         raise NotImplementedError(f"{self.name} state is not implemented.")
 
-    def density_matrix(self, x: np.ndarray | None = None) -> np.ndarray:
+    @overload
+    def density_matrix(
+        self, x: np.ndarray | None = None, sparse: Literal[False] = False
+    ) -> np.ndarray: ...
+    @overload
+    def density_matrix(
+        self, x: np.ndarray | None = None, *, sparse: Literal[True]
+    ) -> sp.csr_matrix: ...
+    def density_matrix(
+        self, x: np.ndarray | None = None, sparse: bool = False
+    ) -> np.ndarray | sp.csr_matrix:
         """Return ``rho = |psi><psi|`` for ``psi = self.state(x)``.
 
         Args:
             x: Input data, passed to :meth:`state`.
+            sparse: ``True`` for a CSR matrix built from the sparse state
+                (``k**2`` stored entries for ``k`` non-zero amplitudes),
+                ``False`` (default) for a NumPy array.
 
         Returns:
             Complex density matrix of shape ``(dim, dim)``.
         """
+        if sparse:
+            psi_sp = self.state(x, sparse=True)
+            return sp.csr_matrix(psi_sp @ psi_sp.conj().T)
         psi = self.state(x)
         return np.outer(psi, psi.conj())

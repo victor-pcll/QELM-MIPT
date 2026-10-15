@@ -48,31 +48,34 @@ def charge_sector_indices(N: int, Q: int) -> np.ndarray:
 
 
 @overload
-def charge_sector_state(N: int, Q: int, dense: Literal[True] = True) -> np.ndarray: ...
-@overload
-def charge_sector_state(N: int, Q: int, dense: Literal[False]) -> sp.csr_matrix: ...
 def charge_sector_state(
-    N: int, Q: int, dense: bool = True
+    N: int, Q: int, sparse: Literal[False] = False
+) -> np.ndarray: ...
+@overload
+def charge_sector_state(N: int, Q: int, sparse: Literal[True]) -> sp.csr_matrix: ...
+def charge_sector_state(
+    N: int, Q: int, sparse: bool = False
 ) -> np.ndarray | sp.csr_matrix:
     """Return the uniform superposition of the basis states of sector ``Q``.
 
     Args:
         N: Number of qubits.
         Q: Target charge, from 0 to ``N``.
-        dense: ``True`` for a NumPy vector, ``False`` for a sparse column.
+        sparse: ``True`` for a sparse column, ``False`` (default) for a NumPy
+            vector.
 
     Returns:
-        Normalized complex state: a vector of shape ``(2**N,)`` if ``dense``,
-        otherwise a CSR column of shape ``(2**N, 1)`` with ``binom(N, Q)``
-        stored entries.
+        Normalized complex state: a CSR column of shape ``(2**N, 1)`` with
+        ``binom(N, Q)`` stored entries if ``sparse``, otherwise a vector of
+        shape ``(2**N,)``.
     """
     idx = charge_sector_indices(N, Q)
     amp = 1.0 / np.sqrt(idx.size)
-    if dense:
-        psi = np.zeros(2**N, dtype=complex)
-        psi[idx] = amp
-        return psi
-    return _sparse_column(idx, np.full(idx.size, amp, dtype=complex), 2**N)
+    if sparse:
+        return _sparse_column(idx, np.full(idx.size, amp, dtype=complex), 2**N)
+    psi = np.zeros(2**N, dtype=complex)
+    psi[idx] = amp
+    return psi
 
 
 def _sparse_column(rows: np.ndarray, values: np.ndarray, dim: int) -> sp.csr_matrix:
@@ -115,14 +118,14 @@ class AncillaChargeSectorEmbedding(Embedding):
 
     @overload
     def state(
-        self, x: np.ndarray | None = None, dense: Literal[True] = True
+        self, x: np.ndarray | None = None, sparse: Literal[False] = False
     ) -> np.ndarray: ...
     @overload
     def state(
-        self, x: np.ndarray | None = None, *, dense: Literal[False]
+        self, x: np.ndarray | None = None, *, sparse: Literal[True]
     ) -> sp.csr_matrix: ...
     def state(
-        self, x: np.ndarray | None = None, dense: bool = True
+        self, x: np.ndarray | None = None, sparse: bool = False
     ) -> np.ndarray | sp.csr_matrix:
         """Return the entangled state on ``R + S``.
 
@@ -132,12 +135,12 @@ class AncillaChargeSectorEmbedding(Embedding):
 
         Args:
             x: Ignored; the state is fixed.
-            dense: ``True`` for a NumPy vector, ``False`` for a sparse column
-                built without any dense vector of size ``2**N``.
+            sparse: ``True`` for a CSR column built without any dense vector
+                of size ``2**N``, ``False`` (default) for a NumPy vector.
 
         Returns:
-            Normalized complex state: a vector of shape ``(2**N,)`` if
-            ``dense``, otherwise a CSR column of shape ``(2**N, 1)``.
+            Normalized complex state: a CSR column of shape ``(2**N, 1)`` if
+            ``sparse``, otherwise a vector of shape ``(2**N,)``.
         """
         idx1 = charge_sector_indices(self.N_S, self.Q1)
         idx2 = charge_sector_indices(self.N_S, self.Q2)
@@ -148,8 +151,8 @@ class AncillaChargeSectorEmbedding(Embedding):
                 np.full(idx2.size, 1.0 / np.sqrt(2 * idx2.size), dtype=complex),
             ]
         )
-        if dense:
-            psi = np.zeros(self.dim, dtype=complex)
-            psi[rows] = values
-            return psi
-        return _sparse_column(rows, values, self.dim)
+        if sparse:
+            return _sparse_column(rows, values, self.dim)
+        psi = np.zeros(self.dim, dtype=complex)
+        psi[rows] = values
+        return psi
