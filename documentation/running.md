@@ -64,7 +64,7 @@ Write temporary outputs (arrays, logs, plots) to `experiments/scratch/`, availab
 
 ### Bash scripts
 
-`experiments/scripts/` holds bash scripts that launch a set of runs from the terminal. The test experiment sweeps `TFIM.N` and `seed` through `main.py` and writes each run to its own folder under `experiments/scratch/`:
+`experiments/scripts/` holds bash scripts that launch a set of runs from the terminal. The test experiment sweeps `TFIM.N` and `seed` through `main.py` and writes each run to its own folder under `outputs/`, which git ignores:
 
 ```bash
 ./experiments/scripts/test_experiment.sh

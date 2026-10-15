@@ -6,7 +6,7 @@
 #     ./experiments/scripts/test_experiment.sh
 #
 # Each run writes its Hydra log and checkpoint to
-#     experiments/scratch/test_experiment/<date_time>/N<N>_seed<seed>/
+#     outputs/test_experiment/<date_time>/N<N>_seed<seed>/
 # (no "=" in folder names: Hydra rejects it inside an override value)
 # which git ignores. Set OUT_ROOT to write somewhere else:
 #     OUT_ROOT=/tmp/qelm ./experiments/scripts/test_experiment.sh
@@ -31,7 +31,7 @@ SEEDS=(0 1)      # one run per seed and per N
 # -----------------------------------------------------------------------------
 
 STAMP="$(date +%Y-%m-%d_%H-%M-%S)"
-OUT_ROOT="${OUT_ROOT:-experiments/scratch}"
+OUT_ROOT="${OUT_ROOT:-outputs}"
 OUT_DIR="$OUT_ROOT/$EXPERIMENT/$STAMP"
 mkdir -p "$OUT_DIR"
 echo "Writing outputs to $OUT_DIR"

@@ -33,6 +33,8 @@ def test_scratch_contents_are_ignored_but_gitkeep_is_not() -> None:
     assert ignored("experiments/scratch/run/log.txt")
     assert not ignored("experiments/scratch/.gitkeep")
     assert not ignored("experiments/run_experiment.py")
+    # Les scripts bash écrivent dans outputs/, ignoré lui aussi.
+    assert ignored("outputs/test_experiment/run/checkpoint.npz")
 
 
 def test_script_runs_with_hydra_overrides(tmp_path: Path) -> None:

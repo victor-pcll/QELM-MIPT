@@ -2,7 +2,7 @@
 
 Bash scripts that launch QELM runs from the terminal. Each script fixes a set of
 parameters, calls the Hydra entry point once per combination, and writes every
-run to its own folder under `experiments/scratch/`, which git ignores.
+run to its own folder under `outputs/`, which git ignores (see `.gitignore`).
 
 ## Run the test experiment
 
@@ -14,7 +14,7 @@ From the repository root, after `uv sync`:
 
 It runs `main.py` on the TFIM for `N` in `4 6` and `seed` in `0 1`, four runs in
 a few seconds. Each run lands in
-`experiments/scratch/test_experiment/<date_time>/N<N>_seed<seed>/` with:
+`outputs/test_experiment/<date_time>/N<N>_seed<seed>/` with:
 
 - `checkpoint.npz`: the checkpoint written by the pipeline;
 - `main.log`: the run log;
@@ -50,7 +50,7 @@ Rules that keep runs clean:
 - `set -euo pipefail` at the top stops the script at the first failing run, so
   a sweep never continues silently past an error.
 - A script that should be shared goes in a pull request; a personal one can
-  stay untracked, or live in `experiments/scratch/`.
+  stay untracked.
 
 ## Hydra multirun
 
@@ -58,7 +58,7 @@ Hydra can also sweep on its own with `-m`, without a bash loop:
 
 ```bash
 uv run python main.py -m TFIM.N=4,6 seed=0,1 \
-  hydra.sweep.dir=experiments/scratch/multirun
+  hydra.sweep.dir=outputs/multirun
 ```
 
 Each combination goes to a numbered subfolder of `hydra.sweep.dir`. The bash
