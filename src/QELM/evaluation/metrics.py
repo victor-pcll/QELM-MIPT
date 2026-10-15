@@ -20,7 +20,15 @@ def metric_status(names: list[str]) -> str:
 
 
 def _as_pair(y_true: ArrayLike, y_pred: ArrayLike) -> tuple[np.ndarray, np.ndarray]:
-    """Convert both inputs to float arrays of the same, non-empty shape."""
+    """Convert both inputs to 1-dimensional float arrays of the same length.
+
+    Every metric goes through this check, so ``MSE``, ``NMSE`` and ``R2``
+    only ever see two validated arrays.
+
+    Raises:
+        ValueError: If the shapes differ, the arrays are empty, or they are
+            not 1-dimensional.
+    """
     y_true_arr = np.asarray(y_true, dtype=np.float64)
     y_pred_arr = np.asarray(y_pred, dtype=np.float64)
     if y_true_arr.shape != y_pred_arr.shape:
@@ -29,6 +37,11 @@ def _as_pair(y_true: ArrayLike, y_pred: ArrayLike) -> tuple[np.ndarray, np.ndarr
         )
     if y_true_arr.size == 0:
         raise ValueError("Input arrays must not be empty.")
+    if y_true_arr.ndim != 1:
+        raise ValueError(
+            f"Inputs must be 1-dimensional. Got y_true ndim: {y_true_arr.ndim}, "
+            f"y_pred ndim: {y_pred_arr.ndim}."
+        )
     return y_true_arr, y_pred_arr
 
 
@@ -55,13 +68,23 @@ def NMSE(y_true: ArrayLike, y_pred: ArrayLike) -> float:
 
     Returns:
         NMSE score.
+
+    Raises:
+        ValueError: If the inputs are invalid (see :func:`_as_pair`) or
+            ``y_true`` is all zeros.
     """
     y_true_arr, y_pred_arr = _as_pair(y_true, y_pred)
-    return MSE(y_true_arr, y_pred_arr) / float(np.mean(y_true_arr**2))
+    norm = float(np.mean(y_true_arr**2))
+    if norm == 0.0:
+        raise ValueError("NMSE is undefined when y_true is all zeros.")
+    return MSE(y_true_arr, y_pred_arr) / norm
 
 
-def R(y_true: ArrayLike, y_pred: ArrayLike) -> float:
-    """R-squared (R2) metric.
+def R2(y_true: ArrayLike, y_pred: ArrayLike) -> float:
+    """Coefficient of determination R^2 (not the Pearson correlation R).
+
+    ``R2 = 1 - sum((y_true - y_pred)**2) / sum((y_true - mean(y_true))**2)``,
+    the same as ``sklearn.metrics.r2_score``.
 
     Args:
         y_true: Ground truth values, 1-dimensional.
@@ -76,8 +99,6 @@ def R(y_true: ArrayLike, y_pred: ArrayLike) -> float:
             not 1-dimensional.
     """
     y_true_arr, y_pred_arr = _as_pair(y_true, y_pred)
-    if y_true_arr.ndim != 1:
-        raise ValueError("y_true and y_pred must be 1-dimensional arrays.")
 
     ss_res = np.sum((y_true_arr - y_pred_arr) ** 2)
     ss_tot = np.sum((y_true_arr - np.mean(y_true_arr)) ** 2)
