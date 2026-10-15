@@ -23,6 +23,18 @@ a few seconds. Each run lands in
 
 Set `OUT_ROOT` to write elsewhere: `OUT_ROOT=/tmp/qelm ./experiments/scripts/test_experiment.sh`.
 
+## Run the projective-readout experiment
+
+```bash
+./experiments/scripts/projective_readout.sh
+```
+
+It runs `experiments/projective_readout.py` for `N` in `4 6` with `seed=0` and
+200 samples (`L=1000 ./experiments/scripts/projective_readout.sh` for more).
+Each run lands in `outputs/projective_readout/<date_time>/N<N>_seed<seed>/` with
+`projective_readout.npz` (`Phi`, `Y`, `M`, `X`, `y_test`, `y_pred`, `W`),
+`metrics.json` (NMSE, R2) and `.hydra/config.yaml`.
+
 ## Write your own
 
 1. Copy the test script and make the copy executable:
