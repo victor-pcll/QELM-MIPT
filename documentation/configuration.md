@@ -17,7 +17,8 @@ Scientific parameters and secrets live in different files.
 | `single_observable.observables`, `double_observable.pairs` | Features measured on the final state: `<O_i>` for each label (default `[Z]`), `<A_i B_j>` for each pair (default `[[Z, Z]]`). Several entries allowed; `[]` or a missing block gives no feature. Read by `SingleObservable.from_config(cfg)` / `DoubleObservable.from_config(cfg)` |
 | `single_observable.N`, `double_observable.N` | Qubit count, `${${models}.N}`. `operators()` uses it when called without `N`; `operators(N=...)` overrides it |
 | `dynamic_readout.p` | Dynamic readout parameter `p`. Not read by the pipeline yet |
-| `projective_measurement.qubits` | Sites measured by `ProjectiveMeasurement`, in order; `null` (default) measures every qubit. Read by `ProjectiveMeasurement.from_config(cfg)`, which also works without the block |
+| `projective_measurement.qubits` | Sites measured by `ProjectiveMeasurement`, in order; `null` (default) measures every system qubit `n_ancilla .. N-1`. Read by `ProjectiveMeasurement.from_config(cfg)`, which also works without the block |
+| `projective_measurement.n_ancilla` | Ancilla qubits at the start of the chain, default `1` (the single ancilla of `AncillaChargeSectorEmbedding`). With `qubits: null` they are never measured; an explicit `qubits` list ignores it. Without the key, `n_ancilla = 0` |
 | `projective_measurement.p` | Probability of measuring each target qubit, default `1.0`. `measure(rho)` uses it; `measure(rho, p=...)` overrides it; without the key, `p = 1.0` |
 | `checkpoint` | Where the run writes its `.npz`. See [Checkpoints and local data](checkpoints.md). |
 | `hydra.run.dir` | `outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}` |
@@ -28,10 +29,10 @@ Group files:
 | --- | --- |
 | `conf/models/TFIM.yaml` | `models: TFIM`, the `TFIM` block (`N`, `J`, `h = 10 J`, `RUNS` random Hamiltonians) and the evolution block `evolution` (`t = 10 / J`, `n_steps = d = 4 N`, `dt = t / d`) |
 | `conf/models/kitaev.yaml` | `models: kitaev`, a `kitaev` block with only `N`, and a fixed `evolution` block (`dt: 0.01`, `n_steps: 100`) |
-| `conf/training/measurements/projective.yaml` | The `projective_measurement` block (`qubits: null`, `p: 1.0`), placed by its `# @package projective_measurement` header |
+| `conf/training/measurements/projective.yaml` | The `projective_measurement` block (`qubits: null`, `n_ancilla: 1`, `p: 1.0`), placed by its `# @package projective_measurement` header |
 | `conf/training/readout/single.yaml` | The `single_observable` block (`N`, `observables: [Z]`), placed by `training/readout@single_observable` in the defaults list |
 | `conf/training/readout/double.yaml` | The `double_observable` block (`N`, `pairs: [[Z, Z]]`), placed by `training/readout@double_observable` in the defaults list |
-| `conf/training/regression/ridge.yaml` | `name: ridge`, under `training` (`# @package training`) |
+| `conf/training/regression/ridge.yaml` | `name: ridge`, `alpha: 1.0` (ridge regularization; `fit(..., alpha=...)` overrides it), under `training` (`# @package training`) |
 | `conf/training/regression/linear.yaml` | `name: linear`, under `training` (`# @package training`) |
 
 The tree under `conf/` mirrors `src/QELM/`: `models/` for `QELM.models`, and `training/measurements/`, `training/readout/` and `training/regression/` for the `QELM.training` subpackages. The composed keys (`projective_measurement`, `single_observable`, `double_observable`, `training`) are the same as before the split, so the code reads them unchanged. Select a file with its group path: `models=kitaev`, `training/regression=linear`.

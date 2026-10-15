@@ -92,7 +92,11 @@ class ProjectiveMeasurement(Readout):
 
     Attributes:
         qubits: Measured qubits in order, from ``params["qubits"]``, or
-            ``None`` to measure every qubit ``0 .. N-1``.
+            ``None`` to measure every system qubit ``n_ancilla .. N-1``.
+        n_ancilla: Number of ancilla qubits at the start of the chain (most
+            significant bits), from ``params["n_ancilla"]``, 0 by default.
+            They are skipped when ``qubits`` is ``None``, so the ancillas
+            never collapse; an explicit ``qubits`` list is used as is.
         p: Measurement probability from ``params["p"]``, used by
             :meth:`measure` when no ``p`` is passed; ``None`` if the block
             has no ``p``, in which case ``measure`` uses 1.0.
@@ -101,20 +105,26 @@ class ProjectiveMeasurement(Readout):
     name: str = "projective_measurement"
 
     def __init__(self, params: Mapping[str, Any]) -> None:
-        """Store the measured qubits and the measurement probability.
+        """Store the measured qubits, the probability and the ancilla count.
 
         Args:
             params: ``qubits`` is an optional list of qubit indices; ``p`` is
-                an optional probability in ``[0, 1]``.
+                an optional probability in ``[0, 1]``; ``n_ancilla`` is the
+                optional number of ancilla qubits at the start of the chain
+                (0 when absent).
 
         Raises:
-            ValueError: If ``p`` is given and is not a number in ``[0, 1]``.
+            ValueError: If ``p`` is given and is not a number in ``[0, 1]``,
+                or if ``n_ancilla`` is negative.
         """
         super().__init__(params)
         raw = params.get("qubits")
         self.qubits: list[int] | None = None if raw is None else [int(q) for q in raw]
         raw_p = params.get("p")
         self.p: float | None = None if raw_p is None else _check_p(raw_p)
+        self.n_ancilla: int = int(params.get("n_ancilla") or 0)
+        if self.n_ancilla < 0:
+            raise ValueError(f"n_ancilla must be >= 0, got {self.n_ancilla}.")
 
     def measure(
         self,
@@ -124,8 +134,10 @@ class ProjectiveMeasurement(Readout):
     ) -> ReadoutResult:
         """Measure each target qubit projectively with probability ``p``.
 
-        Each target qubit, in order, is measured with probability ``p`` and
-        left untouched otherwise. With ``p = 1`` every qubit is measured and
+        The targets are ``self.qubits`` when set, otherwise the system qubits
+        ``n_ancilla .. N-1``: the ancillas are left unmeasured. Each target
+        qubit, in order, is measured with probability ``p`` and left
+        untouched otherwise. With ``p = 1`` every target is measured and
         no extra random number is drawn, so the outcomes are the same as
         before ``p`` existed for a given seed. For ``0 < p < 1`` one uniform
         number decides whether a qubit is measured, then a second one (only
@@ -146,13 +158,14 @@ class ProjectiveMeasurement(Readout):
             collapse.
 
         Raises:
-            ValueError: If ``p`` is not a number in ``[0, 1]``.
+            ValueError: If ``p`` is not a number in ``[0, 1]``, or if ``rho``
+                has fewer qubits than ``n_ancilla``.
         """
         if p is None:
             p = 1.0 if self.p is None else self.p
         p = _check_p(p)
-        N, _, _ = n_qubits(rho)
-        qubits = list(range(N)) if self.qubits is None else self.qubits
+        N, _, _ = n_qubits(rho, self.n_ancilla)
+        qubits = list(range(self.n_ancilla, N)) if self.qubits is None else self.qubits
         outcomes = np.full(len(qubits), np.nan, dtype=np.float64)
         for k, q in enumerate(qubits):
             if p < 1:

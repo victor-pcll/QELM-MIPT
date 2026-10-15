@@ -1,14 +1,16 @@
 """Parent class of the regressions fitted on the QELM features.
 
-Fit and predict are stubs.
+The base ``fit`` and ``predict`` are stubs; :class:`RidgeReadout` overrides
+them with the closed-form solution.
 """
 
 from __future__ import annotations
 
-from typing import Self
+from collections.abc import Mapping
+from typing import Any, Self
 
 import numpy as np
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 
 class Trainer:
@@ -16,25 +18,40 @@ class Trainer:
 
     Attributes:
         name: Config key for this trainer.
+        params: Parameters from the ``training`` block, without ``name``.
     """
 
     name: str
+
+    def __init__(self, params: Mapping[str, Any] | None = None) -> None:
+        """Store the trainer parameters.
+
+        Args:
+            params: Parameter names mapped to scalar values from the
+                ``training`` YAML block. ``None`` means no parameter.
+        """
+        self.params: dict[str, Any] = dict(params or {})
 
     @classmethod
     def from_config(cls, cfg: DictConfig) -> Self:
         """Build the trainer from the composed config.
 
-        Trainers take no config parameter: ridge regression uses the
-        closed-form solution, so there is no learning rate.
+        Reads the ``training`` block (``conf/training/<name>.yaml``), minus
+        its ``name`` key. There is no learning rate: ridge regression uses
+        the closed-form solution.
 
         Args:
-            cfg: Composed Hydra config. Not read yet; kept so every
-                component is built the same way.
+            cfg: Composed Hydra config. ``cfg.training`` may be absent.
 
         Returns:
             An instance of this trainer class.
         """
-        return cls()
+        node = OmegaConf.select(cfg, "training")
+        raw = OmegaConf.to_container(node, resolve=True) if node is not None else {}
+        if not isinstance(raw, dict):
+            raise TypeError("training config must be a mapping.")
+        params = {str(key): value for key, value in raw.items() if key != "name"}
+        return cls(params)
 
     def fit(
         self,
@@ -54,7 +71,7 @@ class Trainer:
         """
         return "scaffold"
 
-    def predict(self, features: np.ndarray | None) -> str:
+    def predict(self, features: np.ndarray | None) -> np.ndarray | str:
         """Record a predict request without emitting a tensor.
 
         Args:
@@ -62,8 +79,9 @@ class Trainer:
                 or ``None``.
 
         Returns:
-            The status string ``"scaffold"``. A later implementation would
-            return predictions of shape ``(n_samples, n_outputs)``.
+            The status string ``"scaffold"`` here. A trainer that fits
+            weights returns predictions of shape ``(n_samples,)`` or
+            ``(n_samples, n_outputs)``.
         """
         return "scaffold"
 
