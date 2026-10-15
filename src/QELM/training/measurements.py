@@ -68,9 +68,12 @@ class Readout:
     def from_config(cls, cfg: DictConfig) -> Self:
         """Build the readout from the Hydra block named ``cls.name``.
 
+        Every readout parameter has a default, so a missing or ``null``
+        block builds the readout with its defaults.
+
         Args:
             cfg: Composed Hydra config. ``cfg[cls.name]`` is a mapping of
-                scalar parameters.
+                scalar parameters, or is absent.
 
         Returns:
             An instance of this class.
@@ -78,7 +81,9 @@ class Readout:
         Raises:
             TypeError: If the config block is not a mapping.
         """
-        node = cfg[cls.name]
+        node = OmegaConf.select(cfg, cls.name)
+        if node is None:
+            return cls({})
         raw = (
             OmegaConf.to_container(node, resolve=True)
             if OmegaConf.is_config(node)
