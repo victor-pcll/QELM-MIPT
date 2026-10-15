@@ -8,7 +8,13 @@ defaults:
 # Scalar seed applied once at startup. Override with seed=0 on the command line.
 seed: 42
 
-# The evolution block (test.t, test.dt, test.n_steps) depends on the
+# Initial state of the reservoir (QELM.embedding). N is the total number of
+# qubits, ancilla included; it follows the selected Hamiltonian so that the
+# state and the model have the same size.
+ancilla_charge_sector:
+  N: ${${sim_type}.N}
+
+# The evolution block (evolution.t, evolution.dt, evolution.n_steps) depends on the
 # Hamiltonian, so it lives in conf/sim_type/ next to it.
 
 # Samples. Not read by the pipeline yet.
@@ -17,9 +23,22 @@ samples:
   train_fraction: 0.7
   train_size: ${int:${mul:${samples.train_fraction},${samples.L}}} # int(0.7 * L)
 
+# Observables measured on the final state (QELM.training.readout): <O_i> for
+# each label in `observables`, <A_i B_j> (i < j) for each pair in `pairs`.
+# A list can hold several entries, or be empty ([]) for no such features.
+single_observable:
+  observables: [Z]
+double_observable:
+  pairs: [[Z, Z]]
+
 # Dynamic readout. Not read by the pipeline yet.
 dynamic_readout:
   p: 0.01
+
+# Projective measurement in the Z basis (QELM.training.measurements).
+# qubits: list of measured sites in order, or null for every qubit.
+projective_measurement:
+  qubits: null
 
 # Checkpoint written at the end of every run. No secrets belong here.
 # dir: null uses Hydra's timestamped run directory when a job is active,

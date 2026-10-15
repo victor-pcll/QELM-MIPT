@@ -3,16 +3,16 @@
 From the repository root, after `uv sync`:
 
 ```bash
-uv run python main.py sim_type=TFIM TFIM.N=12 test.dt=0.05
+uv run python main.py sim_type=TFIM TFIM.N=12 evolution.dt=0.05
 ```
 
 Hydra composes `conf/config.yaml` and applies those overrides:
 
 - `sim_type=TFIM` selects `conf/sim_type/TFIM.yaml` and `TransverseFieldIsingModel`.
-- `TFIM.N=12` overrides `N` on the TFIM block. `J`, `h` and `learning_rate` stay at the values in that YAML file.
-- `test.dt=0.05` overrides the test step. `test.n_steps` keeps its formula `4 * TFIM.N` from `conf/sim_type/TFIM.yaml`, so it becomes 48.
+- `TFIM.N=12` overrides `N` on the TFIM block. `J` and `h` stay at the values in that YAML file.
+- `evolution.dt=0.05` overrides the evolution step. `evolution.n_steps` keeps its formula `4 * TFIM.N` from `conf/sim_type/TFIM.yaml`, so it becomes 48.
 
-The process prints two lines: the selection (`sim_type`, each key in the simulation block, and each `test` key), then the pipeline status. A checkpoint is written under the Hydra run directory. See [Checkpoints and local data](checkpoints.md).
+The process prints two lines: the selection (`sim_type`, each key in the simulation block, and each `evolution` key), then the pipeline status. A checkpoint is written under the Hydra run directory. See [Checkpoints and local data](checkpoints.md).
 
 Other overrides use the same form:
 

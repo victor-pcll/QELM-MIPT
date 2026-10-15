@@ -290,3 +290,26 @@ def test_numpy_scalar_p_is_accepted() -> None:
         BELL, p=np.float64(1.0), rng=np.random.default_rng(0)
     )
     assert not np.any(np.isnan(result.outcomes))
+
+
+# --- Bloc de config absent (issue #25) ---
+
+
+def test_from_full_config() -> None:
+    """La config composée contient le bloc : tous les qubits sont mesurés."""
+    from QELM import load_config
+
+    readout = ProjectiveMeasurement.from_config(load_config())
+    assert readout.qubits is None
+    result = readout.measure(_random_rho(3, 21), rng=np.random.default_rng(0))
+    assert result.outcomes.shape == (3,)
+
+
+@pytest.mark.parametrize("cfg", [{"seed": 0}, {"projective_measurement": None}])
+def test_missing_block_uses_defaults(cfg: dict) -> None:
+    """Bloc absent ou null : valeurs par défaut, pas de ConfigKeyError."""
+    conf = OmegaConf.create(cfg)
+    OmegaConf.set_struct(conf, True)
+    readout = ProjectiveMeasurement.from_config(conf)
+    assert readout.qubits is None
+    assert readout.measure(BELL, rng=np.random.default_rng(1)).outcomes.shape == (2,)
