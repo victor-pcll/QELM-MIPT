@@ -25,6 +25,14 @@ wheels/
 # Personal experiment notebooks. Copy a notebook here to work on it;
 # git pull never touches this folder.
 notebooks/scratch/
+
+# =========================
+# 2b. Experiment scripts
+# =========================
+# Ignore all files in the experiments scratch folder
+experiments/scratch/*
+# But keep the directory itself tracked
+!experiments/scratch/.gitkeep
 # (Optionnel) Ignorer les outputs de notebooks si on utilise des outils comme nbstripout
 # *.ipynb
 

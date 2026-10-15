@@ -51,3 +51,13 @@ cp notebooks/01-QELM-MIPT.ipynb notebooks/scratch/
 `git pull` never touches that folder, so there is nothing to stash. Code changes in `src/` go on their own branch and become a pull request; `main` stays clean.
 
 The template notebooks start with `%load_ext autoreload` and `%autoreload 2`. `uv sync` installs `QELM` in editable mode, so after `git pull && uv sync` the running kernel picks up the new code in `src/` without a restart.
+
+## Experiment scripts
+
+Standalone experiment scripts start from `experiments/run_experiment.py`. It composes `conf/config.yaml` with Hydra like `main.py`, accepts the same overrides, and seeds NumPy from `seed`:
+
+```bash
+uv run python experiments/run_experiment.py models=TFIM TFIM.N=6
+```
+
+Write temporary outputs (arrays, logs, plots) to `experiments/scratch/`, available in the script as `SCRATCH`. Git ignores everything in that folder except `.gitkeep`, so nothing written there is committed. Copy the script to start a new experiment and keep the template unchanged.
