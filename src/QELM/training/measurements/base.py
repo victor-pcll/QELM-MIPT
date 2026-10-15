@@ -87,7 +87,7 @@ class Readout:
     def measure(
         self,
         rho: np.ndarray,
-        p: float = 1.0,
+        p: float | None = None,
         rng: np.random.Generator | None = None,
     ) -> ReadoutResult:
         """Measure ``rho`` and apply the back-action.
@@ -95,6 +95,7 @@ class Readout:
         Args:
             rho: Density matrix of shape ``(2**N, 2**N)``.
             p: Probability of measuring each target qubit, in ``[0, 1]``.
+                ``None`` uses the readout's configured value.
             rng: Random generator for the outcomes. ``None`` uses the
                 global ``numpy.random`` state seeded by
                 :func:`QELM.seed.set_seed`.

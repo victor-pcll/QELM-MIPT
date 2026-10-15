@@ -37,8 +37,10 @@ dynamic_readout:
 
 # Projective measurement in the Z basis (QELM.training.measurements).
 # qubits: list of measured sites in order, or null for every qubit.
+# p: probability of measuring each target qubit; measure(rho, p=...) overrides it.
 projective_measurement:
   qubits: null
+  p: 1.0
 
 # Checkpoint written at the end of every run. No secrets belong here.
 # dir: null uses Hydra's timestamped run directory when a job is active,
