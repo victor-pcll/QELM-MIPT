@@ -26,11 +26,11 @@ cd "$REPO_ROOT"
 export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 
 # ---- Parameters -------------------------------------------------------------
-EXPERIMENT="exp_QELM"
+EXPERIMENT="exp_QELM_M"
 MODEL="TFIM"
-N_VALUES=(4 6)          # number of qubits, ancilla included
+N_VALUES=(4)          # number of qubits, ancilla included
 SEEDS=(42)            # one run per seed and per N
-L="${L:-500}"         # samples per run (samples.L)
+L="${L:-200}"         # samples per run (samples.L)
 # The default alpha=1 also shrinks the bias weight and costs R2; 1e-3 does not.
 ALPHA="${ALPHA:-1e-3}"
 # -----------------------------------------------------------------------------
@@ -51,7 +51,9 @@ for N in "${N_VALUES[@]}"; do
       "seed=$SEED" \
       "samples.L=$L" \
       "training.alpha=$ALPHA" \
-      "hydra.run.dir=$RUN_DIR"
+      "hydra.run.dir=$RUN_DIR"\
+      "dynamic_readout.p=0.5"\
+      "projective_measurement.p=0.5" 
   done
 done
 

@@ -50,7 +50,7 @@ from tqdm import tqdm
 from QELM import TransverseFieldIsingModel, set_seed
 from QELM.embedding import AncillaChargeSectorEmbedding
 from QELM.evaluation.metrics import NMSE, R2
-from QELM.training import RidgeReadout, SingleObservable
+from QELM.training import RidgeReadout, SingleObservable, ProjectiveMeasurement
 
 DEFAULT_OBSERVABLES = ["Z", "Y", "X"]
 
@@ -81,18 +81,24 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     ops = ops.reshape(len(labels), N, sector.dim, sector.dim)
     Z0 = SingleObservable({"N": N, "observables": ["Z"]}).operators()[0]
     psi0 = sector.state()
+    rho = sector.density_matrix()
+    P = ProjectiveMeasurement.from_config(cfg)
 
     L = int(cfg.samples.L)
-    X = np.zeros((L, len(labels), N - 1))
+    X = np.zeros((L, N - 1, N - 1))
+    M = np.zeros((L, N - 1, N - 1)) 
     Y = np.zeros(L)
 
     for i in tqdm(range(L)):
         model = TransverseFieldIsingModel.from_config(cfg)
         psi = model.evolve(psi0, dt=t)
-        X[i] = np.real(np.einsum("a,okab,b->ok", psi.conj(), ops[:, 1:], psi))
-        Y[i] = np.real(psi.conj() @ Z0 @ psi)
+        rho = model.evolve(rho, dt=t)
+        measure = P.measure(rho)
+        rho = measure.rho
+        M[i] = measure.outcomes
+        Y[i] = np.real(np.trace(Z0 @ rho))
 
-    X = X.reshape(L, -1)
+    X = M.reshape(L, -1)
     X = np.hstack([X, np.ones((L, 1))])  # bias column: RidgeReadout has no intercept
 
     train = int(cfg.samples.train_size)
@@ -122,7 +128,7 @@ def save(results: dict[str, Any], out_dir: Path) -> None:
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     arrays = {k: v for k, v in results.items() if isinstance(v, np.ndarray)}
-    np.savez(out_dir / "exp_QELM.npz", **arrays)
+    np.savez(out_dir / "exp_QELM_M.npz", **arrays)
     metrics = {
         "nmse": results["nmse"],
         "r2": results["r2"],

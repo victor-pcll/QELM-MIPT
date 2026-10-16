@@ -26,7 +26,7 @@ cd "$REPO_ROOT"
 export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 
 # ---- Parameters -------------------------------------------------------------
-EXPERIMENT="exp_QELM"
+EXPERIMENT="exp_QELM_Z"
 MODEL="TFIM"
 N_VALUES=(4 6)          # number of qubits, ancilla included
 SEEDS=(42)            # one run per seed and per N

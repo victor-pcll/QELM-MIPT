@@ -122,7 +122,7 @@ def save(results: dict[str, Any], out_dir: Path) -> None:
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     arrays = {k: v for k, v in results.items() if isinstance(v, np.ndarray)}
-    np.savez(out_dir / "exp_QELM.npz", **arrays)
+    np.savez(out_dir / "exp_QELM_Z.npz", **arrays)
     metrics = {
         "nmse": results["nmse"],
         "r2": results["r2"],
