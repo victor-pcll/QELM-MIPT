@@ -23,6 +23,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
+# Find the QELM package in src/ even when Python skips the editable install's
+# .pth file (macOS can mark it hidden, see issue #80).
+export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+
 # ---- Parameters -------------------------------------------------------------
 EXPERIMENT="test_experiment"
 MODEL="TFIM"
