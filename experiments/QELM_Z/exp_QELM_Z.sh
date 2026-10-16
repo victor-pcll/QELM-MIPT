@@ -28,9 +28,9 @@ export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 # ---- Parameters -------------------------------------------------------------
 EXPERIMENT="exp_QELM"
 MODEL="TFIM"
-N_VALUES=(4)          # number of qubits, ancilla included
+N_VALUES=(4 6)          # number of qubits, ancilla included
 SEEDS=(42)            # one run per seed and per N
-L="${L:-200}"         # samples per run (samples.L)
+L="${L:-500}"         # samples per run (samples.L)
 # The default alpha=1 also shrinks the bias weight and costs R2; 1e-3 does not.
 ALPHA="${ALPHA:-1e-3}"
 # -----------------------------------------------------------------------------
@@ -45,7 +45,7 @@ for N in "${N_VALUES[@]}"; do
   for SEED in "${SEEDS[@]}"; do
     RUN_DIR="$OUT_DIR/N${N}_seed${SEED}"
     echo "--- models=$MODEL $MODEL.N=$N seed=$SEED samples.L=$L training.alpha=$ALPHA"
-    uv run python experiments/exp_QELM.py \
+    uv run python experiments/QELM_Z/exp_QELM_Z.py \
       "models=$MODEL" \
       "$MODEL.N=$N" \
       "seed=$SEED" \

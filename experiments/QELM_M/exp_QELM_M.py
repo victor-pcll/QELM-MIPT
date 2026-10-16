@@ -77,10 +77,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     solver = RidgeReadout.from_config(cfg)
     N = sector.N
     t = float(cfg.evolution.t)
-    # ops[o, k] is O_k for the o-th label: flat list ordered label, then site.
     ops = np.array(SingleObservable({"N": N, "observables": labels}).operators())
     ops = ops.reshape(len(labels), N, sector.dim, sector.dim)
-    # <Z_0> on the ancilla, the target.
     Z0 = SingleObservable({"N": N, "observables": ["Z"]}).operators()[0]
     psi0 = sector.state()
 
@@ -91,7 +89,6 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     for i in tqdm(range(L)):
         model = TransverseFieldIsingModel.from_config(cfg)
         psi = model.evolve(psi0, dt=t)
-        # <psi| O |psi> for every label and every system site at once.
         X[i] = np.real(np.einsum("a,okab,b->ok", psi.conj(), ops[:, 1:], psi))
         Y[i] = np.real(psi.conj() @ Z0 @ psi)
 
@@ -136,7 +133,7 @@ def save(results: dict[str, Any], out_dir: Path) -> None:
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
 
 
-@hydra.main(version_base="1.3", config_path="../conf", config_name="config")
+@hydra.main(version_base="1.3", config_path="../../conf", config_name="config")
 def main(cfg: DictConfig) -> None:
     """Run the experiment and save it to the Hydra run directory.
 
