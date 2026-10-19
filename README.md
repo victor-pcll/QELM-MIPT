@@ -30,6 +30,7 @@ uv sync
 | `src/QELM/training/` | Measurements, feature extraction and readout fitting (`LinearReadout` scaffold, `RidgeReadout` closed-form ridge regression) |
 | `src/QELM/evaluation/` | Metrics and plot scaffolds |
 | `notebooks/series.ipynb` | Plot a local series from `data/`; the library call stays a scaffold |
+| `experiments/` | One folder per experiment, each with its Python script and its bash launcher: `example/` (the `run_experiment.py` template and `test_experiment.sh`), `projective/`, `QELM_Z/`, `QELM_M/`; `scratch/` for local outputs (gitignored) |
 | `main.py` | Entrypoint. Routes `models` → model → training → evaluation |
 
 ## Run the pipeline
@@ -78,7 +79,7 @@ uv run ruff format --check
 uv run mypy
 ```
 
-Ruff formats and lints. Mypy typechecks the package and `main.py`. At startup, `main.py` seeds NumPy from `seed` in `conf/config.yaml` (default `42`). Override it with `seed=0`.
+Ruff formats and lints. Mypy typechecks the package, `main.py` and `experiments/example/run_experiment.py`. At startup, `main.py` seeds NumPy from `seed` in `conf/config.yaml` (default `42`). Override it with `seed=0`.
 
 ## Develop
 

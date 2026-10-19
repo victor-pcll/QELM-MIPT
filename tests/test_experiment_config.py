@@ -5,6 +5,7 @@ from hydra.core.global_hydra import GlobalHydra
 from omegaconf import OmegaConf
 
 from QELM import load_config, register_resolvers
+from QELM.training import ProjectiveMeasurement
 
 
 def teardown_function() -> None:
@@ -25,7 +26,23 @@ def test_default_experiment_values() -> None:
     assert cfg.evolution.dt == pytest.approx(10.0 / (4 * N))
     assert cfg.samples.L == 10000
     assert cfg.samples.train_size == 7000
-    assert cfg.dynamic_readout.p == 0.01
+    assert cfg.projective_measurement.p == 1.0
+
+
+def test_measurement_probability_has_one_source() -> None:
+    """Une seule probabilité de mesure dans la config : projective_measurement.p
+    (issue #90). La surcharger change celle qu'utilise ProjectiveMeasurement."""
+    cfg = load_config(["projective_measurement.p=0.5"])
+    assert "dynamic_readout" not in cfg
+    resolved = OmegaConf.to_container(cfg, resolve=True)
+    assert isinstance(resolved, dict)
+    owners = [
+        key
+        for key, block in resolved.items()
+        if isinstance(block, dict) and "p" in block
+    ]
+    assert owners == ["projective_measurement"]
+    assert ProjectiveMeasurement.from_config(cfg).p == 0.5
 
 
 def test_whole_config_resolves() -> None:

@@ -13,6 +13,8 @@ dependencies = [
     "python-dotenv>=1.2.3",
     "scipy>=1.12.0",
     "scikit-learn>=1.4.0",
+    "tqdm>=4.70.1",
+    "ipywidgets>=8.1.9",
 ]
 
 [build-system]
@@ -51,7 +53,7 @@ known-first-party = ["QELM"]
 [tool.mypy]
 python_version = "3.12"
 mypy_path = "src"
-files = ["src/QELM", "main.py"]
+files = ["src/QELM", "main.py", "experiments/example/run_experiment.py"]
 disallow_untyped_defs = true
 warn_unused_ignores = true
 explicit_package_bases = true

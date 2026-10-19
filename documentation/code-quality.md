@@ -12,7 +12,7 @@ uv run pytest
 
 Ruff lints and formats. `pyproject.toml` sets the target to Python 3.12, a line length of 88, and the rule sets `E`, `F`, `I`, and `UP`. `ruff check` reports lint findings. `ruff format --check` reports format drift and does not rewrite files. `ruff format` rewrites them.
 
-Mypy typechecks `src/QELM` and `main.py` with `disallow_untyped_defs`. It does not typecheck `tests/`.
+Mypy typechecks `src/QELM`, `main.py` and `experiments/example/run_experiment.py` with `disallow_untyped_defs`. It does not typecheck `tests/`.
 
 pytest collects `tests/`. `tests/sparse_checks.py` holds `assert_sparse_hermitian(H, atol=1e-8)`, the standard check that a sparse matrix is Hermitian: it compares `H - H^dagger` in sparse form and never calls `toarray()`, so it also works on matrices too large to hold dense. Import it in a test with `from sparse_checks import assert_sparse_hermitian`.
 
