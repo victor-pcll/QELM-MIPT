@@ -1,26 +1,25 @@
 #!/usr/bin/env python3
-"""Simple QELM experiment: learn the ancilla from the system observables.
+"""QELM experiment: learn the ancilla from the measurement record ``M``.
 
-No measurement during the evolution. For each sample ``i`` (``samples.L`` in
-total):
+For each sample ``i`` (``samples.L`` in total):
 
-1. Draw a new TFIM (new disorder ``J_ij``) and prepare the initial state
-   with :class:`AncillaChargeSectorEmbedding`: the ancilla ``R`` (qubit 0)
+1. Draw a new TFIM (new disorder ``J_ij``) and start from the state of
+   :class:`AncillaChargeSectorEmbedding`: the ancilla ``R`` (qubit 0)
    entangled with the charge of the ``N - 1`` system qubits.
-2. Evolve it for the total time ``evolution.t`` in one step,
-   ``U(t) = exp(-i H t)``. Without measurements the state stays pure, so the
-   state vector is evolved rather than ``rho`` (same result, much cheaper).
-3. Store the one-site expectation values ``<O_k>`` on the system qubits
-   ``k = 1 .. N-1`` as the features ``X[i]``, for each Pauli ``O`` in
-   ``experiment.observables`` (default ``[Z, Y, X]``), and ``<Z_0>`` on the
-   ancilla as the target ``Y[i]``.
+2. Split the total time ``evolution.t`` into ``n_meas`` steps of
+   ``t / n_meas`` (``experiment.n_measurements``, default ``N - 1``). After
+   each step, measure the system qubits with
+   :class:`ProjectiveMeasurement` (each with probability
+   ``projective_measurement.p``) and keep the collapsed state: row ``j`` of
+   ``M[i]`` is the record of the ``j``-th measurement (issue #102).
+3. The features ``X[i]`` are the flattened record ``M[i]`` of shape
+   ``(n_meas, N - 1)``, an unmeasured qubit counting as 0 (issue #91); the
+   target ``Y[i]`` is ``<Z_0>`` on the ancilla in the final state.
 
 A ridge readout (``training`` block) is fitted on the first
 ``samples.train_size`` samples and scored on the rest with NMSE and R2.
 ``RidgeReadout`` fits no intercept, so a constant column of ones is appended
-to the features: the target is an affine, not linear, function of them (for
-instance ``<Z_0> ~ c - sum_k <Z_k>`` when ``h >> J`` nearly conserves the
-total charge).
+to the features.
 
 Run from the repository root:
 
@@ -29,7 +28,8 @@ Run from the repository root:
 Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
 
-- ``exp_QELM_M.npz``: ``X`` (features, bias column included), ``Y``,
+- ``exp_QELM_M.npz``: ``M`` (measurement record), ``X`` (features, bias
+  column included), ``Y``,
   ``y_test``, ``y_pred`` and the weights ``W``;
 - ``metrics.json``: ``nmse``, ``r2`` and the shapes used;
 - ``.hydra/config.yaml``: the full composed config, to reproduce the run.
@@ -52,8 +52,6 @@ from QELM.evaluation.metrics import NMSE, R2
 from QELM.training import ProjectiveMeasurement, RidgeReadout, SingleObservable
 from QELM.utils import save_results
 
-DEFAULT_OBSERVABLES = ["Z", "Y", "X"]
-
 
 def run(cfg: DictConfig) -> dict[str, Any]:
     """Simulate the samples, fit the readout and score it.
@@ -61,24 +59,23 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Args:
         cfg: Composed config (``load_config`` or Hydra). Reads
             ``evolution.t``, ``samples.L``, ``samples.train_size``, the TFIM,
-            embedding and training blocks, and the optional
-            ``experiment.observables`` (default ``[Z, Y, X]``).
+            embedding, measurement and training blocks, and the optional
+            ``experiment.n_measurements`` (default ``N - 1``).
 
     Returns:
-        The arrays and metrics of the run: ``X`` (with the bias column),
-        ``Y``, ``y_test``, ``y_pred``, ``W``, ``nmse`` and ``r2``.
+        The arrays and metrics of the run: ``M`` (record of shape
+        ``(L, n_meas, N - 1)``, ``NaN`` for an unmeasured qubit), ``X`` (with
+        the bias column), ``Y``, ``y_test``, ``y_pred``, ``W``, ``nmse`` and ``r2``.
     """
     set_seed(cfg)
-    labels = list(
-        OmegaConf.select(cfg, "experiment.observables", default=DEFAULT_OBSERVABLES)
-    )
 
     sector = AncillaChargeSectorEmbedding.from_config(cfg)
     solver = RidgeReadout.from_config(cfg)
     N = sector.N
-    t = float(cfg.evolution.t)
-    ops = np.array(SingleObservable({"N": N, "observables": labels}).operators())
-    ops = ops.reshape(len(labels), N, sector.dim, sector.dim)
+    n_meas = int(OmegaConf.select(cfg, "experiment.n_measurements", default=N - 1))
+    if n_meas < 1:
+        raise ValueError(f"experiment.n_measurements must be >= 1, got {n_meas}.")
+    dt = float(cfg.evolution.t) / n_meas
     Z0 = SingleObservable({"N": N, "observables": ["Z"]}).operators()[0]
     # Every sample starts from the embedded state, not from the collapsed
     # state of the previous sample (issue #101).
@@ -86,16 +83,17 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     P = ProjectiveMeasurement.from_config(cfg)
 
     L = int(cfg.samples.L)
-    X = np.zeros((L, N - 1, N - 1))
-    M = np.zeros((L, N - 1, N - 1))
+    M = np.zeros((L, n_meas, N - 1))
     Y = np.zeros(L)
 
     for i in tqdm(range(L)):
         model = TransverseFieldIsingModel.from_config(cfg)
-        rho = model.evolve(rho0, dt=t)
-        measure = P.measure(rho)
-        rho = measure.rho
-        M[i] = measure.outcomes
+        rho = rho0
+        for j in range(n_meas):
+            rho = model.evolve(rho, dt=dt)
+            measure = P.measure(rho)
+            rho = measure.rho
+            M[i, j] = measure.outcomes
         # Full 2**N x 2**N product: costly for large N (issue #95).
         Y[i] = np.real(np.trace(Z0 @ rho))
 
@@ -112,6 +110,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     y_pred = solver.predict(X_test)
 
     return {
+        "M": M,
         "X": X,
         "Y": Y,
         "y_test": y_test,
