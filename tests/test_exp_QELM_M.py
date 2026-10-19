@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from QELM import load_config
+from QELM.embedding import AncillaChargeSectorEmbedding
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "experiments" / "QELM_M" / "exp_QELM_M.py"
@@ -50,3 +51,23 @@ def test_unmeasured_qubits_give_zero_features_not_nan(p: float) -> None:
     assert np.all(np.isfinite(out["W"]))
     assert np.all(np.isfinite(out["y_pred"]))
     assert np.isfinite(out["nmse"]) and np.isfinite(out["r2"])
+
+
+def test_every_sample_starts_from_the_embedded_state(monkeypatch) -> None:
+    """Each sample evolves the embedded state of AncillaChargeSectorEmbedding,
+    not the collapsed state left by the previous sample (issue #101)."""
+    module = _load_script()
+    cfg = load_config(OVERRIDES)
+    rho0 = AncillaChargeSectorEmbedding.from_config(cfg).rho()
+    seen: list[np.ndarray] = []
+    evolve = module.TransverseFieldIsingModel.evolve
+
+    def spy(self, rho, *args, **kwargs):
+        seen.append(np.array(rho, copy=True))
+        return evolve(self, rho, *args, **kwargs)
+
+    monkeypatch.setattr(module.TransverseFieldIsingModel, "evolve", spy)
+    module.run(cfg)
+    assert len(seen) == L
+    for rho in seen:
+        np.testing.assert_allclose(rho, rho0, atol=1e-12)

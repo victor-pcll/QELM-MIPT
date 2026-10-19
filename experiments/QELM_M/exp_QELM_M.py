@@ -80,7 +80,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     ops = np.array(SingleObservable({"N": N, "observables": labels}).operators())
     ops = ops.reshape(len(labels), N, sector.dim, sector.dim)
     Z0 = SingleObservable({"N": N, "observables": ["Z"]}).operators()[0]
-    rho = sector.density_matrix()
+    # Every sample starts from the embedded state, not from the collapsed
+    # state of the previous sample (issue #101).
+    rho0 = sector.rho()
     P = ProjectiveMeasurement.from_config(cfg)
 
     L = int(cfg.samples.L)
@@ -90,7 +92,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     for i in tqdm(range(L)):
         model = TransverseFieldIsingModel.from_config(cfg)
-        rho = model.evolve(rho, dt=t)
+        rho = model.evolve(rho0, dt=t)
         measure = P.measure(rho)
         rho = measure.rho
         M[i] = measure.outcomes
