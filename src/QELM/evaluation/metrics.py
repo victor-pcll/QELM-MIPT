@@ -84,19 +84,26 @@ def NMSE(y_true: ArrayLike, y_pred: ArrayLike) -> float:
     return MSE(y_true_arr, y_pred_arr) / norm
 
 
-def R2(y_true: ArrayLike, y_pred: ArrayLike) -> float:
+def R2(y_true: ArrayLike, y_pred: ArrayLike, eps: float = 1e-12) -> float:
     """Coefficient of determination R^2 (not the Pearson correlation R).
 
     ``R2 = 1 - sum((y_true - y_pred)**2) / sum((y_true - mean(y_true))**2)``,
     the same as ``sklearn.metrics.r2_score``.
 
+    ``y_true`` counts as constant when its spread ``ss_tot`` is at most
+    ``eps * max(1, sum(y_true**2))``, not only when it is exactly 0: a target
+    such as ``<Z_0> = +-1`` computed as a trace carries rounding noise of
+    order 1e-16, and dividing by that ``ss_tot`` gives R2 values like -5e32
+    (issue #103).
+
     Args:
         y_true: Ground truth values, 1-dimensional.
         y_pred: Predicted values, same shape as ``y_true``.
+        eps: Relative tolerance of the constant-target test.
 
     Returns:
-        R2 score. When ``y_true`` is constant, 1.0 for a perfect prediction
-        and 0.0 otherwise.
+        R2 score. When ``y_true`` is constant (up to ``eps``), 1.0 for a
+        prediction within the same tolerance and 0.0 otherwise.
 
     Raises:
         ValueError: If the shapes differ, the arrays are empty, or they are
@@ -107,8 +114,9 @@ def R2(y_true: ArrayLike, y_pred: ArrayLike) -> float:
     ss_res = np.sum((y_true_arr - y_pred_arr) ** 2)
     ss_tot = np.sum((y_true_arr - np.mean(y_true_arr)) ** 2)
 
-    if ss_tot == 0.0:
-        return 1.0 if ss_res == 0.0 else 0.0
+    tol = eps * max(1.0, float(np.sum(y_true_arr**2)))
+    if ss_tot <= tol:
+        return 1.0 if ss_res <= tol else 0.0
 
     return float(1 - ss_res / ss_tot)
 
