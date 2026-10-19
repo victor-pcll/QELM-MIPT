@@ -40,7 +40,6 @@ Everything is written to the Hydra run directory, by default
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +53,7 @@ from QELM import TransverseFieldIsingModel, set_seed
 from QELM.embedding import AncillaChargeSectorEmbedding
 from QELM.evaluation.metrics import NMSE, R2
 from QELM.training import ProjectiveMeasurement, RidgeReadout, SingleObservable
+from QELM.utils import save_results
 
 
 def run(cfg: DictConfig) -> dict[str, Any]:
@@ -129,26 +129,6 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     }
 
 
-def save(results: dict[str, Any], out_dir: Path) -> None:
-    """Write the arrays to ``projective_readout.npz`` and the scores to JSON.
-
-    Args:
-        results: Output of :func:`run`.
-        out_dir: Destination folder, created if needed.
-    """
-    out_dir.mkdir(parents=True, exist_ok=True)
-    arrays = {k: v for k, v in results.items() if isinstance(v, np.ndarray)}
-    np.savez(out_dir / "projective_readout.npz", **arrays)
-    metrics = {
-        "nmse": results["nmse"],
-        "r2": results["r2"],
-        "n_samples": int(results["Phi"].shape[0]),
-        "n_test": int(results["y_test"].shape[0]),
-        "n_features": int(np.prod(results["Phi"].shape[1:])),
-    }
-    (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
-
-
 @hydra.main(version_base="1.3", config_path="../../conf", config_name="config")
 def main(cfg: DictConfig) -> None:
     """Run the experiment and save it to the Hydra run directory.
@@ -158,7 +138,7 @@ def main(cfg: DictConfig) -> None:
     """
     results = run(cfg)
     out_dir = Path(HydraConfig.get().runtime.output_dir)
-    save(results, out_dir)
+    save_results(results, out_dir, Path(__file__).stem, features="Phi")
     print(f"Phi: {results['Phi'].shape}  Y: {results['Y'].shape}")
     print(f"NMSE: {results['nmse']:.6g}")
     print(f"R2: {results['r2']:.6g}")
