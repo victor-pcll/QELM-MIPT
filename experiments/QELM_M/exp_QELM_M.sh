@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Simple QELM experiment (experiments/QELM_M/exp_QELM_M.py) on a small sweep over N and
-# the seed, without measurement during the evolution.
+# QELM experiment on the measurement record (experiments/QELM_M/exp_QELM_M.py),
+# on a small sweep over N and the measurement probability p.
 #
 # Run from anywhere, after `uv sync`:
 #
