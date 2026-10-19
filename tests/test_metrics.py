@@ -61,6 +61,22 @@ def test_R2_zero_variance() -> None:
     assert R2(y_true, bad) == r2_score(y_true, bad)
 
 
+def test_R2_constant_up_to_rounding() -> None:
+    """y_true constant à l'arrondi près (issue #103) : même réponse que le
+    cas exact, et non une valeur de l'ordre de -1e32."""
+    y_true = np.array([1.0, 1.0 - 1e-16, 1.0])
+    assert np.sum((y_true - y_true.mean()) ** 2) > 0.0  # pas exactement constant
+    assert R2(y_true, np.ones(3)) == 1.0
+    assert R2(y_true, np.array([1.0, 0.5, 1.0])) == 0.0
+
+
+def test_R2_small_but_real_variance_is_kept() -> None:
+    """Une vraie variance, même petite, n'est pas prise pour une constante."""
+    y_true = np.array([1.0, 1.0 + 1e-3, 1.0 - 1e-3])
+    y_pred = np.array([1.0, 1.0, 1.0])
+    assert R2(y_true, y_pred) == pytest.approx(r2_score(y_true, y_pred))
+
+
 def test_R2_can_be_negative() -> None:
     """Pire que prédire la moyenne : R2 < 0, comme sklearn."""
     y_true, y_pred = [1.0, 2.0, 3.0], [3.0, 2.0, 1.0]
