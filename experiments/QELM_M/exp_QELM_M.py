@@ -91,12 +91,11 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     for i in tqdm(range(L)):
         model = TransverseFieldIsingModel.from_config(cfg)
-        psi = model.evolve(psi0, dt=t)
         rho = model.evolve(rho, dt=t)
         measure = P.measure(rho)
         rho = measure.rho
         M[i] = measure.outcomes
-        Y[i] = np.real(np.trace(Z0 @ rho))
+        Y[i] = np.real(np.trace(Z0 @ rho)) # ca va couter en cout computationnel car taille des matrices 
 
     X = M.reshape(L, -1)
     X = np.hstack([X, np.ones((L, 1))])  # bias column: RidgeReadout has no intercept

@@ -29,10 +29,11 @@ export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 EXPERIMENT="exp_QELM_M"
 MODEL="TFIM"
 N_VALUES=(4)          # number of qubits, ancilla included
-SEEDS=(42)            # one run per seed and per N
-L="${L:-200}"         # samples per run (samples.L)
+L="${L:-12}"         # samples per run (samples.L)
 # The default alpha=1 also shrinks the bias weight and costs R2; 1e-3 does not.
 ALPHA="${ALPHA:-1e-3}"
+SEED="42"
+p_VALUES=(1.0 0.5)
 # -----------------------------------------------------------------------------
 
 STAMP="$(date +%Y-%m-%d_%H-%M-%S)"
@@ -41,19 +42,22 @@ OUT_DIR="$OUT_ROOT/$EXPERIMENT/$STAMP"
 mkdir -p "$OUT_DIR"
 echo "Writing outputs to $OUT_DIR"
 
+# on a deux p insere car la variable est doublee dans les configurations 
+# "dynamic_readout.p=0.5" ne sert a rien -> pas d'effet 
+# "projective_measurement.p=0.5" a un effet mais casse car j'ai init M avec des NAN au lieu des zeros 
+
 for N in "${N_VALUES[@]}"; do
-  for SEED in "${SEEDS[@]}"; do
-    RUN_DIR="$OUT_DIR/N${N}_seed${SEED}"
-    echo "--- models=$MODEL $MODEL.N=$N seed=$SEED samples.L=$L training.alpha=$ALPHA"
+  for p in "${p_VALUES[@]}"; do
+    RUN_DIR="$OUT_DIR/N${N}_seed${SEED}_p${p}"
+    echo "--- models=$MODEL $MODEL.N=$N seed=$SEED samples.L=$L training.alpha=$ALPHA p=$p"
     uv run python experiments/QELM_M/exp_QELM_M.py \
       "models=$MODEL" \
       "$MODEL.N=$N" \
-      "seed=$SEED" \
       "samples.L=$L" \
       "training.alpha=$ALPHA" \
       "hydra.run.dir=$RUN_DIR"\
       "dynamic_readout.p=0.5"\
-      "projective_measurement.p=0.5" 
+      "projective_measurement.p=$p" 
   done
 done
 
