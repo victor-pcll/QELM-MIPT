@@ -97,7 +97,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         # Full 2**N x 2**N product: costly for large N (issue #95).
         Y[i] = np.real(np.trace(Z0 @ rho))
 
-    X = M.reshape(L, -1)
+    # Unmeasured qubits (p < 1) have NaN outcomes; the regression needs
+    # numbers, so they count as 0, <Z> of a fully mixed qubit (issue #91).
+    X = np.nan_to_num(M.reshape(L, -1), nan=0.0)
     X = np.hstack([X, np.ones((L, 1))])  # bias column: RidgeReadout has no intercept
 
     train = int(cfg.samples.train_size)
