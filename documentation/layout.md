@@ -17,7 +17,7 @@
 | `src/QELM/selection.py` | Loads `.env` and formats the selection line |
 | `data/` | Local datasets. Gitignored, and not created by the package |
 | `notebooks/series.ipynb` | Plots a local `data/series.npy` into `outputs/series.png` |
-| `experiments/` | `run_experiment.py`, an executable Hydra entry point that composes `conf/config.yaml` and seeds NumPy, and `scripts/`, bash scripts that launch sweeps from the terminal, and `scratch/`, where experiments write temporary outputs. Everything in `scratch/` except `.gitkeep` is gitignored |
+| `experiments/` | One folder per experiment, each holding its Python script and the bash launcher of its sweep: `example/` (`run_experiment.py`, an executable Hydra template that composes `conf/config.yaml` and seeds NumPy, and `test_experiment.sh`), `projective/` (projective readout), `QELM_Z/` (QELM on the final observables), `QELM_M/` (QELM on the measurement record). `scratch/` is where experiments write temporary outputs; everything in it except `.gitkeep` is gitignored |
 | `tests/` | pytest |
 
 Import the library as `QELM`.

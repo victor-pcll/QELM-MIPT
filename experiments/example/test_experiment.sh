@@ -3,13 +3,13 @@
 #
 # Run from anywhere, after `uv sync`:
 #
-#     ./experiments/scripts/test_experiment.sh
+#     ./experiments/example/test_experiment.sh
 #
 # Each run writes its Hydra log and checkpoint to
 #     outputs/test_experiment/<date_time>/N<N>_seed<seed>/
 # (no "=" in folder names: Hydra rejects it inside an override value)
 # which git ignores. Set OUT_ROOT to write somewhere else:
-#     OUT_ROOT=/tmp/qelm ./experiments/scripts/test_experiment.sh
+#     OUT_ROOT=/tmp/qelm ./experiments/example/test_experiment.sh
 #
 # To build your own experiment, copy this file, rename it, and edit the
 # "Parameters" block and the overrides passed to `uv run` below. See
@@ -22,6 +22,10 @@ set -euo pipefail
 # whatever directory the script is launched from.
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
+
+# Find the QELM package in src/ even when Python skips the editable install's
+# .pth file (macOS can mark it hidden, see issue #80).
+export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 
 # ---- Parameters -------------------------------------------------------------
 EXPERIMENT="test_experiment"
