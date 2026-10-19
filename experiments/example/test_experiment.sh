@@ -27,6 +27,11 @@ cd "$REPO_ROOT"
 # .pth file (macOS can mark it hidden, see issue #80).
 export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 
+# Run with this project's .venv even when another project's virtualenv is
+# active: uv ignores a foreign VIRTUAL_ENV anyway, but warns on every call
+# (issue #79).
+unset VIRTUAL_ENV
+
 # ---- Parameters -------------------------------------------------------------
 EXPERIMENT="test_experiment"
 MODEL="TFIM"
