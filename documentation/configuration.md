@@ -16,10 +16,9 @@ Scientific parameters and secrets live in different files.
 | `samples.L`, `samples.train_fraction`, `samples.train_size` | Number of samples and training split, `train_size = int(0.7 * L)`. Not read by the pipeline yet |
 | `single_observable.observables`, `double_observable.pairs` | Features measured on the final state: `<O_i>` for each label (default `[Z]`), `<A_i B_j>` for each pair (default `[[Z, Z]]`). Several entries allowed; `[]` or a missing block gives no feature. Read by `SingleObservable.from_config(cfg)` / `DoubleObservable.from_config(cfg)` |
 | `single_observable.N`, `double_observable.N` | Qubit count, `${${models}.N}`. `operators()` uses it when called without `N`; `operators(N=...)` overrides it |
-| `dynamic_readout.p` | Dynamic readout parameter `p`. Not read by the pipeline yet |
 | `projective_measurement.qubits` | Sites measured by `ProjectiveMeasurement`, in order; `null` (default) measures every system qubit `n_ancilla .. N-1`. Read by `ProjectiveMeasurement.from_config(cfg)`, which also works without the block |
 | `projective_measurement.n_ancilla` | Ancilla qubits at the start of the chain, default `1` (the single ancilla of `AncillaChargeSectorEmbedding`). With `qubits: null` they are never measured; an explicit `qubits` list ignores it. Without the key, `n_ancilla = 0` |
-| `projective_measurement.p` | Probability of measuring each target qubit, default `1.0`. `measure(rho)` uses it; `measure(rho, p=...)` overrides it; without the key, `p = 1.0` |
+| `projective_measurement.p` | Probability of measuring each target qubit, default `1.0`. `measure(rho)` uses it; `measure(rho, p=...)` overrides it; without the key, `p = 1.0`. It is the only measurement probability in the config: override it with `projective_measurement.p=0.5` |
 | `checkpoint` | Where the run writes its `.npz`. See [Checkpoints and local data](checkpoints.md). |
 | `hydra.run.dir` | `outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}` |
 

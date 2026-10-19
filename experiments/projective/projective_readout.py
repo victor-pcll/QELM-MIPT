@@ -9,7 +9,9 @@ For each sample ``i`` (``samples.L`` in total):
 2. Evolve ``rho`` for ``evolution.n_steps`` steps of ``evolution.dt``.
    After every step but the last, measure the system qubits projectively in
    the Z basis (:class:`ProjectiveMeasurement`) and store the outcomes
-   (``+1``, ``-1``, or ``nan`` for a qubit skipped when ``p < 1``).
+   (``+1``, ``-1``, or ``nan`` for a qubit skipped when ``p < 1``). In the
+   features ``Phi`` a skipped qubit counts as ``0``: the regression needs
+   numbers, and ``0`` is ``<Z>`` of a fully mixed qubit, i.e. no information.
 3. After the last step, store ``<Z_k>`` for the system qubits
    ``k = 1 .. N-1`` as the last row of features, and ``<Z_0>`` on the
    ancilla as the target ``Y[i]``.
@@ -96,7 +98,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
                 if backaction:
                     rho = result.rho
                 M[i, j] = result.outcomes
-                Phi[i, j] = result.outcomes
+                # Unmeasured qubit (p < 1): NaN in the record M, 0 in the
+                # features, i.e. no information (issue #91).
+                Phi[i, j] = np.nan_to_num(result.outcomes, nan=0.0)
             else:
                 for k in range(N - 1):
                     X[i, k] = np.real(np.trace(Z_ops[k + 1] @ rho))

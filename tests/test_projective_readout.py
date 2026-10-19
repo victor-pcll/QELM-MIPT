@@ -112,3 +112,17 @@ def test_bash_launcher_runs(tmp_path: Path) -> None:
     assert [run.name for run in runs] == ["N4_seed0", "N6_seed0"]
     for run in runs:
         assert (run / "metrics.json").is_file()
+
+
+def test_unmeasured_qubits_give_zero_features_not_nan() -> None:
+    """p < 1 : M garde NaN pour un qubit non mesuré, Phi met 0, et la
+    régression et les métriques restent finies (issue #91)."""
+    out = _load_script().run(
+        load_config([*OVERRIDES, "samples.L=30", "projective_measurement.p=0.5"])
+    )
+    assert np.isnan(out["M"]).any()
+    assert np.all(np.isfinite(out["Phi"]))
+    skipped = np.isnan(out["M"])
+    np.testing.assert_array_equal(out["Phi"][:, : out["M"].shape[1]][skipped], 0.0)
+    assert np.all(np.isfinite(out["y_pred"]))
+    assert np.isfinite(out["nmse"]) and np.isfinite(out["r2"])
