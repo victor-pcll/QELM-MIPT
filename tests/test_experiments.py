@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = REPO_ROOT / "experiments" / "run_experiment.py"
+SCRIPT = REPO_ROOT / "experiments" / "example" / "run_experiment.py"
 SCRATCH = REPO_ROOT / "experiments" / "scratch"
 
 
@@ -32,7 +32,7 @@ def test_scratch_contents_are_ignored_but_gitkeep_is_not() -> None:
     assert ignored("experiments/scratch/output.npy")
     assert ignored("experiments/scratch/run/log.txt")
     assert not ignored("experiments/scratch/.gitkeep")
-    assert not ignored("experiments/run_experiment.py")
+    assert not ignored("experiments/example/run_experiment.py")
     # Les scripts bash écrivent dans outputs/, ignoré lui aussi.
     assert ignored("outputs/test_experiment/run/checkpoint.npz")
 
@@ -49,7 +49,7 @@ def test_script_runs_with_hydra_overrides(tmp_path: Path) -> None:
     assert "Running experiment with model: kitaev" in result.stdout
 
 
-BASH_SCRIPT = REPO_ROOT / "experiments" / "scripts" / "test_experiment.sh"
+BASH_SCRIPT = REPO_ROOT / "experiments" / "example" / "test_experiment.sh"
 # Virtualenv of another project, active in the shell that launches the script
 # (issue #79): uv must neither use it nor warn about it.
 FOREIGN_VENV = REPO_ROOT.parent / "other-project" / ".venv"

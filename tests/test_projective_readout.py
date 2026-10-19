@@ -1,4 +1,4 @@
-"""The projective-readout experiment in experiments/projective_readout.py."""
+"""The projective-readout experiment in experiments/projective/projective_readout.py."""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ import numpy as np
 from QELM import load_config
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = REPO_ROOT / "experiments" / "projective_readout.py"
-BASH_SCRIPT = REPO_ROOT / "experiments" / "scripts" / "projective_readout.sh"
+SCRIPT = REPO_ROOT / "experiments" / "projective" / "projective_readout.py"
+BASH_SCRIPT = REPO_ROOT / "experiments" / "projective" / "projective_readout.sh"
 # Virtualenv of another project, active in the shell that launches the script
 # (issue #79): uv must neither use it nor warn about it.
 FOREIGN_VENV = REPO_ROOT.parent / "other-project" / ".venv"
@@ -24,7 +24,7 @@ OVERRIDES = ["models=TFIM", "TFIM.N=4", "samples.L=10"]
 
 
 def _load_script() -> ModuleType:
-    """Importe experiments/projective_readout.py, qui n'est pas un paquet."""
+    """Importe experiments/projective/projective_readout.py, qui n'est pas un paquet."""
     spec = importlib.util.spec_from_file_location("projective_readout", SCRIPT)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

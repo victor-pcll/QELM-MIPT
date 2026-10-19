@@ -54,20 +54,20 @@ The template notebooks start with `%load_ext autoreload` and `%autoreload 2`. `u
 
 ## Experiment scripts
 
-Standalone experiment scripts start from `experiments/run_experiment.py`. It composes `conf/config.yaml` with Hydra like `main.py`, accepts the same overrides, and seeds NumPy from `seed`:
+Standalone experiment scripts start from `experiments/example/run_experiment.py`. It composes `conf/config.yaml` with Hydra like `main.py`, accepts the same overrides, and seeds NumPy from `seed`:
 
 ```bash
-uv run python experiments/run_experiment.py models=TFIM TFIM.N=6
+uv run python experiments/example/run_experiment.py models=TFIM TFIM.N=6
 ```
 
 Write temporary outputs (arrays, logs, plots) to `experiments/scratch/`, available in the script as `SCRATCH`. Git ignores everything in that folder except `.gitkeep`, so nothing written there is committed. Copy the script to start a new experiment and keep the template unchanged.
 
 ### Bash scripts
 
-`experiments/scripts/` holds bash scripts that launch a set of runs from the terminal. The test experiment sweeps `TFIM.N` and `seed` through `main.py` and writes each run to its own folder under `outputs/`, which git ignores:
+Each folder of `experiments/` holds an experiment and the bash script that launches its runs from the terminal. The test experiment sweeps `TFIM.N` and `seed` through `main.py` and writes each run to its own folder under `outputs/`, which git ignores:
 
 ```bash
-./experiments/scripts/test_experiment.sh
+./experiments/example/test_experiment.sh
 ```
 
-Copy it to write your own sweep. [`experiments/scripts/README.md`](../experiments/scripts/README.md) explains how.
+Copy it to write your own sweep. [`experiments/README.md`](../experiments/README.md) explains how.
