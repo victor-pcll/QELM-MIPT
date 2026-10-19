@@ -4,13 +4,13 @@ An embedding prepares the initial state of the reservoir: a pure state
 ``psi`` of shape ``(dim,)`` and its density matrix ``rho = |psi><psi|`` of
 shape ``(dim, dim)``. ``N`` is the total number of qubits, so
 ``dim = 2**N`` matches the models built with the same ``N``. Some embeddings
-use ``n_ancilla`` of them as ancillas, which leaves ``N_S = N - n_ancilla``
+use ``Nr`` of them as ancillas, which leaves ``Ns = N - Nr``
 system qubits.
 
 Qubit ordering follows :func:`QELM.physics.operators.get_site_operator`:
 site 0 is the leftmost factor of ``np.kron``, i.e. the most significant bit
-of a basis index. Ancillas come first (sites ``0 .. n_ancilla - 1``), the
-``N_S`` system qubits after them.
+of a basis index. Ancillas come first (sites ``0 .. Nr - 1``), the
+``Ns`` system qubits after them.
 """
 
 from __future__ import annotations
@@ -29,15 +29,15 @@ class Embedding:
     Attributes:
         name: Config key for this embedding; ``from_config`` reads
             ``cfg[name]``.
-        n_ancilla: Number of ancilla qubits placed before the system.
+        Nr: Number of ancilla qubits placed before the system.
         params: Scalar parameters from the matching YAML block.
         N: Total number of qubits, ancillas included.
-        N_S: Number of system qubits, ``N - n_ancilla``.
+        Ns: Number of system qubits, ``N - Nr``.
         dim: Dimension of the embedded state, ``2**N``.
     """
 
     name: str = "base"
-    n_ancilla: int = 0
+    Nr: int = 0
 
     def __init__(self, params: Mapping[str, Any]) -> None:
         """Store the parameters.
@@ -51,11 +51,10 @@ class Embedding:
         """
         self.params: dict[str, Any] = dict(params)
         self.N: int = int(params["N"])
-        self.N_S: int = self.N - self.n_ancilla
-        if self.N_S < 1:
+        self.Ns: int = self.N - self.Nr
+        if self.Ns < 1:
             raise ValueError(
-                f"N={self.N} leaves no system qubit next to "
-                f"{self.n_ancilla} ancilla(s)."
+                f"N={self.N} leaves no system qubit next to {self.Nr} ancilla(s)."
             )
         self.dim: int = 2**self.N
 

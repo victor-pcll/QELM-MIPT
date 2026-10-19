@@ -3,8 +3,9 @@
 # Scaffold so the dispatcher can route to the Kitaev model.
 # N is required by every model. Other Hamiltonian parameters are not implemented yet.
 models: kitaev
+N: 4 # total number of qubits, override with N=...
 kitaev:
-  N: 4
+  N: ${N}
 
 # Evolution step and step count, recorded by the pipeline (evolution_request).
 evolution:

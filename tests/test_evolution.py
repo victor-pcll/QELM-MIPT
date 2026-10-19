@@ -158,7 +158,7 @@ def test_from_config_reads_evolution_dt() -> None:
     register_resolvers()
     conf_dir = str(Path(__file__).resolve().parents[1] / "conf")
     with initialize_config_dir(config_dir=conf_dir, version_base="1.3"):
-        cfg = compose(config_name="config", overrides=["TFIM.N=3"])
+        cfg = compose(config_name="config", overrides=["N=3"])
     model = TransverseFieldIsingModel.from_config(cfg)
     assert model.dt == pytest.approx(float(cfg.evolution.dt))
     assert model.dt == pytest.approx(10.0 / 12)

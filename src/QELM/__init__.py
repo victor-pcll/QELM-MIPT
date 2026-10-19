@@ -1,6 +1,6 @@
 """QELM: quantum extreme learning machine and the MIPT."""
 
-from QELM.config import load_config
+from QELM.config import check_qubit_counts, load_config
 from QELM.models import TransverseFieldIsingModel
 from QELM.pipeline import resolve_pipeline, run_pipeline
 from QELM.resolvers import register_resolvers
@@ -21,6 +21,7 @@ def hello() -> str:
 __all__ = [
     "TransverseFieldIsingModel",
     "hello",
+    "check_qubit_counts",
     "load_config",
     "register_resolvers",
     "resolve_pipeline",

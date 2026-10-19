@@ -24,7 +24,7 @@ total charge).
 
 Run from the repository root:
 
-    uv run python experiments/QELM_Z/exp_QELM_Z.py TFIM.N=4 samples.L=500
+    uv run python experiments/QELM_Z/exp_QELM_Z.py N=4 samples.L=500
 
 Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
@@ -46,7 +46,7 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
-from QELM import TransverseFieldIsingModel, set_seed
+from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
 from QELM.embedding import AncillaChargeSectorEmbedding
 from QELM.evaluation.metrics import NMSE, R2
 from QELM.training import RidgeReadout, SingleObservable
@@ -75,7 +75,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     sector = AncillaChargeSectorEmbedding.from_config(cfg)
     solver = RidgeReadout.from_config(cfg)
-    N = sector.N
+    # Qubit counts from the config, not from the model or the embedding
+    # (issue #88): N in total, Ns system qubits, Nr ancillas.
+    N, Ns, Nr = check_qubit_counts(cfg)
     t = float(cfg.evolution.t)
     ops = np.array(SingleObservable({"N": N, "observables": labels}).operators())
     ops = ops.reshape(len(labels), N, sector.dim, sector.dim)
@@ -83,13 +85,13 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     psi0 = sector.state()
 
     L = int(cfg.samples.L)
-    X = np.zeros((L, len(labels), N - 1))
+    X = np.zeros((L, len(labels), Ns))
     Y = np.zeros(L)
 
     for i in tqdm(range(L)):
         model = TransverseFieldIsingModel.from_config(cfg)
         psi = model.evolve(psi0, dt=t)
-        X[i] = np.real(np.einsum("a,okab,b->ok", psi.conj(), ops[:, 1:], psi))
+        X[i] = np.real(np.einsum("a,okab,b->ok", psi.conj(), ops[:, Nr:], psi))
         Y[i] = np.real(psi.conj() @ Z0 @ psi)
 
     X = X.reshape(L, -1)

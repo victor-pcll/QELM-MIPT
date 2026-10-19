@@ -21,7 +21,7 @@ class QELMDataset(NamedTuple):
     """Features and labels of ``K`` trajectories.
 
     Attributes:
-        phi: Feature matrix of shape ``(K, n_dynamic + N_S)``.
+        phi: Feature matrix of shape ``(K, n_dynamic + Ns)``.
         y: Ancilla outcomes of shape ``(K,)``.
     """
 
@@ -39,18 +39,18 @@ def create_qelm_dataset(
 
     Args:
         dynamic_measurements: Mid-circuit outcomes ``M`` of shape
-            ``(K, n_dynamic)``, or ``(K, T, N_S)`` (one row of ``N_S``
+            ``(K, n_dynamic)``, or ``(K, T, Ns)`` (one row of ``Ns``
             outcomes per time step), which is flattened row by row to
-            ``(K, T * N_S)``: step 1 first, then step 2, and so on.
+            ``(K, T * Ns)``: step 1 first, then step 2, and so on.
             ``n_dynamic`` may be 0.
-        final_measurements: Final readout ``X`` of shape ``(K, N_S)``.
+        final_measurements: Final readout ``X`` of shape ``(K, Ns)``.
         ancilla_outcomes: Ancilla outcomes ``y`` of shape ``(K,)``.
         fill_value: Value that replaces ``np.nan`` (unmeasured qubits) in
             ``Phi``. ``None`` keeps ``np.nan``.
 
     Returns:
         ``QELMDataset(phi, y)`` with ``phi`` of shape
-        ``(K, n_dynamic + N_S)`` as ``float64`` and ``y`` of shape ``(K,)``.
+        ``(K, n_dynamic + Ns)`` as ``float64`` and ``y`` of shape ``(K,)``.
 
     Raises:
         ValueError: If the arrays do not have the shapes above, if they do
@@ -66,10 +66,10 @@ def create_qelm_dataset(
     if M.ndim != 2:
         raise ValueError(
             f"dynamic_measurements must have shape (K, n_dynamic) or "
-            f"(K, T, N_S), got {M.shape}."
+            f"(K, T, Ns), got {M.shape}."
         )
     if X.ndim != 2:
-        raise ValueError(f"final_measurements must have shape (K, N_S), got {X.shape}.")
+        raise ValueError(f"final_measurements must have shape (K, Ns), got {X.shape}.")
     if y.ndim != 1:
         raise ValueError(f"ancilla_outcomes must have shape (K,), got {y.shape}.")
     if not M.shape[0] == X.shape[0] == y.shape[0]:

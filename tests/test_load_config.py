@@ -14,7 +14,7 @@ def teardown_function() -> None:
 
 
 def test_overrides_apply_and_defaults_kept() -> None:
-    cfg = load_config(["models=TFIM", "TFIM.N=6"])
+    cfg = load_config(["models=TFIM", "N=6"])
     assert cfg.models == "TFIM"
     assert cfg.TFIM.N == 6
     assert cfg.TFIM.J == load_config().TFIM.J
@@ -25,7 +25,7 @@ def test_works_from_notebooks_dir(monkeypatch: pytest.MonkeyPatch) -> None:
     """Jupyter starts in notebooks/, where conf/ is not a relative path."""
     monkeypatch.chdir(REPO_ROOT / "notebooks")
     assert not Path("conf").exists()
-    cfg = load_config(["TFIM.N=4"])
+    cfg = load_config(["N=4"])
     assert cfg.TFIM.N == 4
     assert Path.cwd() == REPO_ROOT / "notebooks"
 
@@ -33,11 +33,11 @@ def test_works_from_notebooks_dir(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_can_be_called_twice_without_clearing() -> None:
     """A re-run notebook cell must not hit 'GlobalHydra is already initialized'."""
     load_config()
-    assert load_config(["TFIM.N=3"]).TFIM.N == 3
+    assert load_config(["N=3"]).TFIM.N == 3
 
 
 def test_notebook_two_liner_builds_model() -> None:
-    cfg = load_config(["models=TFIM", "TFIM.N=3"])
+    cfg = load_config(["models=TFIM", "N=3"])
     set_seed(cfg)
     model = TransverseFieldIsingModel.from_config(cfg)
     assert (model.N, model.dim) == (3, 8)
@@ -49,5 +49,5 @@ def test_missing_dir_raises(tmp_path: Path) -> None:
 
 
 def test_explicit_config_dir() -> None:
-    cfg = load_config(["TFIM.N=5"], config_dir=os.path.join(REPO_ROOT, "conf"))
+    cfg = load_config(["N=5"], config_dir=os.path.join(REPO_ROOT, "conf"))
     assert cfg.TFIM.N == 5

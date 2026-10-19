@@ -15,11 +15,18 @@ defaults:
 # Scalar seed applied once at startup. Override with seed=0 on the command line.
 seed: 42
 
-# Initial state of the reservoir (QELM.embedding). N is the total number of
-# qubits, ancilla included; it follows the selected Hamiltonian so that the
-# state and the model have the same size.
+# Qubit counts (issue #88). N is the total number of qubits, ancilla included;
+# it is set by the selected model file (conf/models/) and overridden with N=6.
+# Nr is the number of ancilla (readout) qubits, the first sites of the chain.
+# Ns, the number of system qubits, is never set by hand: Ns = N - Nr.
+# Every block that needs a qubit count interpolates these three keys, and
+# load_config and the scripts check that they agree (QELM.config).
+Nr: 1
+Ns: ${int:${sub:${N},${Nr}}}
+
+# Initial state of the reservoir (QELM.embedding), on all N qubits.
 ancilla_charge_sector:
-  N: ${${models}.N}
+  N: ${N}
 
 # The evolution block (evolution.t, evolution.dt, evolution.n_steps) depends on the
 # Hamiltonian, so it lives in conf/models/ next to it.

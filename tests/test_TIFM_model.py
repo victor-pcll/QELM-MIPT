@@ -32,13 +32,13 @@ def ising_model(default_params: dict[str, float]) -> TransverseFieldIsingModel:
 # =====================================================================
 
 
-@pytest.mark.parametrize("n_qubits", [2, 3, 4])
-def test_hamiltonian_shape_and_dimension(n_qubits: int):
+@pytest.mark.parametrize("qubit_counts", [2, 3, 4])
+def test_hamiltonian_shape_and_dimension(qubit_counts: int):
     """Vérifie que la matrice H a bien la forme (2^N, 2^N)."""
-    params = {"N": n_qubits, "J": 1.0, "h": 0.5}
+    params = {"N": qubit_counts, "J": 1.0, "h": 0.5}
     model = TransverseFieldIsingModel(params)
 
-    expected_dim = 2**n_qubits
+    expected_dim = 2**qubit_counts
     assert model.dim == expected_dim
 
     H = model.hamiltonian()
@@ -126,7 +126,7 @@ def test_tfim_yaml_builds_model_with_field():
     GlobalHydra.instance().clear()
     conf = Path(__file__).resolve().parents[1] / "conf"
     with initialize_config_dir(version_base="1.3", config_dir=str(conf)):
-        cfg = compose(config_name="config", overrides=["TFIM.N=3", "TFIM.h=0.7"])
+        cfg = compose(config_name="config", overrides=["N=3", "TFIM.h=0.7"])
     GlobalHydra.instance().clear()
 
     model = get_model(str(cfg.models)).from_config(cfg)

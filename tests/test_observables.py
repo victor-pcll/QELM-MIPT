@@ -240,7 +240,7 @@ def test_full_config_gives_N_to_observables() -> None:
     """La config composée donne à chaque bloc le N du Hamiltonien."""
     from QELM import load_config
 
-    cfg = load_config(["TFIM.N=4"])
+    cfg = load_config(["N=4"])
     assert SingleObservable.from_config(cfg).N == 4
     assert DoubleObservable.from_config(cfg).N == 4
     assert len(SingleObservable.from_config(cfg).operators()) == 4
