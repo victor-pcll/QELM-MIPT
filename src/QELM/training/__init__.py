@@ -9,6 +9,8 @@ and one module per child class:
 - :mod:`QELM.training.readout`: features computed from the final state
   (``base.py``: :class:`Observables`; ``single.py``:
   :class:`SingleObservable`; ``double.py``: :class:`DoubleObservable`).
+- :mod:`QELM.training.dataset`: the dataset ``(Phi, y)`` of measured
+  trajectories (:func:`create_qelm_dataset`, :func:`split_dataset`).
 - :mod:`QELM.training.regression`: trainers fitted on those features
   (``base.py``: :class:`Trainer`; ``linear.py``: :class:`LinearReadout`;
   ``ridge.py``: :class:`RidgeReadout`).
@@ -18,6 +20,7 @@ Every class is importable from :mod:`QELM.training` directly.
 
 from __future__ import annotations
 
+from QELM.training.dataset import QELMDataset, create_qelm_dataset, split_dataset
 from QELM.training.measurements import (
     ProjectiveMeasurement,
     Readout,
@@ -79,13 +82,16 @@ __all__ = [
     "DoubleObservable",
     "LinearReadout",
     "Observables",
+    "QELMDataset",
     "ProjectiveMeasurement",
     "Readout",
     "ReadoutResult",
     "RidgeReadout",
     "SingleObservable",
     "Trainer",
+    "create_qelm_dataset",
     "get_readout",
     "get_trainer",
     "measure_projective_rho",
+    "split_dataset",
 ]
