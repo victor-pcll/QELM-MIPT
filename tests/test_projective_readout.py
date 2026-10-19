@@ -17,6 +17,9 @@ from QELM import load_config
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "experiments" / "projective_readout.py"
 BASH_SCRIPT = REPO_ROOT / "experiments" / "scripts" / "projective_readout.sh"
+# Virtualenv of another project, active in the shell that launches the script
+# (issue #79): uv must neither use it nor warn about it.
+FOREIGN_VENV = REPO_ROOT.parent / "other-project" / ".venv"
 OVERRIDES = ["models=TFIM", "TFIM.N=4", "samples.L=10"]
 
 
@@ -93,12 +96,18 @@ def test_bash_launcher_runs(tmp_path: Path) -> None:
     result = subprocess.run(
         [str(BASH_SCRIPT)],
         cwd=tmp_path,
-        env={**os.environ, "OUT_ROOT": str(tmp_path), "L": "5"},
+        env={
+            **os.environ,
+            "OUT_ROOT": str(tmp_path),
+            "L": "5",
+            "VIRTUAL_ENV": str(FOREIGN_VENV),
+        },
         capture_output=True,
         text=True,
         check=True,
     )
     assert "Done: 2 x 1 runs" in result.stdout
+    assert "does not match the project environment" not in result.stderr
     runs = sorted(tmp_path.glob("projective_readout/*/*"))
     assert [run.name for run in runs] == ["N4_seed0", "N6_seed0"]
     for run in runs:

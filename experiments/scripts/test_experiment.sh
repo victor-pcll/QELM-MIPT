@@ -23,6 +23,11 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
+# Run with this project's .venv even when another project's virtualenv is
+# active: uv ignores a foreign VIRTUAL_ENV anyway, but warns on every call
+# (issue #79).
+unset VIRTUAL_ENV
+
 # ---- Parameters -------------------------------------------------------------
 EXPERIMENT="test_experiment"
 MODEL="TFIM"
