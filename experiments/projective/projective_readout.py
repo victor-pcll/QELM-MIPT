@@ -27,7 +27,7 @@ unmeasured ``rho`` and only record the outcomes.
 
 Run from the repository root:
 
-    uv run python experiments/projective/projective_readout.py TFIM.N=6 samples.L=1000
+    uv run python experiments/projective/projective_readout.py N=6 samples.L=1000
 
 Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
@@ -49,7 +49,7 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
-from QELM import TransverseFieldIsingModel, set_seed
+from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
 from QELM.embedding import AncillaChargeSectorEmbedding
 from QELM.evaluation.metrics import NMSE, R2
 from QELM.training import ProjectiveMeasurement, RidgeReadout, SingleObservable
@@ -75,7 +75,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     sector = AncillaChargeSectorEmbedding.from_config(cfg)
     solver = RidgeReadout.from_config(cfg)
     P = ProjectiveMeasurement.from_config(cfg)
-    N = sector.N
+    # Qubit counts from the config, not from the model or the embedding
+    # (issue #88): N in total, Ns system qubits, Nr ancillas.
+    N, Ns, Nr = check_qubit_counts(cfg)
     # <Z_i> for i = 0 .. N-1, built once: Z_ops[0] is the ancilla.
     Z_ops = SingleObservable({"N": N, "observables": ["Z"]}).operators()
 
@@ -83,9 +85,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     N_M = n_steps - 1  # number of measured steps; step N_M is the last one
     temps = int(cfg.samples.L)
 
-    M = np.zeros((temps, N_M, N - 1))
-    X = np.zeros((temps, N - 1))
-    Phi = np.zeros((temps, n_steps, N - 1))
+    M = np.zeros((temps, N_M, Ns))
+    X = np.zeros((temps, Ns))
+    Phi = np.zeros((temps, n_steps, Ns))
     Y = np.zeros(temps)
 
     for i in tqdm(range(temps)):
@@ -102,8 +104,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
                 # features, i.e. no information (issue #91).
                 Phi[i, j] = np.nan_to_num(result.outcomes, nan=0.0)
             else:
-                for k in range(N - 1):
-                    X[i, k] = np.real(np.trace(Z_ops[k + 1] @ rho))
+                for k in range(Ns):
+                    X[i, k] = np.real(np.trace(Z_ops[Nr + k] @ rho))
                 Phi[i, j] = X[i]
         Y[i] = np.real(np.trace(Z_ops[0] @ rho))
 

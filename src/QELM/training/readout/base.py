@@ -15,7 +15,7 @@ from typing import Any, Self
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
-from QELM.physics.operators import n_qubits, pauli
+from QELM.physics.operators import pauli, qubit_counts
 
 
 class Observables:
@@ -109,7 +109,7 @@ class Observables:
         Returns:
             Real array of shape ``(n_features,)``.
         """
-        N, _, _ = n_qubits(rho)
+        N, _, _ = qubit_counts(rho)
         ops = self.operators(N)
         # Tr(rho O) = sum_ij rho_ij O_ji; real because rho and O are Hermitian.
         return np.array([np.einsum("ij,ji->", rho, op).real for op in ops])

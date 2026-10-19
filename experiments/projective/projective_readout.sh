@@ -46,10 +46,10 @@ echo "Writing outputs to $OUT_DIR"
 for N in "${N_VALUES[@]}"; do
   for SEED in "${SEEDS[@]}"; do
     RUN_DIR="$OUT_DIR/N${N}_seed${SEED}"
-    echo "--- models=$MODEL $MODEL.N=$N seed=$SEED samples.L=$L"
+    echo "--- models=$MODEL N=$N seed=$SEED samples.L=$L"
     uv run python experiments/projective/projective_readout.py \
       "models=$MODEL" \
-      "$MODEL.N=$N" \
+      "N=$N" \
       "seed=$SEED" \
       "samples.L=$L" \
       "hydra.run.dir=$RUN_DIR"

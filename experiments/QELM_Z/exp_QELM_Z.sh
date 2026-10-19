@@ -49,10 +49,10 @@ echo "Writing outputs to $OUT_DIR"
 for N in "${N_VALUES[@]}"; do
   for SEED in "${SEEDS[@]}"; do
     RUN_DIR="$OUT_DIR/N${N}_seed${SEED}"
-    echo "--- models=$MODEL $MODEL.N=$N seed=$SEED samples.L=$L training.alpha=$ALPHA"
+    echo "--- models=$MODEL N=$N seed=$SEED samples.L=$L training.alpha=$ALPHA"
     uv run python experiments/QELM_Z/exp_QELM_Z.py \
       "models=$MODEL" \
-      "$MODEL.N=$N" \
+      "N=$N" \
       "seed=$SEED" \
       "samples.L=$L" \
       "training.alpha=$ALPHA" \

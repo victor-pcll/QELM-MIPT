@@ -22,18 +22,18 @@ from QELM.models import TransverseFieldIsingModel
 NS = [2, 3, 4, 5, 6]
 
 
-# N total : 1 ancilla + N_S = N - 1 qubits de système.
+# N total : 1 ancilla + Ns = N - 1 qubits de système.
 NS_TOTAL = [3, 4, 5, 6, 7]
 
 
-def _rho_R(rho: np.ndarray, N_S: int) -> np.ndarray:
+def _rho_R(rho: np.ndarray, Ns: int) -> np.ndarray:
     """Trace partielle sur S : état réduit de l'ancilla (site 0)."""
-    return np.einsum("aibi->ab", rho.reshape(2, 2**N_S, 2, 2**N_S))
+    return np.einsum("aibi->ab", rho.reshape(2, 2**Ns, 2, 2**Ns))
 
 
-def _rho_S(rho: np.ndarray, N_S: int) -> np.ndarray:
+def _rho_S(rho: np.ndarray, Ns: int) -> np.ndarray:
     """Trace partielle sur R : état réduit du système."""
-    return np.einsum("aiaj->ij", rho.reshape(2, 2**N_S, 2, 2**N_S))
+    return np.einsum("aiaj->ij", rho.reshape(2, 2**Ns, 2, 2**Ns))
 
 
 @pytest.mark.parametrize("N", NS)
@@ -63,7 +63,7 @@ def test_ancilla_state_physical(N: int) -> None:
     emb = AncillaChargeSectorEmbedding({"N": N})
     psi = emb.state()
     rho = emb.density_matrix()
-    assert emb.N_S == N - 1
+    assert emb.Ns == N - 1
     assert emb.dim == 2**N
     assert psi.shape == (2**N,)
     assert rho.shape == (2**N, 2**N)
@@ -76,28 +76,28 @@ def test_ancilla_state_physical(N: int) -> None:
 
 @pytest.mark.parametrize("N", NS_TOTAL)
 def test_ancilla_components_in_right_sector(N: int) -> None:
-    N_S = N - 1
+    Ns = N - 1
     psi = AncillaChargeSectorEmbedding({"N": N}).state()
     nonzero = np.flatnonzero(np.abs(psi) > 1e-12)
     for i in nonzero:
-        ancilla, system = divmod(int(i), 2**N_S)
-        expected = N_S // 2 if ancilla == 0 else N_S // 2 - 1
+        ancilla, system = divmod(int(i), 2**Ns)
+        expected = Ns // 2 if ancilla == 0 else Ns // 2 - 1
         assert bin(system).count("1") == expected
     # Chaque branche porte exactement le poids 1/2.
-    assert np.isclose(np.sum(np.abs(psi[: 2**N_S]) ** 2), 0.5)
-    assert np.isclose(np.sum(np.abs(psi[2**N_S :]) ** 2), 0.5)
-    assert nonzero.size == comb(N_S, N_S // 2) + comb(N_S, N_S // 2 - 1)
+    assert np.isclose(np.sum(np.abs(psi[: 2**Ns]) ** 2), 0.5)
+    assert np.isclose(np.sum(np.abs(psi[2**Ns :]) ** 2), 0.5)
+    assert nonzero.size == comb(Ns, Ns // 2) + comb(Ns, Ns // 2 - 1)
 
 
 @pytest.mark.parametrize("N", NS_TOTAL)
 def test_ancilla_reduced_states(N: int) -> None:
-    N_S = N - 1
+    Ns = N - 1
     rho = AncillaChargeSectorEmbedding({"N": N}).density_matrix()
-    assert np.allclose(_rho_R(rho, N_S), np.eye(2) / 2)
-    q1 = charge_sector_state(N_S, N_S // 2)
-    q2 = charge_sector_state(N_S, N_S // 2 - 1)
+    assert np.allclose(_rho_R(rho, Ns), np.eye(2) / 2)
+    q1 = charge_sector_state(Ns, Ns // 2)
+    q2 = charge_sector_state(Ns, Ns // 2 - 1)
     expected_S = (np.outer(q1, q1.conj()) + np.outer(q2, q2.conj())) / 2
-    assert np.allclose(_rho_S(rho, N_S), expected_S)
+    assert np.allclose(_rho_S(rho, Ns), expected_S)
 
 
 def test_ancilla_known_values_N3() -> None:
@@ -111,9 +111,9 @@ def test_ancilla_known_values_N3() -> None:
 
 
 def test_ancilla_odd_system_charges() -> None:
-    # N = 6 : N_S = 5, charges 2 et 1.
+    # N = 6 : Ns = 5, charges 2 et 1.
     emb = AncillaChargeSectorEmbedding({"N": 6})
-    assert (emb.N_S, emb.Q1, emb.Q2) == (5, 2, 1)
+    assert (emb.Ns, emb.Q1, emb.Q2) == (5, 2, 1)
 
 
 @pytest.mark.parametrize("N", [0, 1, 2])
@@ -133,7 +133,7 @@ def test_from_config_and_registry() -> None:
     assert cls is AncillaChargeSectorEmbedding
     emb = cls.from_config(cfg)
     assert isinstance(emb, Embedding)
-    assert (emb.N, emb.N_S, emb.dim) == (4, 3, 16)
+    assert (emb.N, emb.Ns, emb.dim) == (4, 3, 16)
 
 
 def test_from_config_rejects_scalar() -> None:
@@ -149,7 +149,7 @@ def test_unknown_embedding() -> None:
 
 def test_base_without_ancilla() -> None:
     emb = Embedding({"N": 2})
-    assert (emb.N, emb.N_S, emb.dim) == (2, 2, 4)
+    assert (emb.N, emb.Ns, emb.dim) == (2, 2, 4)
     with pytest.raises(NotImplementedError):
         emb.state()
 
@@ -176,7 +176,7 @@ def test_from_full_config_follows_the_model() -> None:
     default_N = int(load_config().TFIM.N)
     for overrides, N in (
         ([], default_N),
-        (["TFIM.N=5"], 5),
+        (["N=5"], 5),
         (["models=kitaev"], 4),
     ):
         cfg = load_config(overrides)

@@ -55,7 +55,7 @@ def test_whole_config_resolves() -> None:
 
 @pytest.mark.parametrize(("J", "N"), [(2.0, 4), (0.5, 6), (1.0, 3)])
 def test_derived_values_follow_sources(J: float, N: int) -> None:
-    cfg = load_config([f"TFIM.J={J}", f"TFIM.N={N}"])
+    cfg = load_config([f"TFIM.J={J}", f"N={N}"])
     assert cfg.TFIM.h == pytest.approx(10.0 * J)
     assert cfg.evolution.t == pytest.approx(10.0 / J)
     assert cfg.evolution.n_steps == 4 * N
@@ -81,9 +81,7 @@ def test_derived_values_can_be_overridden() -> None:
 def test_model_receives_resolved_h() -> None:
     from QELM import TransverseFieldIsingModel
 
-    model = TransverseFieldIsingModel.from_config(
-        load_config(["TFIM.N=3", "TFIM.J=2.0"])
-    )
+    model = TransverseFieldIsingModel.from_config(load_config(["N=3", "TFIM.J=2.0"]))
     assert model.h == pytest.approx(20.0)
 
 

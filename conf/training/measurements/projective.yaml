@@ -2,10 +2,10 @@
 
 # Projective measurement in the Z basis (QELM.training.measurements).
 # qubits: list of measured sites in order, or null for every system qubit
-#   (n_ancilla .. N-1).
-# n_ancilla: ancilla qubits at the start of the chain, never measured by
-#   default. 1 matches AncillaChargeSectorEmbedding (one ancilla R).
+#   (Nr .. N-1).
+# Nr: ancilla qubits at the start of the chain, never measured by default.
+#   It follows the top-level Nr; 1 matches AncillaChargeSectorEmbedding.
 # p: probability of measuring each target qubit; measure(rho, p=...) overrides it.
 qubits: null
-n_ancilla: 1
+Nr: ${Nr}
 p: 1.0

@@ -7,7 +7,7 @@ to ``SCRATCH`` (``experiments/scratch/``), which git ignores.
 
 Run from the repository root:
 
-    uv run python experiments/example/run_experiment.py models=TFIM TFIM.N=6
+    uv run python experiments/example/run_experiment.py models=TFIM N=6
 """
 
 from __future__ import annotations

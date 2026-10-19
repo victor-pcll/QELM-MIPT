@@ -12,7 +12,7 @@ from QELM.selection import format_selection
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_DIR = REPO_ROOT / "conf"
-OVERRIDES = ["models=TFIM", "TFIM.N=12", "evolution.dt=0.05"]
+OVERRIDES = ["models=TFIM", "N=12", "evolution.dt=0.05"]
 
 
 def setup_function() -> None:
@@ -56,7 +56,7 @@ def test_config_loads_and_cli_overrides_apply() -> None:
 
     text = format_selection(chosen)
     assert "models=TFIM" in text
-    assert "TFIM.N=12" in text
+    assert "N=12" in text
     assert "evolution.dt=0.05" in text
 
 
@@ -77,6 +77,6 @@ def test_main_cli_override(tmp_path: Path) -> None:
         env=env,
     )
     assert result.returncode == 0, result.stderr
-    assert "TFIM.N=12" in result.stdout
+    assert "N=12" in result.stdout
     assert "evolution.dt=0.05" in result.stdout
     assert (tmp_path / "checkpoint.npz").is_file()

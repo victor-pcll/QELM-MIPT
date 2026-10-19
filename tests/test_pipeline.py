@@ -45,7 +45,7 @@ def test_run_pipeline_uses_cli_overrides(tmp_path: Path) -> None:
         _compose(
             [
                 "models=TFIM",
-                "TFIM.N=12",
+                "N=12",
                 "evolution.dt=0.05",
                 "training/regression=linear",
                 f"checkpoint.dir={tmp_path}",

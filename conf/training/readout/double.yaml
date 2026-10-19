@@ -2,6 +2,6 @@
 # <A_i B_j> (i < j) for each pair in `pairs`. The list can hold several
 # entries, or be empty ([]) for no such features. Placed at
 # `double_observable` by the defaults list in conf/config.yaml.
-# N follows the selected Hamiltonian; operators() uses it when no N is passed.
-N: ${${models}.N}
+# N is the top-level N (total qubits); operators() uses it when no N is passed.
+N: ${N}
 pairs: [[Z, Z]]

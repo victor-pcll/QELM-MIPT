@@ -16,7 +16,7 @@ def test_physics_only_exposes_primitives() -> None:
         "Z",
         "get_site_operator",
         "local_expectation",
-        "n_qubits",
+        "qubit_counts",
         "pauli",
     }
     for moved in ("Readout", "ProjectiveMeasurement", "SingleObservable"):

@@ -9,8 +9,8 @@ system ``S``::
 
     |psi> = ( |0>_R |Q1>_S + |1>_R |Q2>_S ) / sqrt(2)
 
-on ``N`` qubits in total: one ancilla and ``N_S = N - 1`` system qubits.
-``Q1 = N_S // 2``, ``Q2 = N_S // 2 - 1``, and ``|Q>_S`` is the uniform
+on ``N`` qubits in total: one ancilla and ``Ns = N - 1`` system qubits.
+``Q1 = Ns // 2``, ``Q2 = Ns // 2 - 1``, and ``|Q>_S`` is the uniform
 superposition of the basis states of sector ``Q``. The two sectors are
 orthogonal, so the reduced state of ``R`` is ``I / 2``: the ancilla is
 maximally entangled with the charge of ``S``.
@@ -85,19 +85,19 @@ def _sparse_column(rows: np.ndarray, values: np.ndarray, dim: int) -> sp.csr_mat
 
 
 class AncillaChargeSectorEmbedding(Embedding):
-    """``( |0>_R |N_S//2>_S + |1>_R |N_S//2 - 1>_S ) / sqrt(2)`` on ``N`` qubits.
+    """``( |0>_R |Ns//2>_S + |1>_R |Ns//2 - 1>_S ) / sqrt(2)`` on ``N`` qubits.
 
     The ancilla ``R`` is site 0 (most significant bit), as in
     ``np.kron(ancilla, psi_S)``, and the system ``S`` is sites ``1 .. N-1``,
-    so ``N_S = N - 1``. The state does not depend on the input.
+    so ``Ns = N - 1``. The state does not depend on the input.
 
     Attributes:
-        Q1: Charge paired with ``|0>_R``, ``N_S // 2``.
-        Q2: Charge paired with ``|1>_R``, ``N_S // 2 - 1``.
+        Q1: Charge paired with ``|0>_R``, ``Ns // 2``.
+        Q2: Charge paired with ``|1>_R``, ``Ns // 2 - 1``.
     """
 
     name = "ancilla_charge_sector"
-    n_ancilla = 1
+    Nr = 1
 
     def __init__(self, params: Mapping[str, Any]) -> None:
         """Store ``N`` and the two charges.
@@ -105,16 +105,16 @@ class AncillaChargeSectorEmbedding(Embedding):
         Args:
             params: Parameter names mapped to scalar values. ``N``, the total
                 number of qubits, is required and must be at least 3, so that
-                ``N_S >= 2`` and ``N_S // 2 - 1 >= 0``.
+                ``Ns >= 2`` and ``Ns // 2 - 1 >= 0``.
 
         Raises:
             ValueError: If ``N < 3``.
         """
         super().__init__(params)
-        if self.N_S < 2:
+        if self.Ns < 2:
             raise ValueError(f"N={self.N} must be at least 3.")
-        self.Q1: int = self.N_S // 2
-        self.Q2: int = self.N_S // 2 - 1
+        self.Q1: int = self.Ns // 2
+        self.Q2: int = self.Ns // 2 - 1
 
     @overload
     def state(
@@ -130,8 +130,8 @@ class AncillaChargeSectorEmbedding(Embedding):
         """Return the entangled state on ``R + S``.
 
         Basis index ``b`` of ``|0>_R |Q1>_S`` stays ``b``; for ``|1>_R |Q2>_S``
-        the ancilla bit adds ``2**N_S``. Both branches have amplitude
-        ``1 / sqrt(2 binom(N_S, Q))``.
+        the ancilla bit adds ``2**Ns``. Both branches have amplitude
+        ``1 / sqrt(2 binom(Ns, Q))``.
 
         Args:
             x: Ignored; the state is fixed.
@@ -142,9 +142,9 @@ class AncillaChargeSectorEmbedding(Embedding):
             Normalized complex state: a CSR column of shape ``(2**N, 1)`` if
             ``sparse``, otherwise a vector of shape ``(2**N,)``.
         """
-        idx1 = charge_sector_indices(self.N_S, self.Q1)
-        idx2 = charge_sector_indices(self.N_S, self.Q2)
-        rows = np.concatenate([idx1, idx2 + 2**self.N_S])
+        idx1 = charge_sector_indices(self.Ns, self.Q1)
+        idx2 = charge_sector_indices(self.Ns, self.Q2)
+        rows = np.concatenate([idx1, idx2 + 2**self.Ns])
         values = np.concatenate(
             [
                 np.full(idx1.size, 1.0 / np.sqrt(2 * idx1.size), dtype=complex),

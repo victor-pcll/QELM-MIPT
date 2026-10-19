@@ -15,7 +15,7 @@ from QELM.embedding import AncillaChargeSectorEmbedding
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "experiments" / "QELM_M" / "exp_QELM_M.py"
 L, N = 50, 4
-OVERRIDES = ["models=TFIM", f"TFIM.N={N}", f"samples.L={L}", "training.alpha=1e-3"]
+OVERRIDES = ["models=TFIM", f"N={N}", f"samples.L={L}", "training.alpha=1e-3"]
 
 
 def _load_script() -> ModuleType:

@@ -20,7 +20,7 @@ BASH_SCRIPT = REPO_ROOT / "experiments" / "QELM_Z" / "exp_QELM_Z.sh"
 # Virtualenv of another project, active in the shell that launches the script
 # (issue #79): uv must neither use it nor warn about it.
 FOREIGN_VENV = REPO_ROOT.parent / "other-project" / ".venv"
-OVERRIDES = ["models=TFIM", "TFIM.N=4", "samples.L=10"]
+OVERRIDES = ["models=TFIM", "N=4", "samples.L=10"]
 
 
 def _load_script() -> ModuleType:
@@ -68,9 +68,7 @@ def test_features_match_the_density_matrix() -> None:
 
 def test_qelm_learns_the_ancilla() -> None:
     """With enough samples the readout predicts <Z_0> almost perfectly."""
-    cfg = load_config(
-        ["models=TFIM", "TFIM.N=4", "samples.L=200", "training.alpha=1e-3"]
-    )
+    cfg = load_config(["models=TFIM", "N=4", "samples.L=200", "training.alpha=1e-3"])
     out = _load_script().run(cfg)
     assert out["r2"] > 0.95
 

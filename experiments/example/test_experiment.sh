@@ -48,12 +48,12 @@ echo "Writing outputs to $OUT_DIR"
 for N in "${N_VALUES[@]}"; do
   for SEED in "${SEEDS[@]}"; do
     RUN_DIR="$OUT_DIR/N${N}_seed${SEED}"
-    echo "--- models=$MODEL $MODEL.N=$N seed=$SEED"
+    echo "--- models=$MODEL N=$N seed=$SEED"
     # Any key of conf/ can be overridden here with key=value, exactly as on
     # the command line. hydra.run.dir sets where the log and checkpoint go.
     uv run python main.py \
       "models=$MODEL" \
-      "$MODEL.N=$N" \
+      "N=$N" \
       "seed=$SEED" \
       "hydra.run.dir=$RUN_DIR"
   done

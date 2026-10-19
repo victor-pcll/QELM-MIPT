@@ -20,7 +20,7 @@ BASH_SCRIPT = REPO_ROOT / "experiments" / "projective" / "projective_readout.sh"
 # Virtualenv of another project, active in the shell that launches the script
 # (issue #79): uv must neither use it nor warn about it.
 FOREIGN_VENV = REPO_ROOT.parent / "other-project" / ".venv"
-OVERRIDES = ["models=TFIM", "TFIM.N=4", "samples.L=10"]
+OVERRIDES = ["models=TFIM", "N=4", "samples.L=10"]
 
 
 def _load_script() -> ModuleType:

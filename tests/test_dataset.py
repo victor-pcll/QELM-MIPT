@@ -14,21 +14,21 @@ from QELM.training import (
 )
 
 
-def _samples(K: int, n_dyn: int, N_S: int, seed: int = 0):
+def _samples(K: int, n_dyn: int, Ns: int, seed: int = 0):
     rng = np.random.default_rng(seed)
     M = rng.choice([-1.0, 1.0], size=(K, n_dyn))
-    X = rng.choice([-1.0, 1.0], size=(K, N_S))
+    X = rng.choice([-1.0, 1.0], size=(K, Ns))
     y = rng.choice([-1.0, 1.0], size=K)
     return M, X, y
 
 
-@pytest.mark.parametrize(("K", "n_dyn", "N_S"), [(1, 3, 2), (10, 12, 3), (7, 0, 4)])
-def test_phi_shape_and_concatenation(K: int, n_dyn: int, N_S: int) -> None:
-    """Phi a la forme (K, n_dynamic + N_S) et vaut [M || X]."""
-    M, X, y = _samples(K, n_dyn, N_S)
+@pytest.mark.parametrize(("K", "n_dyn", "Ns"), [(1, 3, 2), (10, 12, 3), (7, 0, 4)])
+def test_phi_shape_and_concatenation(K: int, n_dyn: int, Ns: int) -> None:
+    """Phi a la forme (K, n_dynamic + Ns) et vaut [M || X]."""
+    M, X, y = _samples(K, n_dyn, Ns)
     ds = create_qelm_dataset(M, X, y)
     assert isinstance(ds, QELMDataset)
-    assert ds.phi.shape == (K, n_dyn + N_S)
+    assert ds.phi.shape == (K, n_dyn + Ns)
     assert ds.y.shape == (K,)
     assert ds.phi.dtype == np.float64
     np.testing.assert_array_equal(ds.phi[:, :n_dyn], M)
@@ -37,14 +37,14 @@ def test_phi_shape_and_concatenation(K: int, n_dyn: int, N_S: int) -> None:
 
 
 def test_spatio_temporal_trace_is_flattened_step_by_step() -> None:
-    """M de forme (K, T, N_S) devient (K, T*N_S), pas 1 puis pas 2..."""
-    K, T, N_S = 4, 3, 2
-    M = np.arange(K * T * N_S, dtype=float).reshape(K, T, N_S)
-    X = np.zeros((K, N_S))
+    """M de forme (K, T, Ns) devient (K, T*Ns), pas 1 puis pas 2..."""
+    K, T, Ns = 4, 3, 2
+    M = np.arange(K * T * Ns, dtype=float).reshape(K, T, Ns)
+    X = np.zeros((K, Ns))
     ds = create_qelm_dataset(M, X, np.ones(K))
-    assert ds.phi.shape == (K, T * N_S + N_S)
-    np.testing.assert_array_equal(ds.phi[1, :N_S], M[1, 0])
-    np.testing.assert_array_equal(ds.phi[1, N_S : 2 * N_S], M[1, 1])
+    assert ds.phi.shape == (K, T * Ns + Ns)
+    np.testing.assert_array_equal(ds.phi[1, :Ns], M[1, 0])
+    np.testing.assert_array_equal(ds.phi[1, Ns : 2 * Ns], M[1, 1])
 
 
 def test_unmeasured_sites_keep_nan_or_are_filled() -> None:

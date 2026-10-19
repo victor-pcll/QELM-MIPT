@@ -97,7 +97,7 @@ Rules that keep runs clean:
 Hydra can also sweep on its own with `-m`, without a bash loop:
 
 ```bash
-uv run python main.py -m TFIM.N=4,6 seed=0,1 \
+uv run python main.py -m N=4,6 seed=0,1 \
   hydra.sweep.dir=outputs/multirun
 ```
 

@@ -3,13 +3,13 @@
 From the repository root, after `uv sync`:
 
 ```bash
-uv run python main.py models=TFIM TFIM.N=12 evolution.dt=0.05
+uv run python main.py models=TFIM N=12 evolution.dt=0.05
 ```
 
 Hydra composes `conf/config.yaml` and applies those overrides:
 
 - `models=TFIM` selects `conf/models/TFIM.yaml` and `TransverseFieldIsingModel`.
-- `TFIM.N=12` overrides `N` on the TFIM block. `J` and `h` stay at the values in that YAML file.
+- `N=12` overrides `N` on the TFIM block. `J` and `h` stay at the values in that YAML file.
 - `evolution.dt=0.05` overrides the evolution step. `evolution.n_steps` keeps its formula `4 * TFIM.N` from `conf/models/TFIM.yaml`, so it becomes 48.
 
 The process prints two lines: the selection (`models`, each key in the simulation block, and each `evolution` key), then the pipeline status. A checkpoint is written under the Hydra run directory. See [Checkpoints and local data](checkpoints.md).
@@ -32,7 +32,7 @@ In a notebook, `load_config` composes the same config as the command line. It fi
 ```python
 from QELM import TransverseFieldIsingModel, load_config, set_seed
 
-cfg = load_config(["models=TFIM", "TFIM.N=6"])
+cfg = load_config(["models=TFIM", "N=6"])
 set_seed(cfg)
 model = TransverseFieldIsingModel.from_config(cfg)
 ```
@@ -57,7 +57,7 @@ The template notebooks start with `%load_ext autoreload` and `%autoreload 2`. `u
 Standalone experiment scripts start from `experiments/example/run_experiment.py`. It composes `conf/config.yaml` with Hydra like `main.py`, accepts the same overrides, and seeds NumPy from `seed`:
 
 ```bash
-uv run python experiments/example/run_experiment.py models=TFIM TFIM.N=6
+uv run python experiments/example/run_experiment.py models=TFIM N=6
 ```
 
 Write temporary outputs (arrays, logs, plots) to `experiments/scratch/`, available in the script as `SCRATCH`. Git ignores everything in that folder except `.gitkeep`, so nothing written there is committed. Copy the script to start a new experiment and keep the template unchanged.

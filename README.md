@@ -39,7 +39,7 @@ Scientific parameters live in `conf/` and can be overridden from the command lin
 
 ```bash
 cp .env.example .env
-uv run python main.py models=TFIM TFIM.N=12 evolution.dt=0.05
+uv run python main.py models=TFIM N=12 evolution.dt=0.05
 ```
 
 `models=TFIM` selects `conf/models/TFIM.yaml` and the transverse-field Ising model. `training/regression=ridge` (default) or `training/regression=linear` selects the trainer. `N`, `J`, and `dt` stay in YAML or CLI overrides.
