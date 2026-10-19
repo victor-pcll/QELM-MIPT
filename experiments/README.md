@@ -56,10 +56,12 @@ and `.hydra/config.yaml`.
 ```
 
 It runs `experiments/QELM_M/exp_QELM_M.py` for `N=4`, `seed=42`, 12 samples
-and `projective_measurement.p` in `1.0 0.5`. The features are the projective
-measurement outcomes `M` of the system qubits instead of the observables.
+and `projective_measurement.p` in `1.0 0.5`. The evolution time is split into
+`experiment.n_measurements` steps (default `N - 1`), and the system qubits are
+measured after each step. The features are this measurement record `M`, of
+shape `(n_measurements, N - 1)` per sample, instead of the observables; an
+unmeasured qubit (`p < 1`) counts as 0.
 Each run lands in `outputs/exp_QELM_M/<date_time>/N<N>_seed<seed>_p<p>/`.
-For `p < 1` the metrics are still `NaN` (issue #91).
 
 ## Write your own
 
