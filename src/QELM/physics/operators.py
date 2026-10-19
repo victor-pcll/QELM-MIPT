@@ -119,3 +119,51 @@ def n_qubits(rho: np.ndarray, n_ancilla: int = 0) -> tuple[int, int, int]:
             f"Total qubits ({N}) cannot be less than ancilla qubits ({n_ancilla})."
         )
     return N, N_S, n_ancilla
+
+
+def local_expectation(state: np.ndarray, op: np.ndarray, site: int) -> float:
+    """Return ``<op_site>`` for a one-qubit operator, without building it on N qubits.
+
+    Equal to ``np.real(np.trace(get_site_operator(op, site, N) @ rho))`` for a
+    density matrix and to ``np.real(psi.conj() @ get_site_operator(...) @ psi)``
+    for a state vector, but the ``2**N x 2**N`` product is never formed. The
+    state is reshaped so that the qubit ``site`` has its own axis, the other
+    qubits are traced out, and ``op`` acts on the remaining ``2 x 2`` reduced
+    density matrix: ``O(2**N)`` operations for ``rho`` instead of ``O(8**N)``
+    for the dense product (issue #95).
+
+    Args:
+        state: Density matrix of shape ``(2**N, 2**N)`` or state vector of
+            shape ``(2**N,)``, site 0 being the leftmost Kronecker factor as
+            in :func:`get_site_operator`.
+        op: Hermitian ``2 x 2`` operator (e.g. ``Z``).
+        site: Qubit it acts on, from 0 to ``N - 1``.
+
+    Returns:
+        The real part of the expectation value (the imaginary part vanishes
+        for a Hermitian ``op``).
+
+    Raises:
+        ValueError: If ``op`` is not ``2 x 2``, ``state`` is neither a qubit
+            state vector nor a qubit density matrix, or ``site`` is out of
+            range.
+    """
+    if np.shape(op) != (2, 2):
+        raise ValueError(f"op must have shape (2, 2), got {np.shape(op)}.")
+    state = np.asarray(state)
+    dim = state.shape[0] if state.ndim in (1, 2) else 0
+    N = dim.bit_length() - 1
+    if dim < 2 or 2**N != dim or state.shape not in ((dim,), (dim, dim)):
+        raise ValueError(
+            f"state must have shape (2**N,) or (2**N, 2**N), got {state.shape}."
+        )
+    if not 0 <= site < N:
+        raise ValueError(f"site must be in [0, {N - 1}], got {site}.")
+    left, right = 2**site, 2 ** (N - site - 1)
+    if state.ndim == 1:
+        psi = state.reshape(left, 2, right)
+        reduced = np.einsum("aib,ajb->ij", psi, psi.conj())
+    else:
+        rho = state.reshape(left, 2, right, left, 2, right)
+        reduced = np.einsum("aibajb->ij", rho)
+    return float(np.real(np.einsum("ij,ji->", op, reduced)))
