@@ -7,7 +7,7 @@ to ``SCRATCH`` (``experiments/scratch/``), which git ignores.
 
 Run from the repository root:
 
-    uv run python experiments/run_experiment.py models=TFIM TFIM.N=6
+    uv run python experiments/example/run_experiment.py models=TFIM TFIM.N=6
 """
 
 from __future__ import annotations
@@ -20,10 +20,10 @@ from omegaconf import DictConfig
 from QELM.seed import set_seed
 
 # Temporary local outputs: everything here except .gitkeep is gitignored.
-SCRATCH = Path(__file__).resolve().parent / "scratch"
+SCRATCH = Path(__file__).resolve().parents[1] / "scratch"
 
 
-@hydra.main(version_base="1.3", config_path="../conf", config_name="config")
+@hydra.main(version_base="1.3", config_path="../../conf", config_name="config")
 def main(cfg: DictConfig) -> None:
     """Run the quantum reservoir experiment.
 

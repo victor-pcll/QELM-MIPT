@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Simple QELM experiment (experiments/exp_QELM.py) on a small sweep over N and
+# Simple QELM experiment (experiments/QELM_Z/exp_QELM_Z.py) on a small sweep over N and
 # the seed, without measurement during the evolution.
 #
 # Run from anywhere, after `uv sync`:
 #
-#     ./experiments/scripts/exp_QELM.sh
+#     ./experiments/QELM_Z/exp_QELM_Z.sh
 #
 # Each run writes its arrays, metrics.json, log and Hydra config to
-#     outputs/exp_QELM/<date_time>/N<N>_seed<seed>/
+#     outputs/exp_QELM_Z/<date_time>/N<N>_seed<seed>/
 # which git ignores. Environment variables change the defaults:
 #     OUT_ROOT=/tmp/qelm   write under /tmp/qelm instead of outputs
 #     L=1000               number of samples per run

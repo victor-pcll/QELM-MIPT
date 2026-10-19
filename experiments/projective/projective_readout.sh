@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Projective-readout experiment (experiments/projective_readout.py) on a small
+# Projective-readout experiment (experiments/projective/projective_readout.py) on a small
 # sweep over N and the seed.
 #
 # Run from anywhere, after `uv sync`:
 #
-#     ./experiments/scripts/projective_readout.sh
+#     ./experiments/projective/projective_readout.sh
 #
 # Each run writes its arrays, metrics.json, log and Hydra config to
 #     outputs/projective_readout/<date_time>/N<N>_seed<seed>/
@@ -42,7 +42,7 @@ for N in "${N_VALUES[@]}"; do
   for SEED in "${SEEDS[@]}"; do
     RUN_DIR="$OUT_DIR/N${N}_seed${SEED}"
     echo "--- models=$MODEL $MODEL.N=$N seed=$SEED samples.L=$L"
-    uv run python experiments/projective_readout.py \
+    uv run python experiments/projective/projective_readout.py \
       "models=$MODEL" \
       "$MODEL.N=$N" \
       "seed=$SEED" \

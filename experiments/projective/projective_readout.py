@@ -25,7 +25,7 @@ unmeasured ``rho`` and only record the outcomes.
 
 Run from the repository root:
 
-    uv run python experiments/projective_readout.py TFIM.N=6 samples.L=1000
+    uv run python experiments/projective/projective_readout.py TFIM.N=6 samples.L=1000
 
 Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
@@ -145,7 +145,7 @@ def save(results: dict[str, Any], out_dir: Path) -> None:
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
 
 
-@hydra.main(version_base="1.3", config_path="../conf", config_name="config")
+@hydra.main(version_base="1.3", config_path="../../conf", config_name="config")
 def main(cfg: DictConfig) -> None:
     """Run the experiment and save it to the Hydra run directory.
 

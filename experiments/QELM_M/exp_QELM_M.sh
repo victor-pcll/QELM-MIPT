@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Simple QELM experiment (experiments/exp_QELM.py) on a small sweep over N and
+# Simple QELM experiment (experiments/QELM_M/exp_QELM_M.py) on a small sweep over N and
 # the seed, without measurement during the evolution.
 #
 # Run from anywhere, after `uv sync`:
 #
-#     ./experiments/scripts/exp_QELM.sh
+#     ./experiments/QELM_M/exp_QELM_M.sh
 #
 # Each run writes its arrays, metrics.json, log and Hydra config to
-#     outputs/exp_QELM/<date_time>/N<N>_seed<seed>/
+#     outputs/exp_QELM_M/<date_time>/N<N>_seed<seed>/
 # which git ignores. Environment variables change the defaults:
 #     OUT_ROOT=/tmp/qelm   write under /tmp/qelm instead of outputs
 #     L=1000               number of samples per run
@@ -42,9 +42,9 @@ OUT_DIR="$OUT_ROOT/$EXPERIMENT/$STAMP"
 mkdir -p "$OUT_DIR"
 echo "Writing outputs to $OUT_DIR"
 
-# on a deux p insere car la variable est doublee dans les configurations 
-# "dynamic_readout.p=0.5" ne sert a rien -> pas d'effet 
-# "projective_measurement.p=0.5" a un effet mais casse car j'ai init M avec des NAN au lieu des zeros 
+# The measurement probability is projective_measurement.p, the only p the
+# code reads (dynamic_readout.p had no effect, issue #90). For p < 1 the
+# unmeasured qubits give NaN outcomes and NaN metrics (issue #91).
 
 for N in "${N_VALUES[@]}"; do
   for p in "${p_VALUES[@]}"; do
@@ -53,12 +53,12 @@ for N in "${N_VALUES[@]}"; do
     uv run python experiments/QELM_M/exp_QELM_M.py \
       "models=$MODEL" \
       "$MODEL.N=$N" \
+      "seed=$SEED" \
       "samples.L=$L" \
       "training.alpha=$ALPHA" \
-      "hydra.run.dir=$RUN_DIR"\
-      "dynamic_readout.p=0.5"\
-      "projective_measurement.p=$p" 
+      "projective_measurement.p=$p" \
+      "hydra.run.dir=$RUN_DIR"
   done
 done
 
-echo "Done: ${#N_VALUES[@]} x ${#SEEDS[@]} runs in $OUT_DIR"
+echo "Done: ${#N_VALUES[@]} x ${#p_VALUES[@]} runs in $OUT_DIR"

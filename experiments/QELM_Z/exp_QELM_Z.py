@@ -24,12 +24,12 @@ total charge).
 
 Run from the repository root:
 
-    uv run python experiments/exp_QELM.py TFIM.N=4 samples.L=500
+    uv run python experiments/QELM_Z/exp_QELM_Z.py TFIM.N=4 samples.L=500
 
 Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
 
-- ``exp_QELM.npz``: ``X`` (features, bias column included), ``Y``,
+- ``exp_QELM_Z.npz``: ``X`` (features, bias column included), ``Y``,
   ``y_test``, ``y_pred`` and the weights ``W``;
 - ``metrics.json``: ``nmse``, ``r2`` and the shapes used;
 - ``.hydra/config.yaml``: the full composed config, to reproduce the run.
@@ -114,7 +114,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
 
 def save(results: dict[str, Any], out_dir: Path) -> None:
-    """Write the arrays to ``exp_QELM.npz`` and the scores to JSON.
+    """Write the arrays to ``exp_QELM_Z.npz`` and the scores to JSON.
 
     Args:
         results: Output of :func:`run`.

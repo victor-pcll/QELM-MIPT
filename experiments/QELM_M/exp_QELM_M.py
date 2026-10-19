@@ -24,12 +24,12 @@ total charge).
 
 Run from the repository root:
 
-    uv run python experiments/exp_QELM.py TFIM.N=4 samples.L=500
+    uv run python experiments/QELM_M/exp_QELM_M.py TFIM.N=4 samples.L=500
 
 Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
 
-- ``exp_QELM.npz``: ``X`` (features, bias column included), ``Y``,
+- ``exp_QELM_M.npz``: ``X`` (features, bias column included), ``Y``,
   ``y_test``, ``y_pred`` and the weights ``W``;
 - ``metrics.json``: ``nmse``, ``r2`` and the shapes used;
 - ``.hydra/config.yaml``: the full composed config, to reproduce the run.
@@ -50,7 +50,7 @@ from tqdm import tqdm
 from QELM import TransverseFieldIsingModel, set_seed
 from QELM.embedding import AncillaChargeSectorEmbedding
 from QELM.evaluation.metrics import NMSE, R2
-from QELM.training import RidgeReadout, SingleObservable, ProjectiveMeasurement
+from QELM.training import ProjectiveMeasurement, RidgeReadout, SingleObservable
 
 DEFAULT_OBSERVABLES = ["Z", "Y", "X"]
 
@@ -80,13 +80,12 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     ops = np.array(SingleObservable({"N": N, "observables": labels}).operators())
     ops = ops.reshape(len(labels), N, sector.dim, sector.dim)
     Z0 = SingleObservable({"N": N, "observables": ["Z"]}).operators()[0]
-    psi0 = sector.state()
     rho = sector.density_matrix()
     P = ProjectiveMeasurement.from_config(cfg)
 
     L = int(cfg.samples.L)
     X = np.zeros((L, N - 1, N - 1))
-    M = np.zeros((L, N - 1, N - 1)) 
+    M = np.zeros((L, N - 1, N - 1))
     Y = np.zeros(L)
 
     for i in tqdm(range(L)):
@@ -95,7 +94,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         measure = P.measure(rho)
         rho = measure.rho
         M[i] = measure.outcomes
-        Y[i] = np.real(np.trace(Z0 @ rho)) # ca va couter en cout computationnel car taille des matrices 
+        # Full 2**N x 2**N product: costly for large N (issue #95).
+        Y[i] = np.real(np.trace(Z0 @ rho))
 
     X = M.reshape(L, -1)
     X = np.hstack([X, np.ones((L, 1))])  # bias column: RidgeReadout has no intercept
@@ -119,7 +119,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
 
 def save(results: dict[str, Any], out_dir: Path) -> None:
-    """Write the arrays to ``exp_QELM.npz`` and the scores to JSON.
+    """Write the arrays to ``exp_QELM_M.npz`` and the scores to JSON.
 
     Args:
         results: Output of :func:`run`.

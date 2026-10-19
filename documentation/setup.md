@@ -43,5 +43,5 @@ ls -lO .venv/lib/python3.12/site-packages/*.pth
 chflags nohidden .venv/lib/python3.12/site-packages/*.pth
 ```
 
-The bash launchers in `experiments/scripts/` and the test suite put `src/` on
+The bash launchers in `experiments/` and the test suite put `src/` on
 `PYTHONPATH` themselves, so they work either way.

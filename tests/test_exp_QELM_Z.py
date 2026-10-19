@@ -1,4 +1,4 @@
-"""The simple QELM experiment in experiments/exp_QELM.py."""
+"""The simple QELM experiment in experiments/QELM_Z/exp_QELM_Z.py."""
 
 from __future__ import annotations
 
@@ -15,14 +15,14 @@ import numpy as np
 from QELM import load_config
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = REPO_ROOT / "experiments" / "exp_QELM.py"
-BASH_SCRIPT = REPO_ROOT / "experiments" / "scripts" / "exp_QELM.sh"
+SCRIPT = REPO_ROOT / "experiments" / "QELM_Z" / "exp_QELM_Z.py"
+BASH_SCRIPT = REPO_ROOT / "experiments" / "QELM_Z" / "exp_QELM_Z.sh"
 OVERRIDES = ["models=TFIM", "TFIM.N=4", "samples.L=10"]
 
 
 def _load_script() -> ModuleType:
-    """Import experiments/exp_QELM.py, which is not a package."""
-    spec = importlib.util.spec_from_file_location("exp_QELM", SCRIPT)
+    """Import experiments/QELM_Z/exp_QELM_Z.py, which is not a package."""
+    spec = importlib.util.spec_from_file_location("exp_QELM_Z", SCRIPT)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -92,7 +92,7 @@ def test_script_saves_outputs(tmp_path: Path) -> None:
         text=True,
         check=True,
     )
-    data = np.load(tmp_path / "exp_QELM.npz")
+    data = np.load(tmp_path / "exp_QELM_Z.npz")
     assert {"X", "Y", "y_test", "y_pred", "W"} <= set(data.files)
     metrics = json.loads((tmp_path / "metrics.json").read_text())
     assert {"nmse", "r2"} <= set(metrics)
@@ -101,7 +101,7 @@ def test_script_saves_outputs(tmp_path: Path) -> None:
 
 
 def test_bash_launcher_runs(tmp_path: Path) -> None:
-    """The bash launcher writes one run under OUT_ROOT/exp_QELM/."""
+    """The bash launcher writes one run per N (4 and 6) under OUT_ROOT/exp_QELM_Z/."""
     assert os.access(BASH_SCRIPT, os.X_OK)
     subprocess.run(["bash", "-n", str(BASH_SCRIPT)], check=True)
     result = subprocess.run(
@@ -112,7 +112,8 @@ def test_bash_launcher_runs(tmp_path: Path) -> None:
         text=True,
         check=True,
     )
-    assert "Done: 1 x 1 runs" in result.stdout
-    runs = sorted(tmp_path.glob("exp_QELM/*/*"))
-    assert [run.name for run in runs] == ["N4_seed42"]
-    assert (runs[0] / "metrics.json").is_file()
+    assert "Done: 2 x 1 runs" in result.stdout
+    runs = sorted(tmp_path.glob("exp_QELM_Z/*/*"))
+    assert [run.name for run in runs] == ["N4_seed42", "N6_seed42"]
+    for run in runs:
+        assert (run / "metrics.json").is_file()
