@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 
 import matplotlib
+import numpy as np
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -45,6 +46,19 @@ def test_notebook_runs_the_sweep_and_plots(
     assert "10/10" not in shown
     assert len(namespace["rows"]) == 4
     assert [(r["p"], r["n_runs"]) for r in namespace["table"]] == [(0.2, 2), (1.0, 2)]
+    # R2, NMSE and the two ancilla entropies (#119), each with a mean +- error
+    # plot and an error-only plot.
+    keys = [key for key, _, _ in namespace["METRICS"]]
+    assert keys == ["r2", "nmse", "S_vN_mean", "S_renyi_1_mean"]
+    assert namespace["axes"].shape == (4, 2)
+    for key in keys:
+        assert all(np.isfinite(r[f"{key}_sem"]) for r in namespace["table"])
+    # p = 1 purifies the ancilla in every run, so the entropy and its error
+    # vanish there (S_vN_mean, the mean over the samples of a run, averaged
+    # over the seeds by summarize).
+    at_p1 = next(r for r in namespace["table"] if r["p"] == 1.0)
+    assert at_p1["S_vN_mean_mean"] == pytest.approx(0.0, abs=1e-9)
+    assert at_p1["S_vN_mean_sem"] == pytest.approx(0.0, abs=1e-9)
     assert namespace["figure_path"].is_file()
     assert namespace["figure_path"].parent.parent == tmp_path / "exp_QELM_M"
     os.chdir(REPO_ROOT)
