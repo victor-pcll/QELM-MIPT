@@ -31,6 +31,14 @@ ancilla_charge_sector:
 # The evolution block (evolution.t, evolution.dt, evolution.n_steps) depends on the
 # Hamiltonian, so it lives in conf/models/ next to it.
 
+# Experiment settings read by experiments/QELM_M/exp_QELM_M.py (issue #123).
+# nbr_time_evolution: number of time-evolution steps of length
+# evolution.t / nbr_time_evolution, each followed by a measurement of the
+# system. Independent of N, Ns and Nr. Override with
+# experiment.nbr_time_evolution=10.
+experiment:
+  nbr_time_evolution: 5
+
 # Samples. Not read by the pipeline yet.
 samples:
   L: 10000 # number of samples
