@@ -18,6 +18,7 @@ def test_conf_tree_mirrors_the_package() -> None:
         "models/TFIM.yaml",
         "models/kitaev.yaml",
         "training/measurements/projective.yaml",
+        "training/measurements/weak.yaml",
         "training/readout/single.yaml",
         "training/readout/double.yaml",
         "training/regression/linear.yaml",
@@ -27,7 +28,9 @@ def test_conf_tree_mirrors_the_package() -> None:
     found = {
         str(path.relative_to(CONF))
         for path in CONF.rglob("*.yaml")
-        if path.name != "config.yaml"
+        # Primary configs: config.yaml, and one per experiment with its own
+        # model (charge_sharpening.yaml, issue #137).
+        if path.name not in ("config.yaml", "charge_sharpening.yaml")
     }
     assert found == expected
     assert not (CONF / "sim_type").exists()
