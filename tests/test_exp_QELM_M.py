@@ -14,6 +14,7 @@ import pytest
 
 from QELM import TransverseFieldIsingModel, load_config
 from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.evaluation.metrics import accuracy
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "experiments" / "QELM_M" / "exp_QELM_M.py"
@@ -188,12 +189,14 @@ def test_bash_launcher_dry_run(tmp_path: Path) -> None:
     for run in runs:
         assert (run / "metrics.json").is_file()
         metrics = json.loads((run / "metrics.json").read_text())
-        assert {"nmse", "r2", "S_vN_mean", "S_renyi_1_mean"} <= set(metrics)
+        expected_keys = {"nmse", "r2", *_load_script().EXTRA_METRICS}
+        assert expected_keys <= set(metrics)
         assert (run / "exp_QELM_M.npz").is_file()
         with np.load(run / "exp_QELM_M.npz") as data:
             assert data["X"].shape == (10, 2 * 2 + 1)
-            assert data["S_vN"].shape == data["S_renyi_1"].shape == (10,)
-            assert metrics["S_vN_mean"] == pytest.approx(np.mean(data["S_vN"]))
+            for name in _load_script().ENTROPIES:
+                assert data[name].shape == (10,)
+                assert metrics[f"{name}_mean"] == pytest.approx(np.mean(data[name]))
 
 
 def test_n_measurements_must_be_positive() -> None:
@@ -239,3 +242,44 @@ def test_rare_measurements_leave_the_ancilla_entangled() -> None:
     the mean entropy is well above the p = 1 value of 0."""
     out = _load_script().run(load_config([*OVERRIDES, "projective_measurement.p=0.1"]))
     assert out["S_vN_mean"] > 0.1
+
+
+@pytest.mark.parametrize("p", [1.0, 0.5, 0.1])
+def test_system_entropies_are_recorded(p: float) -> None:
+    """Issue #124. The global state is pure, so the system sector has the
+    entropy of the ancilla, S_2 <= S_vN, and each single-qubit mean lies in
+    [0, 1] bit, with its sample mean in the results."""
+    module = _load_script()
+    out = module.run(load_config([*OVERRIDES, f"projective_measurement.p={p}"]))
+    for name in module.ENTROPIES:
+        assert out[name].shape == (L,)
+        assert np.all(out[name] >= -1e-12) and np.all(out[name] <= 1 + 1e-12)
+        assert out[f"{name}_mean"] == pytest.approx(np.mean(out[name]))
+    np.testing.assert_allclose(out["S_vN_sys"], out["S_vN"], atol=1e-9)
+    assert np.all(out["S_renyi_2_sys"] <= out["S_vN_sys"] + 1e-9)
+    assert np.all(out["S_renyi_2_1q"] <= out["S_vN_1q"] + 1e-9)
+
+
+def test_measuring_every_qubit_leaves_every_system_qubit_pure() -> None:
+    """p = 1: the last step measures every system qubit, so each one is in a
+    Z eigenstate and the single-qubit means vanish; the system sector, like
+    the ancilla, is pure."""
+    out = _load_script().run(load_config(OVERRIDES))
+    for name in ("S_vN_sys", "S_renyi_2_sys", "S_vN_1q", "S_renyi_2_1q"):
+        np.testing.assert_allclose(out[name], 0.0, atol=1e-9)
+
+
+def test_rare_measurements_leave_the_system_qubits_entangled() -> None:
+    """p = 0.1: most system qubits stay entangled with the rest."""
+    out = _load_script().run(load_config([*OVERRIDES, "projective_measurement.p=0.1"]))
+    assert out["S_vN_1q_mean"] > 0.1
+
+
+def test_accuracy_is_recorded() -> None:
+    """The sign accuracy of the test predictions (issue #124): 1 at p = 1,
+    where <Z_0> = +-1 is read off the last row of M (R2 close to 1)."""
+    out = _load_script().run(load_config(OVERRIDES))
+    assert out["accuracy"] == accuracy(out["y_test"], out["y_pred"])
+    assert out["accuracy"] == 1.0
+    out = _load_script().run(load_config([*OVERRIDES, "projective_measurement.p=0.1"]))
+    assert 0.0 <= out["accuracy"] <= 1.0

@@ -152,3 +152,39 @@ def renyi_entropy(
     if math.isinf(n):
         return float(-np.log(values[0]) / log_base)
     return float(np.log(np.sum(values**n)) / ((1.0 - n) * log_base))
+
+
+def mean_single_qubit_entropy(
+    state: np.ndarray | sp.spmatrix,
+    sites: Sequence[int],
+    n: float = 1.0,
+    base: float = 2.0,
+    eps: float = 1e-12,
+) -> float:
+    """Return the mean over ``k`` in ``sites`` of ``S_n(rho_k)``.
+
+    ``rho_k`` is the 2 x 2 reduced state of qubit ``k`` alone. Each term is
+    between 0 (qubit ``k`` in a pure state, a product with the rest) and
+    ``log_base(2)`` (qubit ``k`` maximally mixed), so the mean is too. Unlike
+    the entropy of the whole sector, it does not see the correlations
+    between the qubits of ``sites``: it is the local entanglement of each
+    qubit with everything else.
+
+    Args:
+        state: See :func:`entanglement_spectrum`.
+        sites: Qubits to average over, distinct, at least one.
+        n: Rényi order, as in :func:`renyi_entropy` (1 for von Neumann).
+        base: Logarithm base: 2 for bits (default), ``np.e`` for nats.
+        eps: Eigenvalues ``<= eps`` are dropped.
+
+    Returns:
+        ``(1 / |sites|) sum_k S_n(rho_k)``.
+
+    Raises:
+        ValueError: If ``sites`` is empty, or if ``state``, a site, ``n`` or
+            ``base`` is invalid.
+    """
+    sites = check_sites(sites, state_qubits(state), "sites")
+    if not sites:
+        raise ValueError("sites must hold at least one qubit.")
+    return float(np.mean([renyi_entropy(state, n, [k], base, eps) for k in sites]))

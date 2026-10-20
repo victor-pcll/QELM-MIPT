@@ -1,5 +1,5 @@
-"""Regression metrics for the readout, the ancilla entanglement entropy,
-and the scaffold status line."""
+"""Regression metrics for the readout, the sign accuracy, the ancilla
+entanglement entropy, and the scaffold status line."""
 
 from __future__ import annotations
 
@@ -119,6 +119,30 @@ def R2(y_true: ArrayLike, y_pred: ArrayLike, eps: float = 1e-12) -> float:
         return 1.0 if ss_res <= tol else 0.0
 
     return float(1 - ss_res / ss_tot)
+
+
+def accuracy(y_true: ArrayLike, y_pred: ArrayLike, threshold: float = 0.0) -> float:
+    """Share of samples classified on the right side of ``threshold``.
+
+    The regression output becomes a binary classifier: class ``+1`` when
+    ``y >= threshold``, ``-1`` otherwise, for the target and the prediction
+    alike. With the default ``threshold = 0`` and the target ``<Z_0>`` of
+    the ancilla, it is the share of test samples whose sign of ``<Z_0>``
+    (ancilla closer to ``|0>`` or to ``|1>``) the readout gets right.
+
+    Args:
+        y_true: Ground truth values, 1-dimensional.
+        y_pred: Predicted values, same shape as ``y_true``.
+        threshold: Boundary between the two classes.
+
+    Returns:
+        Accuracy between 0 and 1.
+
+    Raises:
+        ValueError: If the inputs are invalid (see :func:`_as_pair`).
+    """
+    y_true_arr, y_pred_arr = _as_pair(y_true, y_pred)
+    return float(np.mean((y_true_arr >= threshold) == (y_pred_arr >= threshold)))
 
 
 def von_neumann_entropy(
