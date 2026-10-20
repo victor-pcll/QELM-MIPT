@@ -14,7 +14,7 @@ import pytest
 
 from QELM import TransverseFieldIsingModel, load_config
 from QELM.embedding import AncillaChargeSectorEmbedding
-from QELM.evaluation.metrics import accuracy
+from QELM.evaluation.metrics import accuracy, balanced_accuracy, majority_accuracy
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "experiments" / "QELM_M" / "exp_QELM_M.py"
@@ -302,3 +302,30 @@ def test_accuracy_is_recorded() -> None:
     assert out["accuracy"] == 1.0
     out = _load_script().run(load_config([*OVERRIDES, "projective_measurement.p=0.1"]))
     assert 0.0 <= out["accuracy"] <= 1.0
+
+
+def test_no_measurement_scores_the_chance_level() -> None:
+    """Issue #130: at p = 0 every feature is 0, the readout predicts one
+    constant and learns nothing. Its sign accuracy is the share of the
+    majority sign of <Z_0> (well above 0.5: the ancilla relaxes towards
+    |0>), equal to the baseline, and its balanced accuracy is 0.5."""
+    out = _load_script().run(load_config([*OVERRIDES, "projective_measurement.p=0"]))
+    np.testing.assert_array_equal(out["X"][:, :-1], 0.0)
+    assert np.ptp(out["y_pred"]) == 0.0
+    train = len(out["Y"]) - len(out["y_test"])
+    assert out["accuracy_baseline"] == majority_accuracy(
+        out["Y"][:train], out["y_test"]
+    )
+    assert out["accuracy"] == out["accuracy_baseline"]
+    assert out["accuracy"] > 0.5
+    assert out["balanced_accuracy"] == balanced_accuracy(out["y_test"], out["y_pred"])
+    assert out["balanced_accuracy"] == 0.5
+
+
+def test_most_samples_have_a_positive_z0() -> None:
+    """The cause of issue #130: the TFIM at h = 10 J nearly conserves the
+    charge, Ns // 2 = 1 excitation shared by N = 4 qubits, so <Z_0> averages
+    about 1 - 2 / 4 = 0.5 and is positive in most samples, at any p < 1."""
+    out = _load_script().run(load_config([*OVERRIDES, "projective_measurement.p=0"]))
+    assert np.mean(out["Y"] >= 0) > 0.7
+    assert np.mean(out["Y"]) == pytest.approx(0.5, abs=0.15)

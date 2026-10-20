@@ -44,7 +44,16 @@ A ridge readout (``training`` block) is fitted on the first
 ``samples.train_size`` samples and scored on the rest with NMSE and R2.
 ``RidgeReadout`` fits no intercept, so a constant column of ones is appended
 to the features. Besides NMSE and R2, the readout is scored as a classifier
-of the sign of ``<Z_0>`` (``accuracy``, issue #124).
+of the sign of ``<Z_0>`` (``accuracy``, issue #124). The two classes are not
+balanced: the TFIM at ``h = 10 J`` nearly conserves the charge, the ancilla
+shares ``Ns // 2`` excitations with ``N - 1`` other qubits, so it relaxes
+closer to ``|0>`` and ``<Z_0> > 0`` in most samples (about 85% at ``N = 4``).
+A readout that learns nothing, as at ``p = 0`` where every feature is 0,
+predicts that majority sign and scores its share, not 0.5 (issue #130). So
+two more scores go with it: ``accuracy_baseline``, the accuracy of always
+predicting the majority sign of the training targets (the chance level of
+``accuracy``), and ``balanced_accuracy``, the mean over the two signs of the
+share recovered, which is 0.5 for a readout that ignores the features.
 
 Run from the repository root:
 
@@ -58,7 +67,8 @@ Everything is written to the Hydra run directory, by default
   ``y_test``, ``y_pred``, the weights ``W`` and the entropies ``S_vN``,
   ``S_renyi_1``, ``S_vN_sys``, ``S_renyi_2_sys``, ``S_vN_1q`` and
   ``S_renyi_2_1q`` of shape ``(L,)``;
-- ``metrics.json``: ``nmse``, ``r2``, ``accuracy``, the shapes used and the
+- ``metrics.json``: ``nmse``, ``r2``, ``accuracy``, ``accuracy_baseline``,
+  ``balanced_accuracy``, the shapes used and the
   sample mean ``<name>_mean`` of each entropy;
 - ``.hydra/config.yaml``: the full composed config, to reproduce the run.
 """
@@ -81,7 +91,13 @@ from QELM.evaluation import (
     renyi_entropy,
     von_neumann_entropy,
 )
-from QELM.evaluation.metrics import NMSE, R2, accuracy
+from QELM.evaluation.metrics import (
+    NMSE,
+    R2,
+    accuracy,
+    balanced_accuracy,
+    majority_accuracy,
+)
 from QELM.physics import Z, local_expectation
 from QELM.training import ProjectiveMeasurement, RidgeReadout
 from QELM.utils import save_results
@@ -96,7 +112,12 @@ ENTROPIES = (
     "S_renyi_2_1q",
 )
 # Scalars written to metrics.json besides nmse and r2.
-EXTRA_METRICS = ("accuracy", *(f"{name}_mean" for name in ENTROPIES))
+EXTRA_METRICS = (
+    "accuracy",
+    "accuracy_baseline",
+    "balanced_accuracy",
+    *(f"{name}_mean" for name in ENTROPIES),
+)
 # The ancilla R, qubit 0, is the subsystem A of the entropies.
 SECTOR_A = [0]
 
@@ -114,7 +135,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         The arrays and metrics of the run: ``M`` (record of shape
         ``(L, nbr_time_evolution, Ns)``, ``NaN`` for an unmeasured qubit), ``X`` (with
         the bias column), ``Y``, ``y_test``, ``y_pred``, ``W``, ``nmse``,
-        ``r2``, ``accuracy``, the entropies of :data:`ENTROPIES` (bits, one
+        ``r2``, ``accuracy``, ``accuracy_baseline``, ``balanced_accuracy``,
+        the entropies of :data:`ENTROPIES` (bits, one
         per sample) and their means ``<name>_mean``.
     """
     set_seed(cfg)
@@ -196,6 +218,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "nmse": NMSE(y_test, y_pred),
         "r2": R2(y_test, y_pred),
         "accuracy": accuracy(y_test, y_pred),
+        "accuracy_baseline": majority_accuracy(y_train, y_test),
+        "balanced_accuracy": balanced_accuracy(y_test, y_pred),
         **S,
         **{f"{name}_mean": float(np.mean(values)) for name, values in S.items()},
     }
@@ -215,6 +239,8 @@ def main(cfg: DictConfig) -> None:
     print(f"NMSE: {results['nmse']:.6g}")
     print(f"R2: {results['r2']:.6g}")
     print(f"accuracy: {results['accuracy']:.6g}")
+    print(f"accuracy baseline (majority sign): {results['accuracy_baseline']:.6g}")
+    print(f"balanced accuracy: {results['balanced_accuracy']:.6g}")
     for name in ENTROPIES:
         print(f"{name} (mean, bits): {results[f'{name}_mean']:.6g}")
     print(f"Saved to {out_dir}")

@@ -1,4 +1,5 @@
-"""Regression metrics for the readout, the sign accuracy, the ancilla
+"""Regression metrics for the readout, the sign accuracy (raw, balanced and
+its chance level), the ancilla
 entanglement entropy, and the scaffold status line."""
 
 from __future__ import annotations
@@ -143,6 +144,69 @@ def accuracy(y_true: ArrayLike, y_pred: ArrayLike, threshold: float = 0.0) -> fl
     """
     y_true_arr, y_pred_arr = _as_pair(y_true, y_pred)
     return float(np.mean((y_true_arr >= threshold) == (y_pred_arr >= threshold)))
+
+
+def balanced_accuracy(
+    y_true: ArrayLike, y_pred: ArrayLike, threshold: float = 0.0
+) -> float:
+    """Sign accuracy corrected for unbalanced classes (issue #130).
+
+    The mean, over the classes present in ``y_true``, of the share of that
+    class the prediction gets right (the recall), with the classes of
+    :func:`accuracy`. A prediction that ignores the input, such as a
+    constant, scores 0.5 whatever the share of each class, while
+    :func:`accuracy` gives it the share of the majority class. Same as
+    ``sklearn.metrics.balanced_accuracy_score`` on the classes.
+
+    Args:
+        y_true: Ground truth values, 1-dimensional.
+        y_pred: Predicted values, same shape as ``y_true``.
+        threshold: Boundary between the two classes.
+
+    Returns:
+        Balanced accuracy between 0 and 1.
+
+    Raises:
+        ValueError: If the inputs are invalid (see :func:`_as_pair`).
+    """
+    y_true_arr, y_pred_arr = _as_pair(y_true, y_pred)
+    true_cls = y_true_arr >= threshold
+    pred_cls = y_pred_arr >= threshold
+    recalls = [np.mean(pred_cls[true_cls == c] == c) for c in np.unique(true_cls)]
+    return float(np.mean(recalls))
+
+
+def majority_accuracy(
+    y_train: ArrayLike, y_test: ArrayLike, threshold: float = 0.0
+) -> float:
+    """Sign accuracy of a classifier that ignores the input (issue #130).
+
+    It always predicts the majority class of ``y_train`` (class ``+1`` on a
+    tie) and is scored with :func:`accuracy` on ``y_test``. This is the
+    chance level of :func:`accuracy`: a readout that learns nothing from the
+    features scores this, not 0.5, when the classes are unbalanced.
+
+    Args:
+        y_train: Training targets, 1-dimensional, not empty.
+        y_test: Test targets, 1-dimensional, not empty.
+        threshold: Boundary between the two classes.
+
+    Returns:
+        Share of ``y_test`` in the majority class of ``y_train``.
+
+    Raises:
+        ValueError: If either input is empty or not 1-dimensional.
+    """
+    y_train_arr = np.asarray(y_train, dtype=np.float64)
+    y_test_arr = np.asarray(y_test, dtype=np.float64)
+    for name, arr in (("y_train", y_train_arr), ("y_test", y_test_arr)):
+        if arr.ndim != 1 or arr.size == 0:
+            raise ValueError(
+                f"{name} must be 1-dimensional and not empty, got shape {arr.shape}."
+            )
+    majority_is_plus = np.mean(y_train_arr >= threshold) >= 0.5
+    pick = threshold if majority_is_plus else threshold - 1.0
+    return accuracy(y_test_arr, np.full(y_test_arr.shape, pick), threshold)
 
 
 def von_neumann_entropy(
