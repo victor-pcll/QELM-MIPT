@@ -108,10 +108,16 @@ def plot_sweep(sweep_dir: Path, reference_dir: Path = REFERENCE_DIR) -> dict[str
     refs = load_references(reference_dir)
     sizes = sorted({int(row["N"]) for row in summary})
     comparison: dict[str, Any] = {}
+    # One color per curve, the same in every panel: ours first, then the
+    # reference curves by name (the files do not list them in the same order).
+    ref_names = sorted({name for curves in refs.values() for name in curves})
+    color_of = {
+        key: COLORS[k % len(COLORS)]
+        for k, key in enumerate([*(f"N{N}" for N in sizes), *ref_names])
+    }
 
     fig, axes = plt.subplots(1, 3, figsize=(13, 3.8), constrained_layout=True)
     for ax, (metric, _, label) in zip(axes, PANELS, strict=True):
-        k = 0
         for N in sizes:
             sel = sorted(
                 (r for r in summary if int(r["N"]) == N), key=lambda r: r["gamma"]
@@ -135,7 +141,7 @@ def plot_sweep(sweep_dir: Path, reference_dir: Path = REFERENCE_DIR) -> dict[str
                     err[keep],
                 )
                 sel = [r for r, kept in zip(sel, keep, strict=True) if kept]
-            color = COLORS[k % len(COLORS)]
+            color = color_of[f"N{N}"]
             if np.all(n_runs > 1):
                 std = np.array([r[f"{metric}_std"] for r in sel])
                 ax.fill_between(
@@ -152,7 +158,6 @@ def plot_sweep(sweep_dir: Path, reference_dir: Path = REFERENCE_DIR) -> dict[str
                 capsize=2,
                 label=f"this work, L={N - 1}",
             )
-            k += 1
             for name, (x_ref, y_ref) in refs.get(metric, {}).items():
                 # Compare to the reference of the same size only, when the
                 # curve name gives one ("L = 6"); our L is Ns = N - 1.
@@ -165,16 +170,20 @@ def plot_sweep(sweep_dir: Path, reference_dir: Path = REFERENCE_DIR) -> dict[str
             ax.plot(
                 x_ref,
                 y_ref,
-                color=COLORS[k % len(COLORS)],
+                color=color_of[name],
                 lw=2,
                 ls="--",
                 marker="s",
                 ms=5,
                 label=f"Agrawal et al. 2024: {name}",
             )
-            k += 1
         ax.set_xlabel(r"measurement strength $\gamma$")
         ax.set_ylabel(label)
+        if metric == "binder" and metric in refs:
+            # Far from the peak B drops to large negative values (rare
+            # outliers); keep the scale of the reference curves.
+            low = min(float(np.min(y)) for _, y in refs[metric].values())
+            ax.set_ylim(1.5 * low, 1.0)
         ax.grid(alpha=0.25, lw=0.5)
         ax.spines[["top", "right"]].set_visible(False)
     axes[0].legend(frameon=False, fontsize=8)
