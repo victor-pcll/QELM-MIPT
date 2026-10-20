@@ -87,7 +87,7 @@ def test_every_sample_starts_from_the_embedded_state(monkeypatch) -> None:
     cfg = load_config(OVERRIDES)
     rho0 = AncillaChargeSectorEmbedding.from_config(cfg).rho()
     _, propagators, measured = _spy_run(monkeypatch, cfg)
-    steps = 5  # default experiment.nbr_time_evolution
+    steps = 5  # default projective_measurement.nbr_time_evolution
     assert len(propagators) == L and len(measured) == L * steps
     # The first measurement of sample i sees U_i rho0 U_i^dagger.
     for (_, U), rho in zip(propagators, measured[::steps], strict=True):
@@ -99,7 +99,9 @@ def test_record_has_one_row_per_measurement_step(monkeypatch) -> None:
     of t / nbr_time_evolution, not one measurement copied N - 1 times
     (issue #102)."""
     steps = 2
-    cfg = load_config([*OVERRIDES, f"experiment.nbr_time_evolution={steps}"])
+    cfg = load_config(
+        [*OVERRIDES, f"projective_measurement.nbr_time_evolution={steps}"]
+    )
     out, propagators, measured = _spy_run(monkeypatch, cfg)
     assert out["M"].shape == (L, steps, N - 1)
     assert out["X"].shape == (L, steps * (N - 1) + 1)
@@ -203,7 +205,9 @@ def test_bash_launcher_dry_run(tmp_path: Path) -> None:
 
 def test_nbr_time_evolution_must_be_positive() -> None:
     with pytest.raises(ValueError, match="nbr_time_evolution must be >= 1"):
-        _load_script().run(load_config([*OVERRIDES, "experiment.nbr_time_evolution=0"]))
+        _load_script().run(
+            load_config([*OVERRIDES, "projective_measurement.nbr_time_evolution=0"])
+        )
 
 
 @pytest.mark.parametrize("n_qubits", [3, 4, 5])
@@ -211,16 +215,29 @@ def test_nbr_time_evolution_defaults_to_5_whatever_n(n_qubits: int) -> None:
     """The number of time-evolution steps is 5 by default, for every N: it
     no longer follows Ns = N - Nr (issue #123)."""
     cfg = load_config(["models=TFIM", f"N={n_qubits}", "samples.L=4"])
-    assert cfg.experiment.nbr_time_evolution == 5
+    assert cfg.projective_measurement.nbr_time_evolution == 5
     out = _load_script().run(cfg)
     assert out["M"].shape == (4, 5, n_qubits - 1)
 
 
-def test_old_n_measurements_key_is_rejected() -> None:
-    """A config still using the old name fails loudly instead of being
-    silently ignored (issue #123)."""
-    with pytest.raises(ValueError, match="renamed experiment.nbr_time_evolution"):
-        _load_script().run(load_config([*OVERRIDES, "+experiment.n_measurements=2"]))
+def test_nbr_time_evolution_lives_in_the_measurement_block() -> None:
+    """The step count sits with the projective measurement it schedules, in
+    conf/training/measurements/projective.yaml, and no longer in an
+    experiment block of conf/config.yaml (issue #132)."""
+    cfg = load_config(OVERRIDES)
+    assert "experiment" not in cfg
+    assert cfg.projective_measurement.nbr_time_evolution == 5
+
+
+@pytest.mark.parametrize(
+    "old_key", ["experiment.n_measurements", "experiment.nbr_time_evolution"]
+)
+def test_old_step_count_keys_are_rejected(old_key: str) -> None:
+    """A config still using an old key fails loudly instead of being
+    silently ignored (issues #123, #132)."""
+    match = "moved to projective_measurement.nbr_time_evolution"
+    with pytest.raises(ValueError, match=match):
+        _load_script().run(load_config([*OVERRIDES, f"+{old_key}=2"]))
 
 
 def _binary_entropy(q: np.ndarray) -> np.ndarray:
