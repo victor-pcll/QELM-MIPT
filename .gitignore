@@ -46,6 +46,8 @@ experiments/scratch/*
 *.npz
 *.dat
 *.csv
+# Small reference curves digitized from papers, committed on purpose.
+!experiments/*/reference/*.csv
 *.parquet
 *.pkl
 

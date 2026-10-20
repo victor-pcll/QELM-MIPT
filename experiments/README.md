@@ -78,6 +78,51 @@ for the whole sweep (`QELM.utils.run_with_progress`), reads the run folders
 back with `QELM.utils.load_sweep` and plots R2 and NMSE against `p`, averaged
 over the seeds with the standard error as error bars.
 
+## Run the charge-sharpening benchmark (issue #137)
+
+```bash
+./experiments/charge_sharpening/charge_sharpening.sh
+```
+
+A test of the library on a published result: it reproduces Fig. 7 of
+Agrawal et al., "Observing quantum measurement collapse as a learnability
+phase transition", PRX 14, 041012 (2024), at the paper's `L = 6` system
+qubits, i.e. `N = 7` here (the ancilla `R` is one of the `N` qubits). The
+config is `conf/charge_sharpening.yaml`, which composes `conf/config.yaml`
+and changes:
+
+- the initial state, Eq. (B1): `(|0>_R |010101> + |1>_R |010100>) / sqrt(2)`
+  (`ancilla_charge_sector.initial=product`), scrambled by 5 all-to-all
+  layers of random U(1) gates;
+- the dynamics: `U1_circuit.depth = Ns / 2 = 3` brickwork layers of random
+  charge-conserving gates (`QELM.models.circuits`), open boundaries, one
+  fixed circuit instance per seed (`U1_circuit.fixed_instance=true`);
+- the measurement: after each layer, every system qubit is measured weakly
+  with strength `weak_measurement.gamma` (`QELM.training.measurements.weak`),
+  `gamma = 0` learning nothing and `gamma = 1` being projective.
+
+Each run computes the ancilla entropy `S_R` (bits) of `samples.L = 10000`
+trajectories and its mean, variance and Binder ratio
+`B = 1 - mu_4 / (3 mu_2**2)` (`QELM.evaluation.charge_sharpening`), with
+bootstrap errors. The launcher sweeps `GAMMA_VALUES` (default
+`0.0 0.1 ... 1.0`), `SEEDS` (default `0`) and `N_VALUES` (default `7`):
+
+```bash
+SEEDS="0 1 2 3 4" L=10000 ./experiments/charge_sharpening/charge_sharpening.sh
+```
+
+Each run lands in `outputs/charge_sharpening/<date_time>/N<N>_seed<seed>_g<gamma>/`
+with `charge_sharpening.npz` (`S_R`, the click record `M`), `metrics.json` and
+`.hydra/config.yaml`. At the end, `plot_charge_sharpening.py` draws the three
+panels of Fig. 7 in `charge_sharpening.png`, over the curves digitized from
+the paper in `experiments/charge_sharpening/reference/` (see the README there),
+and writes the deviation at the reference points to `comparison.json`.
+
+Two exact limits are checked by the tests: `S_R = 1` in every trajectory at
+`gamma = 0` (gates on the system cannot change the ancilla's entropy) and
+`S_R = 0` at `gamma = 1` (a projective record of every qubit reveals the
+charge).
+
 ## Write your own
 
 1. Copy the test script and make the copy executable:
