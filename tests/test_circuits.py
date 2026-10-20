@@ -118,7 +118,15 @@ def test_brickwork_bonds_open_and_periodic() -> None:
     periodic = U1BrickworkCircuit({**params, "boundary": "periodic"})
     assert periodic.bonds(1) == [(2, 3), (4, 5), (6, 1)]
     assert periodic.bonds(2) == [(1, 2), (3, 4), (5, 6)]
-    assert [len(layer) for layer in circuit.layers] == [3, 2]
+    # One layer is a full period: the even half-layer, then the odd one.
+    assert [(i, j) for i, j, _ in circuit.layers[0]] == [
+        (1, 2),
+        (3, 4),
+        (5, 6),
+        (2, 3),
+        (4, 5),
+    ]
+    assert [len(layer) for layer in circuit.layers] == [5, 5]
 
 
 def test_scrambling_pairs_are_disjoint_system_qubits() -> None:

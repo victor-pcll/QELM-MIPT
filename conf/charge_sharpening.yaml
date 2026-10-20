@@ -20,8 +20,10 @@ ancilla_charge_sector:
   initial: product
 
 # Brickwork of random U(1) gates on the system qubits (QELM.models.circuits).
-# depth: number of brickwork layers t, each followed by a weak measurement of
-#   every system qubit; the paper uses t = L / 2 = Ns / 2.
+# depth: number of brickwork layers t, the paper's t = L / 2 = Ns / 2. One layer
+#   is a full period of the brickwork (even then odd half-layer). Every system
+#   qubit is weakly measured between two layers (t - 1 rounds), see
+#   charge_sharpening.measure_after_last_layer.
 # scrambling_layers: all-to-all random U(1) layers applied once to the initial
 #   state, before the monitored dynamics (5 in the paper).
 # boundary: open (a chain of trapped ions) or periodic.
@@ -44,7 +46,11 @@ samples:
   L: 10000
 
 charge_sharpening:
+  # false: measure between layers only (t - 1 rounds), which matches the
+  # digitized Fig. 7; true: also measure after the last layer (t rounds).
+  measure_after_last_layer: false
   # Bootstrap resamples for the error bars of the variance and the Binder ratio.
   n_boot: 200
-  # Logarithm base of S_R: 2 for bits (S_R <= 1), e for nats (S_R <= ln 2).
-  entropy_base: 2
+  # Logarithm base of S_R: e for nats (S_R <= ln 2), as in the paper's Fig. 7;
+  # 2 for bits (S_R <= 1).
+  entropy_base: 2.718281828459045

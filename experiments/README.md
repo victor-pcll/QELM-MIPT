@@ -95,13 +95,20 @@ and changes:
   (`ancilla_charge_sector.initial=product`), scrambled by 5 all-to-all
   layers of random U(1) gates;
 - the dynamics: `U1_circuit.depth = Ns / 2 = 3` brickwork layers of random
-  charge-conserving gates (`QELM.models.circuits`), open boundaries, one
-  fixed circuit instance per seed (`U1_circuit.fixed_instance=true`);
-- the measurement: after each layer, every system qubit is measured weakly
-  with strength `weak_measurement.gamma` (`QELM.training.measurements.weak`),
-  `gamma = 0` learning nothing and `gamma = 1` being projective.
+  charge-conserving gates (`QELM.models.circuits`), each a full period of
+  the brickwork (even then odd bonds), open boundaries, one fixed circuit
+  instance per seed (`U1_circuit.fixed_instance=true`);
+- the measurement: between two layers (`t - 1 = 2` rounds), every system
+  qubit is measured weakly with strength `weak_measurement.gamma`
+  (`QELM.training.measurements.weak`), `gamma = 0` learning nothing and
+  `gamma = 1` being projective.
 
-Each run computes the ancilla entropy `S_R` (bits) of `samples.L = 10000`
+The paper does not spell out the timing of the layers and measurements;
+this one was chosen against the digitized curves, which it matches within
+about 0.01 nats for `S_R` (measuring after every layer, or taking a layer as
+half a brickwork period, sharpens the charge about 0.1 too early in `gamma`).
+
+Each run computes the ancilla entropy `S_R` (nats, as in the paper) of `samples.L = 10000`
 trajectories and its mean, variance and Binder ratio
 `B = 1 - mu_4 / (3 mu_2**2)` (`QELM.evaluation.charge_sharpening`), with
 bootstrap errors. The launcher sweeps `GAMMA_VALUES` (default

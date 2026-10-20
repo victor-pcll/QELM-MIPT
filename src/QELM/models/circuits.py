@@ -16,11 +16,13 @@ on ``U(2)``; here ``U_2`` is drawn directly from the Haar measure.
 Gates act on the ``Ns`` system qubits ``Nr .. N-1`` only, never on the
 ``Nr`` ancillas at the start of the chain. Two kinds of layers are used:
 
-- brickwork layers: layer ``t`` couples the neighbour pairs
-  ``(s_0, s_1), (s_2, s_3), ...`` when ``t`` is even and
-  ``(s_1, s_2), (s_3, s_4), ...`` when ``t`` is odd, with open boundaries
-  by default (``boundary="periodic"`` adds the pair ``(s_{Ns-1}, s_0)`` to
-  the odd layers when ``Ns`` is even);
+- brickwork layers: each layer is one full period of the brickwork, an even
+  half-layer on the pairs ``(s_0, s_1), (s_2, s_3), ...`` followed by an odd
+  half-layer on ``(s_1, s_2), (s_3, s_4), ...``, so that every bond gets a
+  gate once per layer. Boundaries are open by default
+  (``boundary="periodic"`` adds the pair ``(s_{Ns-1}, s_0)`` to the odd
+  half-layer when ``Ns`` is even). Taking a layer as a full period is what
+  reproduces the paper's Fig. 7 (issue #137);
 - scrambling layers: the system qubits are shuffled and paired at random,
   all to all, which the paper applies 5 times to the product initial state
   to spread the charge before the monitored dynamics.
@@ -169,7 +171,8 @@ class U1BrickworkCircuit:
         N: Total number of qubits, ancillas included.
         Nr: Number of ancilla qubits at the start of the chain, untouched.
         Ns: Number of system qubits, ``N - Nr``.
-        depth: Number of brickwork layers.
+        depth: Number of brickwork layers, each a full period (even then
+            odd half-layer).
         scrambling_layers: Number of all-to-all scrambling layers.
         boundary: ``"open"`` or ``"periodic"``.
         fixed_instance: ``True`` to keep the same gates for every
@@ -246,20 +249,21 @@ class U1BrickworkCircuit:
             raise TypeError(f"{cls.name} config must be a mapping.")
         return cls({str(key): value for key, value in raw.items()}, rng)
 
-    def bonds(self, t: int) -> list[tuple[int, int]]:
-        """Return the qubit pairs of brickwork layer ``t``.
+    def bonds(self, half: int) -> list[tuple[int, int]]:
+        """Return the qubit pairs of one half-layer of the brickwork.
 
         Args:
-            t: Layer index; even layers start on the first system qubit, odd
-                layers on the second.
+            half: 0 (even) for the half-layer starting on the first system
+                qubit, 1 (odd) for the one starting on the second; only the
+                parity counts.
 
         Returns:
             Disjoint pairs ``(i, i + 1)`` of system qubits, plus the
-            wrap-around pair for an odd layer with periodic boundaries and
-            an even ``Ns``.
+            wrap-around pair for the odd half-layer with periodic boundaries
+            and an even ``Ns``.
         """
         sites = list(range(self.Nr, self.N))
-        start = t % 2
+        start = half % 2
         pairs = [(sites[k], sites[k + 1]) for k in range(start, self.Ns - 1, 2)]
         if self.boundary == "periodic" and start == 1 and self.Ns % 2 == 0:
             pairs.append((sites[-1], sites[0]))
@@ -290,9 +294,10 @@ class U1BrickworkCircuit:
             [(i, j, random_u1_gate(gen)) for i, j in self.scrambling_bonds(gen)]
             for _ in range(self.scrambling_layers)
         ]
+        # One layer = the even half-layer, then the odd one.
         self.layers = [
-            [(i, j, random_u1_gate(gen)) for i, j in self.bonds(t)]
-            for t in range(self.depth)
+            [(i, j, random_u1_gate(gen)) for i, j in self.bonds(0) + self.bonds(1)]
+            for _ in range(self.depth)
         ]
 
     def scramble(self, state: np.ndarray) -> np.ndarray:

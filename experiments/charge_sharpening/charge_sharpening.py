@@ -18,17 +18,28 @@ experiments; only the circuit and the measurement are new.
    drawn once and shared by every trajectory, and the seed selects it;
    with ``false`` every trajectory draws its own.
 3. For each of the ``samples.L`` trajectories, apply ``U1_circuit.depth``
-   brickwork layers (``t = Ns / 2`` by default), each followed by the weak
-   measurement of every system qubit with strength
-   ``weak_measurement.gamma`` (:class:`WeakMeasurement`). The outcomes are
-   drawn with the Born rule, so trajectories come with their weight ``p_m``.
+   brickwork layers (``t = Ns / 2`` by default, each a full period of the
+   brickwork) and weakly measure every system qubit with strength
+   ``weak_measurement.gamma`` (:class:`WeakMeasurement`) between two
+   layers: ``t - 1`` measurement rounds. A last round after the final layer
+   is added with ``charge_sharpening.measure_after_last_layer=true``. The
+   outcomes are drawn with the Born rule, so trajectories come with their
+   weight ``p_m``.
+
+   This timing is not spelled out in the paper. It was chosen against the
+   digitized Fig. 7 (``reference/``): at ``L = 6`` it matches ``S_R`` within
+   about 0.01 nats, while measuring after every layer (one more round)
+   sharpens the charge about 0.1 too early in ``gamma``.
 4. Record the entanglement entropy ``S_R^(m)`` of the ancilla with the system
-   (von Neumann, in bits by default).
+   (von Neumann, in nats as in the paper: ``charge_sharpening.entropy_base``).
 
 The scores are the observables of Fig. 7, from
 :mod:`QELM.evaluation.charge_sharpening`: the mean ``S_R``, the variance
 ``mu_2`` and the Binder ratio ``B = 1 - mu_4 / (3 mu_2**2)``, with bootstrap
-error bars. At ``gamma = 0`` the record holds no information and ``S_R``
+error bars. The Binder ratio is the standard ``1 - mu_4 / (3 mu_2**2)``:
+the digitized curve has the same large negative values away from the peak
+(about ``-10`` at ``gamma = 0.2``), which the printed formula of the paper
+cannot give. At ``gamma = 0`` the record holds no information and ``S_R``
 stays at its scrambled value; as ``gamma`` grows the measurements learn the
 charge and ``S_R`` drops to 0: the charge sharpens.
 
@@ -44,7 +55,7 @@ Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
 
 - ``charge_sharpening.npz``: ``S_R`` (one entropy per trajectory, shape
-  ``(L,)``) and ``M`` (measurement record, shape ``(L, depth, Ns)``, 1 for
+  ``(L,)``) and ``M`` (measurement record, shape ``(L, rounds, Ns)``, 1 for
   a click);
 - ``metrics.json``: ``gamma``, ``S_R_mean``, ``S_R_var``, ``binder``, their
   bootstrap errors ``<name>_err`` and the click rate;
@@ -97,8 +108,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             ``U1_circuit``, ``weak_measurement`` and ``charge_sharpening``.
 
     Returns:
-        ``S_R`` (shape ``(L,)``), ``M`` (shape ``(L, depth, Ns)``) and the
-        scalars of :data:`METRICS`.
+        ``S_R`` (shape ``(L,)``), ``M`` (shape ``(L, rounds, Ns)``, with
+        ``rounds = depth - 1``, or ``depth`` when measuring after the last
+        layer) and the scalars of :data:`METRICS`.
     """
     set_seed(cfg)
     N, Ns, Nr = check_qubit_counts(cfg)
@@ -115,8 +127,11 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     L = int(cfg.samples.L)
     depth = circuit.depth
+    measure_last = bool(cfg.charge_sharpening.measure_after_last_layer)
+    # Layers followed by a measurement round.
+    measured = [t for t in range(depth) if t < depth - 1 or measure_last]
     S_R = np.zeros(L)
-    M = np.zeros((L, depth, Ns))
+    M = np.zeros((L, len(measured), Ns))
     for i in tqdm(range(L)):
         if circuit.fixed_instance:
             psi = psi_scrambled
@@ -125,9 +140,10 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             psi = circuit.scramble(psi0)
         for t in range(depth):
             psi = circuit.apply_layer(psi, t)
-            result = measurement.measure(psi)
-            psi = result.rho
-            M[i, t] = result.outcomes
+            if t in measured:
+                result = measurement.measure(psi)
+                psi = result.rho
+                M[i, t] = result.outcomes
         S_R[i] = von_neumann_entropy(psi, SECTOR_R, base=base)
 
     stats = sharpening_statistics(S_R)

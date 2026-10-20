@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -59,10 +60,12 @@ KEYS = (
 )
 # (metric, reference file stem, axis label), one panel each, as in Fig. 7.
 PANELS = (
-    ("S_R_mean", "agrawal2024_fig7_S_R", r"$S_R$"),
-    ("S_R_var", "agrawal2024_fig7_S_R_var", r"Var $S_R$"),
+    ("S_R_mean", "agrawal2024_fig7_S_R", r"$S_R$ (nats)"),
+    ("S_R_var", "agrawal2024_fig7_S_R_var", r"Var $S_R$ (nats$^2$)"),
     ("binder", "agrawal2024_fig7_binder", r"Binder ratio $B$"),
 )
+# The digitized exports list (value, gamma), not (gamma, value).
+SWAP_XY = True
 # The Binder ratio is drawn only where Var S_R exceeds this: elsewhere S_R
 # has collapsed on 1 (weak gamma) or 0 (strong gamma) and B is dominated by
 # rare outliers (large and negative), which would flatten the panel.
@@ -79,7 +82,10 @@ def load_references(
     for metric, stem, _ in PANELS:
         path = reference_dir / f"{stem}.csv"
         if path.is_file():
-            refs[metric] = load_wpd_csv(path, default_name="Agrawal et al. 2024")
+            # The exports hold (value, gamma) pairs: see reference/README.md.
+            refs[metric] = load_wpd_csv(
+                path, default_name="Agrawal et al. 2024", swap_xy=SWAP_XY
+            )
     return refs
 
 
@@ -148,6 +154,11 @@ def plot_sweep(sweep_dir: Path, reference_dir: Path = REFERENCE_DIR) -> dict[str
             )
             k += 1
             for name, (x_ref, y_ref) in refs.get(metric, {}).items():
+                # Compare to the reference of the same size only, when the
+                # curve name gives one ("L = 6"); our L is Ns = N - 1.
+                size = re.search(r"L\s*=\s*(\d+)", name)
+                if size is not None and int(size.group(1)) != N - 1:
+                    continue
                 stats = compare_to_reference(gamma, mean, x_ref, y_ref)
                 comparison.setdefault(metric, {}).setdefault(f"N{N}", {})[name] = stats
         for name, (x_ref, y_ref) in refs.get(metric, {}).items():

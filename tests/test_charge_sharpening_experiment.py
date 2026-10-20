@@ -78,7 +78,7 @@ def test_config_composes_with_the_paper_parameters() -> None:
 def test_run_shapes_and_ranges() -> None:
     out = _load(SCRIPT).run(_cfg("weak_measurement.gamma=0.4"))
     assert out["S_R"].shape == (40,)
-    assert out["M"].shape == (40, 3, 6)
+    assert out["M"].shape == (40, 2, 6)
     assert np.all((out["S_R"] >= -1e-12) & (out["S_R"] <= 1 + 1e-12))
     assert set(np.unique(out["M"])) <= {0.0, 1.0}
     assert out["gamma"] == 0.4
@@ -87,9 +87,9 @@ def test_run_shapes_and_ranges() -> None:
 
 
 def test_no_measurement_keeps_the_ancilla_maximally_entangled() -> None:
-    """gamma = 0 : rien n'est appris, S_R = 1 bit dans chaque trajectoire."""
+    """gamma = 0 : rien n'est appris, S_R = ln 2 dans chaque trajectoire."""
     out = _load(SCRIPT).run(_cfg("weak_measurement.gamma=0.0"))
-    np.testing.assert_allclose(out["S_R"], 1.0, atol=1e-10)
+    np.testing.assert_allclose(out["S_R"], np.log(2), atol=1e-10)
     assert out["S_R_var"] == pytest.approx(0.0, abs=1e-12)
     assert out["click_rate"] == 0.0
 
@@ -113,14 +113,24 @@ def test_entropy_decreases_with_gamma() -> None:
     assert means[0] > means[1] > means[2]
 
 
-def test_entropy_in_nats() -> None:
+def test_entropy_in_bits() -> None:
     out = _load(SCRIPT).run(
+        _cfg("weak_measurement.gamma=0.0", "charge_sharpening.entropy_base=2")
+    )
+    np.testing.assert_allclose(out["S_R"], 1.0, atol=1e-9)
+
+
+def test_measurement_rounds() -> None:
+    """t - 1 rondes entre les couches, t avec measure_after_last_layer."""
+    run = _load(SCRIPT).run
+    assert run(_cfg("weak_measurement.gamma=0.5"))["M"].shape == (40, 2, 6)
+    out = run(
         _cfg(
-            "weak_measurement.gamma=0.0",
-            "charge_sharpening.entropy_base=2.718281828459045",
+            "weak_measurement.gamma=0.5",
+            "charge_sharpening.measure_after_last_layer=true",
         )
     )
-    np.testing.assert_allclose(out["S_R"], np.log(2), atol=1e-9)
+    assert out["M"].shape == (40, 3, 6)
 
 
 def test_same_seed_same_run_and_fixed_instance_shared_across_gamma() -> None:
@@ -162,11 +172,13 @@ def test_bash_script_and_plot(tmp_path: Path) -> None:
     )
     assert (sweep / "charge_sharpening.png").is_file()
 
-    # Against a fake reference: S_R = 1 - gamma, which our two points match.
+    # Against a fake reference S_R = ln2 (1 - gamma), which our two points
+    # match, written as (value, gamma) like the digitized exports.
     ref = tmp_path / "ref"
     ref.mkdir()
+    ln2 = np.log(2)
     (ref / "agrawal2024_fig7_S_R.csv").write_text(
-        "L=6,\nX,Y\n0.0,1.0\n0.5,0.5\n1.0,0.0\n"
+        f"L=6,\nX,Y\n{ln2},0.0\n{ln2 / 2},0.5\n0.0,1.0\n"
     )
     comparison = _load(PLOT).plot_sweep(sweep, ref)
     stats = comparison["S_R_mean"]["N7"]["L=6"]
