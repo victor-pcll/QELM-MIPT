@@ -55,13 +55,25 @@ and `.hydra/config.yaml`.
 ./experiments/QELM_M/exp_QELM_M.sh
 ```
 
-It runs `experiments/QELM_M/exp_QELM_M.py` for `N=4`, `seed=42`, 12 samples
-and `projective_measurement.p` in `1.0 0.5`. The evolution time is split into
-`experiment.n_measurements` steps (default `N - 1`), and the system qubits are
-measured after each step. The features are this measurement record `M`, of
-shape `(n_measurements, N - 1)` per sample, instead of the observables; an
-unmeasured qubit (`p < 1`) counts as 0.
+It runs `experiments/QELM_M/exp_QELM_M.py` for every combination of
+`N_VALUES` (default `4`), `SEEDS` (default `42`) and `P_VALUES`
+(`projective_measurement.p`, default `0.1 0.3 0.5 0.8 1.0`), with `L=12`
+samples per run by default. Each list is an environment variable:
+
+```bash
+L=500 SEEDS="42 43 44" P_VALUES="0.0 0.2 0.5 1.0" ./experiments/QELM_M/exp_QELM_M.sh
+```
+
+The evolution time is split into `experiment.n_measurements` steps (default
+`Ns = N - Nr`), and the system qubits are measured after each step. The
+features are this measurement record `M`, of shape `(n_measurements, Ns)` per
+sample, instead of the observables; an unmeasured qubit (`p < 1`) counts as 0.
+The target is `<Z_0>` of the ancilla, never measured, at the final time.
 Each run lands in `outputs/exp_QELM_M/<date_time>/N<N>_seed<seed>_p<p>/`.
+
+`notebooks/02_QELM_M_analysis.ipynb` runs this sweep, reads the run folders
+back with `QELM.utils.load_sweep` and plots R2 and NMSE against `p`, averaged
+over the seeds with the standard error as error bars.
 
 ## Write your own
 

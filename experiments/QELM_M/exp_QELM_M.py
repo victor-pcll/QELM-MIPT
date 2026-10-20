@@ -49,7 +49,8 @@ from tqdm import tqdm
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
 from QELM.embedding import AncillaChargeSectorEmbedding
 from QELM.evaluation.metrics import NMSE, R2
-from QELM.training import ProjectiveMeasurement, RidgeReadout, SingleObservable
+from QELM.physics import Z, local_expectation
+from QELM.training import ProjectiveMeasurement, RidgeReadout
 from QELM.utils import save_results
 
 
@@ -78,7 +79,6 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     if n_meas < 1:
         raise ValueError(f"experiment.n_measurements must be >= 1, got {n_meas}.")
     dt = float(cfg.evolution.t) / n_meas
-    Z0 = SingleObservable({"N": N, "observables": ["Z"]}).operators()[0]
     # Every sample starts from the embedded state, not from the collapsed
     # state of the previous sample (issue #101).
     rho0 = sector.rho()
@@ -90,14 +90,20 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     for i in tqdm(range(L)):
         model = TransverseFieldIsingModel.from_config(cfg)
+        # U(dt) once per sample: model.evolve rebuilds exp(-i H dt) v from
+        # products H @ v at every call, which gets slow when ||H|| dt is
+        # large (h = 10 J, dt = t / n_meas), while the n_meas steps of a
+        # sample all use the same U.
+        U = model.propagator(dt=dt)
+        U_dag = U.conj().T
         rho = rho0
         for j in range(n_meas):
-            rho = model.evolve(rho, dt=dt)
+            rho = U @ rho @ U_dag
             measure = P.measure(rho)
             rho = measure.rho
             M[i, j] = measure.outcomes
-        # Full 2**N x 2**N product: costly for large N (issue #95).
-        Y[i] = np.real(np.trace(Z0 @ rho))
+        # <Z_0> on the ancilla from its 2 x 2 reduced state (issue #95).
+        Y[i] = local_expectation(rho, Z, 0)
 
     # Unmeasured qubits (p < 1) have NaN outcomes; the regression needs
     # numbers, so they count as 0, <Z> of a fully mixed qubit (issue #91).
