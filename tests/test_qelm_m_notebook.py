@@ -72,6 +72,15 @@ def test_notebook_runs_the_sweep_and_plots(
         "S_renyi_2_1q_mean",
     ]
     assert namespace["axes"].shape == (len(keys), 2)
+    # The chance levels are drawn on the accuracy plots (#130): the dashed
+    # majority-sign baseline, and 0.5 for the balanced accuracy.
+    acc_ax = namespace["axes"][keys.index("accuracy"), 0]
+    assert any(line.get_linestyle() == "--" for line in acc_ax.lines)
+    bal_ax = namespace["axes"][keys.index("balanced_accuracy"), 0]
+    assert any(
+        line.get_linestyle() == ":" and set(line.get_ydata()) == {0.5}
+        for line in bal_ax.lines
+    )
     for key in keys:
         assert all(np.isfinite(r[f"{key}_sem"]) for r in namespace["table"])
     # p = 1 purifies the ancilla in every run, so the entropy and its error
