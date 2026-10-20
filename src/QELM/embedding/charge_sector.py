@@ -14,6 +14,13 @@ on ``N`` qubits in total: one ancilla and ``Ns = N - 1`` system qubits.
 superposition of the basis states of sector ``Q``. The two sectors are
 orthogonal, so the reduced state of ``R`` is ``I / 2``: the ancilla is
 maximally entangled with the charge of ``S``.
+
+With ``initial: product`` the sector states are the product states of
+Agrawal et al., PRX 14, 041012 (2024), Eq. (B1) (issue #137): the system
+qubits alternate ``|0>, |1>, |0>, |1>, ...`` (charge ``Ns // 2``), and the
+last ``|1>`` is flipped to ``|0>`` for the charge ``Ns // 2 - 1``. For
+``Ns = 6``: ``|010101>`` and ``|010100>``. The paper then scrambles the
+charge with random U(1) gates (:class:`QELM.models.circuits.U1BrickworkCircuit`).
 """
 
 from __future__ import annotations
@@ -45,6 +52,29 @@ def charge_sector_indices(N: int, Q: int) -> np.ndarray:
     indices = np.arange(2**N)
     popcount = np.array([bin(i).count("1") for i in indices])
     return indices[popcount == Q]
+
+
+def product_charge_index(N: int, Q: int) -> int:
+    """Return the basis index of the alternating product state of charge ``Q``.
+
+    The qubits alternate ``0, 1, 0, 1, ...`` from site 0, and only the first
+    ``Q`` sites holding a 1 keep it: ``N = 6, Q = 3`` gives ``|010101>``,
+    ``Q = 2`` gives ``|010100>``.
+
+    Args:
+        N: Number of qubits.
+        Q: Target charge, from 0 to ``N // 2``.
+
+    Returns:
+        Integer in ``[0, 2**N)``; site 0 is the most significant bit.
+
+    Raises:
+        ValueError: If ``Q`` is not in ``[0, N // 2]``.
+    """
+    if not 0 <= Q <= N // 2:
+        raise ValueError(f"Charge Q={Q} is out of range [0, {N // 2}].")
+    ones = list(range(1, N, 2))[:Q]
+    return sum(1 << (N - 1 - site) for site in ones)
 
 
 @overload
@@ -94,6 +124,9 @@ class AncillaChargeSectorEmbedding(Embedding):
     Attributes:
         Q1: Charge paired with ``|0>_R``, ``Ns // 2``.
         Q2: Charge paired with ``|1>_R``, ``Ns // 2 - 1``.
+        initial: ``"uniform"`` (default) for the uniform superposition of
+            each sector, ``"product"`` for the alternating product state of
+            each charge (:func:`product_charge_index`).
     """
 
     name = "ancilla_charge_sector"
@@ -105,16 +138,22 @@ class AncillaChargeSectorEmbedding(Embedding):
         Args:
             params: Parameter names mapped to scalar values. ``N``, the total
                 number of qubits, is required and must be at least 3, so that
-                ``Ns >= 2`` and ``Ns // 2 - 1 >= 0``.
+                ``Ns >= 2`` and ``Ns // 2 - 1 >= 0``. ``initial`` is optional,
+                ``"uniform"`` or ``"product"``.
 
         Raises:
-            ValueError: If ``N < 3``.
+            ValueError: If ``N < 3`` or ``initial`` is unknown.
         """
         super().__init__(params)
         if self.Ns < 2:
             raise ValueError(f"N={self.N} must be at least 3.")
         self.Q1: int = self.Ns // 2
         self.Q2: int = self.Ns // 2 - 1
+        self.initial: str = str(params.get("initial") or "uniform")
+        if self.initial not in ("uniform", "product"):
+            raise ValueError(
+                f"initial must be 'uniform' or 'product', got {self.initial!r}."
+            )
 
     @overload
     def state(
@@ -131,7 +170,8 @@ class AncillaChargeSectorEmbedding(Embedding):
 
         Basis index ``b`` of ``|0>_R |Q1>_S`` stays ``b``; for ``|1>_R |Q2>_S``
         the ancilla bit adds ``2**Ns``. Both branches have amplitude
-        ``1 / sqrt(2 binom(Ns, Q))``.
+        ``1 / sqrt(2 binom(Ns, Q))`` for ``initial="uniform"``, and
+        ``1 / sqrt(2)`` on a single basis state for ``initial="product"``.
 
         Args:
             x: Ignored; the state is fixed.
@@ -142,8 +182,12 @@ class AncillaChargeSectorEmbedding(Embedding):
             Normalized complex state: a CSR column of shape ``(2**N, 1)`` if
             ``sparse``, otherwise a vector of shape ``(2**N,)``.
         """
-        idx1 = charge_sector_indices(self.Ns, self.Q1)
-        idx2 = charge_sector_indices(self.Ns, self.Q2)
+        if self.initial == "product":
+            idx1 = np.array([product_charge_index(self.Ns, self.Q1)])
+            idx2 = np.array([product_charge_index(self.Ns, self.Q2)])
+        else:
+            idx1 = charge_sector_indices(self.Ns, self.Q1)
+            idx2 = charge_sector_indices(self.Ns, self.Q2)
         rows = np.concatenate([idx1, idx2 + 2**self.Ns])
         values = np.concatenate(
             [
