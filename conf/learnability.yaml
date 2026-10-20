@@ -1,0 +1,44 @@
+# Charge learnability of Barratt et al., PRL 129, 200602 (2022), Fig. 2b and
+# 2c (issues #113 and #115). Primary config of
+# experiments/learnability/learnability.py: the main config, with no ancilla
+# and the block below.
+#
+#   uv run python experiments/learnability/learnability.py learnability.p=0.2
+defaults:
+  - config
+  - _self_
+
+# The chain of the paper: L = Ns = N sites, no ancilla (Nr = 0). Eve learns
+# the charge from the measurement record, not from an ancilla.
+N: 6
+Nr: 0
+
+# Number of records per run, half drawn at each charge (40 000 in the paper).
+samples:
+  L: 40000
+
+# Setup of QELM.evaluation.learnability.
+# p: probability of measuring each site after each time step.
+# depth: number of time steps t_f, each a full brickwork period (even then
+#   odd bonds); t_f = L in the paper.
+# charges: the two charges Eve chooses between, null for (L // 2, L // 2 - 1)
+#   as in the paper.
+# boundary: open or periodic (the paper does not say; open by default).
+# measure_every: layer to measure after each layer of the brickwork (2 t_f
+#   rounds), period to measure only after each full step (t_f rounds). The
+#   paper does not say; layer matches the digitized Fig. 2c (issue #115).
+# entropy_base: logarithm base of the binary entropy H(P_corr):
+#   e = 2.718281828459045 for nats, as in Fig. 2c (H = ln 2 at p = 0,
+#   issue #115), 2 for bits.
+# n_boot: bootstrap resamples for the error bars.
+# batch: records simulated at once; memory grows as batch * 2**L.
+learnability:
+  L: ${Ns}
+  p: 0.2
+  depth: ${Ns}
+  charges: null
+  boundary: open
+  measure_every: layer
+  entropy_base: 2.718281828459045
+  n_boot: 200
+  batch: 4000

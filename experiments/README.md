@@ -135,6 +135,72 @@ Two exact limits are checked by the tests: `S_R = 1` in every trajectory at
 `S_R = 0` at `gamma = 1` (a projective record of every qubit reveals the
 charge).
 
+## Run the charge-learnability benchmark (issue #113)
+
+```bash
+./experiments/learnability/learnability.sh
+```
+
+A second test of the library on a published result: Fig. 2b of Barratt,
+Agrawal, Potter, Gopalakrishnan and Vasseur, "Transitions in the learnability
+of global charges from local measurements", PRL 129, 200602 (2022). The
+config is `conf/learnability.yaml`; the simulation is
+`QELM.evaluation.learnability`.
+
+- A chain of `L = N` qubits (no ancilla, `Nr = 0`) starts in the uniform
+  superposition of the bitstrings of charge `Q0 = L // 2` (half of the
+  records) or `Q1 = L // 2 - 1` (the other half).
+- It evolves for `t_f = L` time steps (`learnability.depth`), each a full
+  period of a random U(1) brickwork (`QELM.models.circuits`), with a new
+  circuit for every record. After each layer of the brickwork (so twice per
+  step, `learnability.measure_every=layer`) every site is measured in Z with
+  probability `learnability.p`, by the Born rule. The paper does not say
+  when within a step the sites are measured; this choice matches the
+  digitized Fig. 2c within 0.02 nats, while measuring once per step
+  (`measure_every=period`) learns the charge about twice too slowly in `p`.
+- Eve sees the record but not the gates. Her optimal classifier is the Bayes
+  posterior `P(Q | m)` computed with the Haar-averaged dynamics, a symmetric
+  exclusion process. `P_corr = P(Q* | m)` is the posterior of the true charge.
+- The accuracy of Fig. 2b is `P(P_corr > 1/2)`, a tie counting 1/2 so that
+  a blind guess scores 1/2 (`accuracy_strict` counts it 0). The inset is the
+  Binder ratio `1 - mu_4 / (3 mu_2**2)` of `P_corr`, whose curves for
+  several `L` cross at `p_tails ~ 0.1` in the paper. The same run also writes
+  the mean binary entropy `H(P_corr)` of Fig. 2c (issue #115).
+
+The launcher sweeps `P_VALUES`, `SEEDS` and `N_VALUES` (default `6`) with
+`L = 40000` records per run, as in the paper:
+
+```bash
+N_VALUES="6 8 10" SEEDS="0 1 2" ./experiments/learnability/learnability.sh
+```
+
+Each run lands in `outputs/learnability/<date_time>/N<N>_seed<seed>_p<p>/`
+with `learnability.npz` (`P_corr`, `charge`, the records `outcomes`),
+`metrics.json` and `.hydra/config.yaml`. At the end,
+`plot_learnability.py` draws the accuracy and the Binder ratio against `p`
+in `learnability.png`, over the curves digitized from the paper in
+`experiments/learnability/reference/`, and writes to `comparison.json` the
+deviation at the reference points and the `p` where the Binder curves of
+two sizes cross. `notebooks/03_learnability_accuracy.ipynb` runs the same
+sweep and plots it.
+
+Two exact limits are checked by the tests: at `p = 0` every `P_corr` is 1/2
+and the accuracy is 1/2; at `p = 1` the first record gives the charge and
+the accuracy is 1.
+
+### Fig. 2c: the mean entropy (issue #115)
+
+The same runs give Fig. 2c, the success transition: `plot_learnability.py`
+also draws the mean entropy `E[H(P_corr)]` of the binary distribution
+`{P_corr, 1 - P_corr}` (in nats, as in the paper: `learnability.entropy_base`)
+and, from the inset, the Binder ratio of `H(P_corr)`, whose curves for
+several `L` cross at `p_success ~ 0.2` in the paper. The figure is
+`learnability_fig2c.png` and the comparison `comparison_fig2c.json`, against
+`reference/barratt2022_fig2c_entropy.csv` (`L = 6` and `L = 20`) and
+`reference/barratt2022_fig2c_binder.csv` when present. The mean entropy is
+`ln 2` at `p = 0` (Eve knows nothing) and 0 at `p = 1`.
+`notebooks/04_learnability_entropy.ipynb` runs the sweep and plots Fig. 2c.
+
 ## Write your own
 
 1. Copy the test script and make the copy executable:
