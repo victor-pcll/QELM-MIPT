@@ -1,0 +1,73 @@
+"""QELM.utils.sweep: read back the runs of a sweep (issue #94)."""
+
+from __future__ import annotations
+
+import json
+import math
+from pathlib import Path
+
+import pytest
+from omegaconf import OmegaConf
+
+from QELM.utils import latest_sweep, load_sweep, summarize
+
+
+def _write_run(sweep: Path, name: str, N: int, seed: int, p: float, r2: float) -> None:
+    run = sweep / name
+    (run / ".hydra").mkdir(parents=True)
+    cfg = {
+        "N": N,
+        "seed": seed,
+        "samples": {"L": 10},
+        "projective_measurement": {"p": p},
+    }
+    OmegaConf.save(OmegaConf.create(cfg), run / ".hydra" / "config.yaml")
+    metrics = {"nmse": 1 - r2, "r2": r2, "n_samples": 10}
+    (run / "metrics.json").write_text(json.dumps(metrics))
+
+
+def test_rows_come_from_the_config_not_the_folder_name(tmp_path: Path) -> None:
+    _write_run(tmp_path, "renamed", N=4, seed=1, p=0.5, r2=0.3)
+    (row,) = load_sweep(tmp_path)
+    assert row == {
+        "run": "renamed",
+        "N": 4,
+        "seed": 1,
+        "p": 0.5,
+        "L": 10,
+        "nmse": pytest.approx(0.7),
+        "r2": 0.3,
+        "n_samples": 10,
+    }
+
+
+def test_folders_without_metrics_are_skipped(tmp_path: Path) -> None:
+    _write_run(tmp_path, "a", N=4, seed=1, p=0.5, r2=0.3)
+    (tmp_path / "unfinished").mkdir()
+    assert [r["run"] for r in load_sweep(tmp_path)] == ["a"]
+
+
+def test_empty_sweep_is_an_error(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="metrics.json"):
+        load_sweep(tmp_path)
+
+
+def test_summarize_averages_the_seeds(tmp_path: Path) -> None:
+    for seed, r2 in [(1, 0.2), (2, 0.4), (3, 0.6)]:
+        _write_run(tmp_path, f"N4_s{seed}_p0.5", N=4, seed=seed, p=0.5, r2=r2)
+    _write_run(tmp_path, "N4_s1_p1.0", N=4, seed=1, p=1.0, r2=0.9)
+    first, second = summarize(load_sweep(tmp_path))
+    assert (first["N"], first["p"], first["n_runs"]) == (4, 0.5, 3)
+    assert first["r2_mean"] == pytest.approx(0.4)
+    assert first["r2_std"] == pytest.approx(0.2)
+    assert first["r2_sem"] == pytest.approx(0.2 / math.sqrt(3))
+    assert (second["p"], second["n_runs"]) == (1.0, 1)
+    assert math.isnan(second["r2_std"])  # one run: no spread
+
+
+def test_latest_sweep(tmp_path: Path) -> None:
+    for stamp in ["2026-10-19_23-00-00", "2026-10-20_01-00-00", "2026-10-19_09-00-00"]:
+        (tmp_path / stamp).mkdir()
+    assert latest_sweep(tmp_path).name == "2026-10-20_01-00-00"
+    with pytest.raises(FileNotFoundError):
+        latest_sweep(tmp_path / "2026-10-19_09-00-00")
