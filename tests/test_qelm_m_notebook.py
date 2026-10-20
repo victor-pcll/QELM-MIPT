@@ -18,7 +18,7 @@ NOTEBOOK = REPO_ROOT / "notebooks" / "02_QELM_M_analysis.ipynb"
 
 
 def test_notebook_runs_the_sweep_and_plots(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     matplotlib.use("Agg")
     for key, value in {
@@ -39,6 +39,10 @@ def test_notebook_runs_the_sweep_and_plots(
             exec(compile("".join(cell["source"]), str(NOTEBOOK), "exec"), namespace)
 
     assert Path.cwd() == REPO_ROOT
+    # One bar for the sweep (4 runs), none for the samples of each run.
+    shown = capsys.readouterr().out
+    assert "4/4" in shown
+    assert "10/10" not in shown
     assert len(namespace["rows"]) == 4
     assert [(r["p"], r["n_runs"]) for r in namespace["table"]] == [(0.2, 2), (1.0, 2)]
     assert namespace["figure_path"].is_file()

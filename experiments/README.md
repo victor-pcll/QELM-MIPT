@@ -71,7 +71,8 @@ sample, instead of the observables; an unmeasured qubit (`p < 1`) counts as 0.
 The target is `<Z_0>` of the ancilla, never measured, at the final time.
 Each run lands in `outputs/exp_QELM_M/<date_time>/N<N>_seed<seed>_p<p>/`.
 
-`notebooks/02_QELM_M_analysis.ipynb` runs this sweep, reads the run folders
+`notebooks/02_QELM_M_analysis.ipynb` runs this sweep with one progress bar
+for the whole sweep (`QELM.utils.run_with_progress`), reads the run folders
 back with `QELM.utils.load_sweep` and plots R2 and NMSE against `p`, averaged
 over the seeds with the standard error as error bars.
 
