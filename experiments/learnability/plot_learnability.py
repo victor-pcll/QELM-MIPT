@@ -144,6 +144,7 @@ def plot_sweep(
     reference_dir: Path = REFERENCE_DIR,
     panels: Sequence[tuple[str, str, str]] = PANELS,
     filename: str = "learnability.png",
+    transition: tuple[str, float] | None = (r"$p_{tails}$", P_TAILS),
 ) -> dict[str, Any]:
     """Draw the figure and write ``comparison.json`` in ``sweep_dir``.
 
@@ -153,6 +154,8 @@ def plot_sweep(
             skipped.
         panels: ``(metric, reference stem, label)``, one panel each.
         filename: Name of the figure in ``sweep_dir``.
+        transition: ``(label, p)`` of the paper's transition, drawn as a
+            dotted line on the Binder panels; ``None`` draws none.
 
     Returns:
         The comparison: ``{metric: {L<N>: {curve: deviation stats}}}`` and,
@@ -224,7 +227,9 @@ def plot_sweep(
             comparison.setdefault("binder_crossings", {})[metric] = binder_crossings(
                 summary, metric
             )
-            ax.axvline(P_TAILS, color="gray", ls=":", lw=1, label=r"$p_{tails}$ = 0.1")
+            if transition is not None:
+                name, p_c = transition
+                ax.axvline(p_c, color="gray", ls=":", lw=1, label=f"{name} = {p_c:g}")
         if metric.startswith("accuracy"):
             ax.axhline(0.5, color="gray", ls=":", lw=1)
         ax.set_xlabel(r"measurement probability $p$")
