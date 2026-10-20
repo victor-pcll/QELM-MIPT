@@ -152,6 +152,8 @@ def test_bash_script_and_plot(tmp_path: Path) -> None:
     assert metrics["p"] == 1.0 and metrics["accuracy"] == 1.0
     assert metrics["L"] == 6 and metrics["n_records"] == 40
     assert (sweep / "learnability.png").is_file()
+    assert (sweep / "learnability_fig2c.png").is_file()
+    assert (sweep / "comparison_fig2c.json").is_file()
 
     # Against a fake reference that our two L = 6 points match, and one
     # for another size, which is drawn but not compared.
@@ -170,3 +172,28 @@ def test_bash_script_and_plot(tmp_path: Path) -> None:
     assert stats["max_abs_diff"] == pytest.approx(0.0, abs=1e-12)
     assert "L = 20" not in comparison["accuracy"]["L6"]
     assert "L4-L6" in comparison["binder_crossings"]["P_corr_binder"]
+
+    # Fig. 2c (issue #115): the mean entropy is ln 2 at p = 0 and 0 at
+    # p = 1, which the fake reference says too, exported as (value, p) like
+    # the real one; the Fig. 2b comparison file is left alone.
+    (ref / "barratt2022_fig2c_entropy.csv").write_text(
+        "L = 6,,L = 20,\nX,Y,X,Y\n0.0,1.0,0.0,1.0\n0.6931471805599453,0.0,0.1,0.5\n"
+    )
+    plot = _load(PLOT)
+    panels, transition, filename, comparison_name = plot.FIGURES["2c"]
+    assert transition == (r"$p_{success}$", 0.2)
+    comparison = plot.plot_sweep(
+        sweep,
+        ref,
+        panels,
+        filename,
+        transition=transition,
+        comparison_name=comparison_name,
+    )
+    stats = comparison["entropy_mean"]["L6"]["L = 6"]
+    assert stats["n_points"] == 2
+    assert stats["max_abs_diff"] == pytest.approx(0.0, abs=1e-12)
+    assert "L4-L6" in comparison["binder_crossings"]["entropy_binder"]
+    saved = json.loads((sweep / "comparison_fig2c.json").read_text())
+    assert "entropy_mean" in saved
+    assert "accuracy" in json.loads((sweep / "comparison.json").read_text())
