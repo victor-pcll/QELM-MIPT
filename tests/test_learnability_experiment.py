@@ -119,6 +119,12 @@ def test_curve_crossing() -> None:
     )
 
 
+def test_accuracy_lower_bound() -> None:
+    """Eq. (1) : 1/2 à p = 0, ~0.84 à p = 0.5 (courbe en tirets de la Fig. 2b)."""
+    bound = _load(PLOT).accuracy_lower_bound(np.array([0.0, 0.5]))
+    np.testing.assert_allclose(bound, [0.5, 0.8413], atol=1e-4)
+
+
 def test_bash_script_and_plot(tmp_path: Path) -> None:
     """Le lanceur fait 2 L x 1 seed x 3 p, puis la figure et la comparaison."""
     assert os.access(BASH_SCRIPT, os.X_OK) and os.access(SCRIPT, os.X_OK)
@@ -147,12 +153,16 @@ def test_bash_script_and_plot(tmp_path: Path) -> None:
     assert metrics["L"] == 6 and metrics["n_records"] == 40
     assert (sweep / "learnability.png").is_file()
 
-    # Against a fake reference that our three L = 6 points match, and one
+    # Against a fake reference that our two L = 6 points match, and one
     # for another size, which is drawn but not compared.
     ref = tmp_path / "ref"
     ref.mkdir()
+    # Like the real export, the file holds (value, p) pairs, each value v
+    # digitized on 0..1 and standing for 0.564 + 0.436 v (VALUE_AXIS): v0
+    # stands for our accuracy 0.5 at p = 0, and v = 1 for 1 at p = 1.
+    v0 = (0.5 - 0.564) / 0.436
     (ref / "barratt2022_fig2b_accuracy.csv").write_text(
-        "L = 6,,L = 20,\nX,Y,X,Y\n0.0,0.5,0.0,0.5\n1.0,1.0,0.5,0.9\n"
+        f"L = 6,,L = 20,\nX,Y,X,Y\n{v0},0.0,{v0},0.0\n1.0,1.0,0.9,0.5\n"
     )
     comparison = _load(PLOT).plot_sweep(sweep, ref)
     stats = comparison["accuracy"]["L6"]["L = 6"]

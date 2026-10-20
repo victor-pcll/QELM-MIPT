@@ -42,6 +42,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+from scipy.special import erf  # noqa: E402
 
 from QELM.utils import (  # noqa: E402
     compare_to_reference,
@@ -66,10 +67,19 @@ PANELS: tuple[tuple[str, str, str], ...] = (
 )
 # Transition read off the Binder crossing of the inset of Fig. 2b.
 P_TAILS = 0.1
+# Binder panels show 0 <= p <= BINDER_WINDOW * p_c around the transition.
+BINDER_WINDOW = 2.0
 # True if the exports hold (value, p) pairs instead of (p, value), as for the
 # Fig. 7 curves of issue #137 (see reference/README.md): the Fig. 2b export
 # of issue #113 is one of them.
 SWAP_XY = True
+# Value axes digitized on the wrong scale, as {stem: (low, high)}: the export
+# reads 0 to 1 where the figure's value runs from low to high, so a digitized
+# value v stands for low + (high - low) * v. For the accuracy of Fig. 2b
+# (issue #113), the two ends are read off the figure: every curve starts at
+# 0.59 at p = 0.025 (digitized 0.060 for L = 20) and the L = 20 curve
+# saturates at 1 (digitized 1.000).
+VALUE_AXIS = {"barratt2022_fig2b_accuracy": (0.564, 1.0)}
 # Categorical slots in fixed order: ours first, then the reference curves.
 COLORS = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#6250d6", "#d63a8a")
 
@@ -82,10 +92,32 @@ def load_references(
     for metric, stem, _ in panels:
         path = reference_dir / f"{stem}.csv"
         if path.is_file():
-            refs[metric] = load_wpd_csv(
+            curves = load_wpd_csv(
                 path, default_name="Barratt et al. 2022", swap_xy=SWAP_XY
             )
+            low, high = VALUE_AXIS.get(stem, (0.0, 1.0))
+            refs[metric] = {
+                name: (x, low + (high - low) * y) for name, (x, y) in curves.items()
+            }
     return refs
+
+
+def accuracy_lower_bound(p: np.ndarray, t_f_over_L: float = 1.0) -> np.ndarray:
+    """Return the accuracy lower bound of Eq. (1) of Barratt et al. 2022.
+
+    ``alpha = (1 + erf(sqrt(p t_f / L))) / 2``: the accuracy of a classifier
+    that treats every measured bit as an independent coin, biased by the
+    charge density, for ``Q0 = L / 2`` and ``Q1 = L / 2 - 1``. It is the
+    dashed curve of Fig. 2b, with ``t_f = L``.
+
+    Args:
+        p: Measurement probabilities.
+        t_f_over_L: Ratio ``t_f / L``, 1 in the paper.
+
+    Returns:
+        The bound, of the shape of ``p``.
+    """
+    return np.asarray(0.5 * (1.0 + erf(np.sqrt(np.asarray(p) * t_f_over_L))))
 
 
 def curve_crossing(x: np.ndarray, y_a: np.ndarray, y_b: np.ndarray) -> float | None:
@@ -231,8 +263,30 @@ def plot_sweep(
             if transition is not None:
                 name, p_c = transition
                 ax.axvline(p_c, color="gray", ls=":", lw=1, label=f"{name} = {p_c:g}")
+                # As the insets of Fig. 2: 0 <= p <= 2 p_c. Further out the
+                # Binder ratio plunges to large negative values (rare
+                # outliers) and would flatten the crossing.
+                window = [
+                    r[f"{metric}_mean"]
+                    for r in summary
+                    if r["p"] <= BINDER_WINDOW * p_c
+                    and np.isfinite(r[f"{metric}_mean"])
+                ]
+                if window:
+                    pad = 0.1 * (max(window) - min(window) or 1.0)
+                    ax.set_xlim(0.0, BINDER_WINDOW * p_c)
+                    ax.set_ylim(min(window) - pad, max(window) + pad)
         if metric.startswith("accuracy"):
             ax.axhline(0.5, color="gray", ls=":", lw=1)
+            p_grid = np.linspace(0.0, max(float(r["p"]) for r in summary), 101)
+            ax.plot(
+                p_grid,
+                accuracy_lower_bound(p_grid),
+                color="gray",
+                ls="--",
+                lw=1.5,
+                label="lower bound, Eq. (1)",
+            )
         ax.set_xlabel(r"measurement probability $p$")
         ax.set_ylabel(label)
         ax.grid(alpha=0.25, lw=0.5)
