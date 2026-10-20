@@ -7,7 +7,8 @@ import QELM.training as training
 
 
 def test_physics_only_exposes_primitives() -> None:
-    """Measurements and observables are no longer in physics."""
+    """Measurements and observables are no longer in physics; the partial
+    trace (issue #93) is a primitive and belongs there."""
     assert set(physics.__all__) == {
         "PAULIS",
         "I",
@@ -16,6 +17,7 @@ def test_physics_only_exposes_primitives() -> None:
         "Z",
         "get_site_operator",
         "local_expectation",
+        "partial_trace",
         "qubit_counts",
         "pauli",
     }
