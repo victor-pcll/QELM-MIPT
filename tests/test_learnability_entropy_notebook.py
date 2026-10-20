@@ -27,7 +27,7 @@ def test_notebook_runs_the_sweep_and_plots(
     shows: list[tuple] = []
     monkeypatch.setattr(plt, "show", lambda *args, **kwargs: shows.append(args))
     for key, value in {
-        "L": "20",
+        "N_SAMPLES": "20",
         "N_VALUES": "4 6",
         "SEEDS": "0 1",
         "P_VALUES": "0.0 1.0",
@@ -58,6 +58,6 @@ def test_notebook_runs_the_sweep_and_plots(
         assert r["entropy_mean_mean"] == pytest.approx(expected, abs=1e-9)
     assert namespace["figure_path"].name == "learnability_fig2c.png"
     assert namespace["figure_path"].is_file()
-    assert "L4-L6" in namespace["comparison"]["binder_crossings"]["entropy_binder"]
+    assert "N4-N6" in namespace["comparison"]["binder_crossings"]["entropy_binder"]
     assert len(shows) == 1
     os.chdir(REPO_ROOT)

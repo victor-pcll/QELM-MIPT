@@ -29,6 +29,11 @@ With several sizes it also locates where their Binder curves cross
 (Fig. 2b) and ``comparison_fig2c.json`` (Fig. 2c) in the sweep folder, next
 to the figures.
 
+Notation: ``N`` is the chain length everywhere here, the ``L`` of the paper
+(no ancilla). The paper's curve names (``L = 6``) are read as ``N = 6``, so
+that our curve ``N6`` is compared to the reference ``N = 6``. The number of
+records per run is ``samples.L`` in the config, ``n_records`` here.
+
 Error bars: with one seed, the bootstrap error over records; with several,
 the standard error over seeds.
 
@@ -46,14 +51,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.special import erf
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
-from scipy.special import erf  # noqa: E402
-
-from QELM.utils import (  # noqa: E402
+from QELM.utils import (
     compare_to_reference,
     latest_sweep,
     load_sweep,
@@ -108,6 +110,8 @@ SWAP_XY = True
 # 0.59 at p = 0.025 (digitized 0.060 for L = 20) and the L = 20 curve
 # saturates at 1 (digitized 1.000).
 VALUE_AXIS = {"barratt2022_fig2b_accuracy": (0.564, 1.0)}
+# The paper's chain length "L = 6" in a curve name, renamed to our "N = 6".
+PAPER_SIZE = re.compile(r"\bL\s*=")
 # Categorical slots in fixed order: ours first, then the reference curves.
 COLORS = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#6250d6", "#d63a8a")
 
@@ -115,7 +119,11 @@ COLORS = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#6250d6", "#d63a8a")
 def load_references(
     reference_dir: Path, panels: Sequence[tuple[str, str, str]] = PANELS
 ) -> dict[str, dict[str, tuple[np.ndarray, np.ndarray]]]:
-    """Return ``{metric: {curve name: (p, value)}}`` for the reference files found."""
+    """Return ``{metric: {curve name: (p, value)}}`` for the reference files found.
+
+    The curve names of the exports use the paper's ``L`` for the chain
+    length (``L = 6``); they are renamed to our ``N`` (``N = 6``).
+    """
     refs = {}
     for metric, stem, _ in panels:
         path = reference_dir / f"{stem}.csv"
@@ -125,7 +133,8 @@ def load_references(
             )
             low, high = VALUE_AXIS.get(stem, (0.0, 1.0))
             refs[metric] = {
-                name: (x, low + (high - low) * y) for name, (x, y) in curves.items()
+                PAPER_SIZE.sub("N =", name): (x, low + (high - low) * y)
+                for name, (x, y) in curves.items()
             }
     return refs
 
@@ -185,7 +194,7 @@ def binder_crossings(
         metric: Row key, ``<metric>_mean`` being read.
 
     Returns:
-        ``{"L<a>-L<b>": p of the first crossing, or None}``, on the ``p``
+        ``{"N<a>-N<b>": p of the first crossing, or None}``, on the ``p``
         values that both sizes share.
     """
     sizes = sorted({int(r["N"]) for r in summary})
@@ -194,7 +203,7 @@ def binder_crossings(
         ya = {r["p"]: r[f"{metric}_mean"] for r in summary if int(r["N"]) == a}
         yb = {r["p"]: r[f"{metric}_mean"] for r in summary if int(r["N"]) == b}
         p = np.array(sorted(set(ya) & set(yb)), dtype=float)
-        out[f"L{a}-L{b}"] = curve_crossing(
+        out[f"N{a}-N{b}"] = curve_crossing(
             p, np.array([ya[q] for q in p]), np.array([yb[q] for q in p])
         )
     return out
@@ -221,7 +230,7 @@ def plot_sweep(
         comparison_name: Name of the JSON file of the comparison.
 
     Returns:
-        The comparison: ``{metric: {L<N>: {curve: deviation stats}}}`` and,
+        The comparison: ``{metric: {N<N>: {curve: deviation stats}}}`` and,
         under ``"binder_crossings"``, :func:`binder_crossings` of every
         Binder metric drawn.
     """
@@ -238,7 +247,7 @@ def plot_sweep(
     ref_names = sorted({name for curves in refs.values() for name in curves})
     color_of = {
         key: COLORS[k % len(COLORS)]
-        for k, key in enumerate([*(f"L{N}" for N in sizes), *ref_names])
+        for k, key in enumerate([*(f"N{N}" for N in sizes), *ref_names])
     }
 
     fig, axes = plt.subplots(
@@ -260,21 +269,21 @@ def plot_sweep(
                 p,
                 mean,
                 yerr=err,
-                color=color_of[f"L{N}"],
+                color=color_of[f"N{N}"],
                 lw=2,
                 marker="o",
                 ms=5,
                 capsize=2,
-                label=f"this work, L={N}",
+                label=f"this work, N={N}",
             )
             for name, (x_ref, y_ref) in refs.get(metric, {}).items():
                 # Compare to the reference of the same size only, when the
-                # curve name gives one ("L = 6").
-                size = re.search(r"L\s*=\s*(\d+)", name)
+                # curve name gives one ("N = 6").
+                size = re.search(r"N\s*=\s*(\d+)", name)
                 if size is not None and int(size.group(1)) != N:
                     continue
                 stats = compare_to_reference(p, mean, x_ref, y_ref)
-                comparison.setdefault(metric, {}).setdefault(f"L{N}", {})[name] = stats
+                comparison.setdefault(metric, {}).setdefault(f"N{N}", {})[name] = stats
         for name, (x_ref, y_ref) in refs.get(metric, {}).items():
             ax.plot(
                 x_ref,
@@ -331,6 +340,9 @@ def plot_sweep(
 
 def main() -> None:
     """Parse the command line and plot one sweep."""
+    # No window from the command line: draw to the PNG only. The notebooks
+    # import this module without this, so their figures show inline (#144).
+    plt.switch_backend("Agg")
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument(
         "sweep_dir",
