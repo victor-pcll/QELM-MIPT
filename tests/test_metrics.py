@@ -8,9 +8,9 @@ import numpy as np
 import pytest
 from sklearn.metrics import (
     accuracy_score,
-    balanced_accuracy_score,
     mean_squared_error,
     r2_score,
+    recall_score,
 )
 
 from QELM.evaluation.metrics import (
@@ -147,10 +147,22 @@ def test_accuracy_rejects_bad_shapes() -> None:
         accuracy([1.0, 2.0], [1.0])
 
 
+@pytest.mark.filterwarnings("error")
 @pytest.mark.parametrize(("y_true", "y_pred"), CASES)
 def test_balanced_accuracy_matches_sklearn_on_the_signs(y_true, y_pred) -> None:
-    """Moyenne des rappels des deux signes (#130), comme sklearn."""
-    expected = balanced_accuracy_score(np.asarray(y_true) >= 0, np.asarray(y_pred) >= 0)
+    """Moyenne des rappels des signes présents dans y_true (#130), comme sklearn.
+
+    La référence est le rappel moyen ``recall_score(average="macro")`` sur les
+    classes de y_true, la définition de ``balanced_accuracy_score``. Celle-ci
+    n'a pas de paramètre ``labels`` et émet un UserWarning quand y_true et
+    y_pred n'ont qu'un signe, comme ``[1, 2, 3]`` dans CASES (issue #133).
+    Toute alerte fait échouer ce test.
+    """
+    true_cls = np.asarray(y_true) >= 0
+    pred_cls = np.asarray(y_pred) >= 0
+    expected = recall_score(
+        true_cls, pred_cls, labels=np.unique(true_cls), average="macro"
+    )
     assert balanced_accuracy(y_true, y_pred) == pytest.approx(expected)
 
 
