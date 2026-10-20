@@ -64,9 +64,10 @@ samples per run by default. Each list is an environment variable:
 L=500 SEEDS="42 43 44" P_VALUES="0.0 0.2 0.5 1.0" ./experiments/QELM_M/exp_QELM_M.sh
 ```
 
-The evolution time is split into `experiment.n_measurements` steps (default
-`Ns = N - Nr`), and the system qubits are measured after each step. The
-features are this measurement record `M`, of shape `(n_measurements, Ns)` per
+The evolution time is split into `experiment.nbr_time_evolution` steps
+(default 5, set in `conf/config.yaml`, independent of `N`), and the system
+qubits are measured after each step. The features are this measurement record
+`M`, of shape `(nbr_time_evolution, Ns)` per
 sample, instead of the observables; an unmeasured qubit (`p < 1`) counts as 0.
 The target is `<Z_0>` of the ancilla, never measured, at the final time.
 Each run lands in `outputs/exp_QELM_M/<date_time>/N<N>_seed<seed>_p<p>/`.
