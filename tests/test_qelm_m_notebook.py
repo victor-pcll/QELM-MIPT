@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
@@ -18,10 +19,17 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOK = REPO_ROOT / "notebooks" / "02_QELM_M_analysis.ipynb"
 
 
+# Agg has no window: plt.show() in the notebook warns "FigureCanvasAgg is
+# non-interactive" whenever a display is set (macOS, Linux with DISPLAY).
+# show is replaced by a no-op below, and the warning is an error here so that
+# it cannot come back (#114).
+@pytest.mark.filterwarnings("error:.*FigureCanvasAgg is non-interactive:UserWarning")
 def test_notebook_runs_the_sweep_and_plots(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     matplotlib.use("Agg")
+    shows: list[tuple] = []
+    monkeypatch.setattr(plt, "show", lambda *args, **kwargs: shows.append(args))
     for key, value in {
         "L": "10",
         "N_VALUES": "3",
@@ -73,5 +81,6 @@ def test_notebook_runs_the_sweep_and_plots(
     assert at_p1["S_vN_mean_mean"] == pytest.approx(0.0, abs=1e-9)
     assert at_p1["S_vN_mean_sem"] == pytest.approx(0.0, abs=1e-9)
     assert namespace["figure_path"].is_file()
+    assert len(shows) == 1  # the notebook still asks to show its figure
     assert namespace["figure_path"].parent.parent == tmp_path / "exp_QELM_M"
     os.chdir(REPO_ROOT)

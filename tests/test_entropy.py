@@ -262,6 +262,52 @@ def test_bad_sector_is_rejected() -> None:
         renyi_entropy(BELL, 2, [2])
 
 
+# ---- sector_A omitted: the whole system (issue #116) ----------------------------
+
+
+@pytest.mark.parametrize("N", [1, 3, 4])
+def test_omitted_sector_is_all_qubits(N: int) -> None:
+    rho = _random_rho(N, 30 + N)
+    every = list(range(N))
+    np.testing.assert_allclose(
+        entanglement_spectrum(rho), entanglement_spectrum(rho, every)
+    )
+    np.testing.assert_allclose(
+        entanglement_spectrum(rho),
+        np.sort(np.linalg.eigvalsh(rho))[::-1][: entanglement_spectrum(rho).size],
+    )
+    assert von_neumann_entropy(rho) == pytest.approx(von_neumann_entropy(rho, every))
+    for n in ORDERS:
+        assert renyi_entropy(rho, n) == pytest.approx(renyi_entropy(rho, n, every))
+
+
+@pytest.mark.parametrize("n", ORDERS)
+def test_whole_pure_state_has_zero_entropy(n: float) -> None:
+    psi = _random_state(4, 40)
+    for state in (psi, sp.csr_matrix(psi.reshape(-1, 1)), np.outer(psi, psi.conj())):
+        assert renyi_entropy(state, n) == pytest.approx(0.0, abs=1e-9)
+        assert von_neumann_entropy(state) == pytest.approx(0.0, abs=1e-9)
+    np.testing.assert_allclose(entanglement_spectrum(psi), [1.0])
+
+
+def test_whole_mixed_state_known_values() -> None:
+    # 3 maximally mixed qubits: 3 bits for every order.
+    rho = np.eye(8) / 8
+    for n in ORDERS:
+        assert renyi_entropy(rho, n) == pytest.approx(3.0)
+    # diag(1/2, 1/4, 1/4, 0) on 2 qubits: S_1 = 1.5, S_2 = -log2(3/8).
+    rho = np.diag([0.5, 0.25, 0.25, 0.0])
+    assert von_neumann_entropy(rho) == pytest.approx(1.5)
+    assert renyi_entropy(rho, 2) == pytest.approx(-math.log2(0.375))
+    assert renyi_entropy(rho, 0) == pytest.approx(math.log2(3))
+    assert von_neumann_entropy(sp.csr_matrix(rho)) == pytest.approx(1.5)
+
+
+def test_omitted_sector_still_checks_the_state_shape() -> None:
+    with pytest.raises(ValueError):
+        von_neumann_entropy(np.ones((3, 3)) / 3)
+
+
 def test_ancilla_entropy_of_the_embedding() -> None:
     """The charge-sector embedding entangles the ancilla with S: 1 bit, and
     the ancilla metric of evaluation.metrics is the case A = {0}."""

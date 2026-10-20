@@ -1,7 +1,8 @@
 """Rényi and von Neumann entanglement entropies of a subsystem ``A``.
 
-For a state ``rho`` on ``N`` qubits and a set of qubits ``A`` (``sector_A``),
-with ``rho_A = Tr_B(rho)`` and ``l_i`` the eigenvalues of ``rho_A``:
+For a state ``rho`` on ``N`` qubits and a set of qubits ``A`` (``sector_A``,
+all ``N`` qubits when omitted), with ``rho_A = Tr_B(rho)`` and ``l_i`` the
+eigenvalues of ``rho_A``:
 
 - Rényi entropy of order ``n``: ``S_n = log(sum_i l_i**n) / (1 - n)``;
 - ``n = 0``, Hartley entropy: ``S_0 = log(rank rho_A)``;
@@ -46,7 +47,7 @@ def _check_base(base: float) -> float:
 
 def entanglement_spectrum(
     state: np.ndarray | sp.spmatrix,
-    sector_A: Sequence[int],
+    sector_A: Sequence[int] | None = None,
     eps: float = 1e-12,
 ) -> np.ndarray:
     """Return the eigenvalues of ``rho_A`` above ``eps``, in decreasing order.
@@ -60,7 +61,10 @@ def entanglement_spectrum(
         state: State vector ``(2**N,)``, sparse column ``(2**N, 1)``, or
             density matrix ``(2**N, 2**N)``, dense or sparse.
         sector_A: Qubits of ``A``, distinct, each in ``0 .. N-1``. Empty for
-            ``A = {}``, whose only eigenvalue is ``Tr rho``.
+            ``A = {}``, whose only eigenvalue is ``Tr rho``. ``None``
+            (default) for the whole system, ``A = {0, ..., N-1}``, with
+            ``N`` read from the shape of ``state``: the spectrum is then
+            that of ``rho`` itself (issue #116).
         eps: Eigenvalues ``<= eps`` are dropped, so that rounding noise such
             as ``-1e-16`` never reaches a logarithm.
 
@@ -71,6 +75,8 @@ def entanglement_spectrum(
         ValueError: If the shape of ``state`` or ``sector_A`` is invalid.
     """
     N = state_qubits(state)
+    if sector_A is None:
+        sector_A = range(N)
     keep = check_sites(sector_A, N, "sector_A")
     psi = as_vector(state)
     if psi is not None:
@@ -84,7 +90,7 @@ def entanglement_spectrum(
 
 def von_neumann_entropy(
     state: np.ndarray | sp.spmatrix,
-    sector_A: Sequence[int],
+    sector_A: Sequence[int] | None = None,
     base: float = 2.0,
     eps: float = 1e-12,
 ) -> float:
@@ -92,7 +98,8 @@ def von_neumann_entropy(
 
     Args:
         state: See :func:`entanglement_spectrum`.
-        sector_A: Qubits of ``A``.
+        sector_A: Qubits of ``A``; ``None`` (default) for all the qubits,
+            the entropy of the whole state (0 for a pure state).
         base: Logarithm base: 2 for bits (default), ``np.e`` for nats.
         eps: Eigenvalues ``<= eps`` are dropped.
 
@@ -112,7 +119,7 @@ def von_neumann_entropy(
 def renyi_entropy(
     state: np.ndarray | sp.spmatrix,
     n: float,
-    sector_A: Sequence[int],
+    sector_A: Sequence[int] | None = None,
     base: float = 2.0,
     eps: float = 1e-12,
 ) -> float:
@@ -127,7 +134,8 @@ def renyi_entropy(
     Args:
         state: See :func:`entanglement_spectrum`.
         n: Order, a number ``>= 0`` or ``float("inf")``.
-        sector_A: Qubits of ``A``.
+        sector_A: Qubits of ``A``; ``None`` (default) for all the qubits,
+            the entropy of the whole state (0 for a pure state).
         base: Logarithm base: 2 for bits (default), ``np.e`` for nats.
         eps: Eigenvalues ``<= eps`` are dropped.
 

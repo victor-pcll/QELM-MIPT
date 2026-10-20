@@ -36,7 +36,8 @@ def test_all_qubits_measured_at_p_1() -> None:
     """p = 1: every feature is an outcome +-1, plus the bias column."""
     out = _load_script().run(load_config(OVERRIDES))
     features = out["X"][:, :-1]
-    assert out["X"].shape == (L, (N - 1) * (N - 1) + 1)
+    # 5 time-evolution steps (the default) x (N - 1) system qubits.
+    assert out["X"].shape == (L, 5 * (N - 1) + 1)
     np.testing.assert_array_equal(out["X"][:, -1], 1.0)
     assert set(np.unique(features)) <= {-1.0, 1.0}
     assert np.isfinite(out["nmse"]) and np.isfinite(out["r2"])
@@ -86,27 +87,28 @@ def test_every_sample_starts_from_the_embedded_state(monkeypatch) -> None:
     cfg = load_config(OVERRIDES)
     rho0 = AncillaChargeSectorEmbedding.from_config(cfg).rho()
     _, propagators, measured = _spy_run(monkeypatch, cfg)
-    n_meas = N - 1
-    assert len(propagators) == L and len(measured) == L * n_meas
+    steps = 5  # default experiment.nbr_time_evolution
+    assert len(propagators) == L and len(measured) == L * steps
     # The first measurement of sample i sees U_i rho0 U_i^dagger.
-    for (_, U), rho in zip(propagators, measured[::n_meas], strict=True):
+    for (_, U), rho in zip(propagators, measured[::steps], strict=True):
         np.testing.assert_allclose(rho, U @ rho0 @ U.conj().T, atol=1e-12)
 
 
 def test_record_has_one_row_per_measurement_step(monkeypatch) -> None:
-    """M[i] holds n_meas separate measurements, each after a step of
-    t / n_meas, not one measurement copied N - 1 times (issue #102)."""
-    n_meas = 2
-    cfg = load_config([*OVERRIDES, f"+experiment.n_measurements={n_meas}"])
+    """M[i] holds nbr_time_evolution separate measurements, each after a step
+    of t / nbr_time_evolution, not one measurement copied N - 1 times
+    (issue #102)."""
+    steps = 2
+    cfg = load_config([*OVERRIDES, f"experiment.nbr_time_evolution={steps}"])
     out, propagators, measured = _spy_run(monkeypatch, cfg)
-    assert out["M"].shape == (L, n_meas, N - 1)
-    assert out["X"].shape == (L, n_meas * (N - 1) + 1)
+    assert out["M"].shape == (L, steps, N - 1)
+    assert out["X"].shape == (L, steps * (N - 1) + 1)
     np.testing.assert_array_equal(out["X"][:, :-1], out["M"].reshape(L, -1))
-    # One U(t / n_meas) per sample, applied before each of the n_meas
-    # measurements.
-    dt = float(cfg.evolution.t) / n_meas
+    # One U(t / nbr_time_evolution) per sample, applied before each of the
+    # nbr_time_evolution measurements.
+    dt = float(cfg.evolution.t) / steps
     assert [step for step, _ in propagators] == [pytest.approx(dt)] * L
-    assert len(measured) == L * n_meas
+    assert len(measured) == L * steps
     # Evolution between the measurements changes the outcomes for some samples.
     assert np.any(out["M"][:, 0] != out["M"][:, 1])
 
@@ -193,15 +195,32 @@ def test_bash_launcher_dry_run(tmp_path: Path) -> None:
         assert expected_keys <= set(metrics)
         assert (run / "exp_QELM_M.npz").is_file()
         with np.load(run / "exp_QELM_M.npz") as data:
-            assert data["X"].shape == (10, 2 * 2 + 1)
+            assert data["X"].shape == (10, 5 * 2 + 1)
             for name in _load_script().ENTROPIES:
                 assert data[name].shape == (10,)
                 assert metrics[f"{name}_mean"] == pytest.approx(np.mean(data[name]))
 
 
-def test_n_measurements_must_be_positive() -> None:
-    with pytest.raises(ValueError, match="n_measurements"):
-        _load_script().run(load_config([*OVERRIDES, "+experiment.n_measurements=0"]))
+def test_nbr_time_evolution_must_be_positive() -> None:
+    with pytest.raises(ValueError, match="nbr_time_evolution must be >= 1"):
+        _load_script().run(load_config([*OVERRIDES, "experiment.nbr_time_evolution=0"]))
+
+
+@pytest.mark.parametrize("n_qubits", [3, 4, 5])
+def test_nbr_time_evolution_defaults_to_5_whatever_n(n_qubits: int) -> None:
+    """The number of time-evolution steps is 5 by default, for every N: it
+    no longer follows Ns = N - Nr (issue #123)."""
+    cfg = load_config(["models=TFIM", f"N={n_qubits}", "samples.L=4"])
+    assert cfg.experiment.nbr_time_evolution == 5
+    out = _load_script().run(cfg)
+    assert out["M"].shape == (4, 5, n_qubits - 1)
+
+
+def test_old_n_measurements_key_is_rejected() -> None:
+    """A config still using the old name fails loudly instead of being
+    silently ignored (issue #123)."""
+    with pytest.raises(ValueError, match="renamed experiment.nbr_time_evolution"):
+        _load_script().run(load_config([*OVERRIDES, "+experiment.n_measurements=2"]))
 
 
 def _binary_entropy(q: np.ndarray) -> np.ndarray:

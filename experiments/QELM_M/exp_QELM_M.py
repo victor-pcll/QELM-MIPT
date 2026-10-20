@@ -6,14 +6,15 @@ For each sample ``i`` (``samples.L`` in total):
 1. Draw a new TFIM (new disorder ``J_ij``) and start from the state of
    :class:`AncillaChargeSectorEmbedding`: the ancilla ``R`` (qubit 0)
    entangled with the charge of the ``N - 1`` system qubits.
-2. Split the total time ``evolution.t`` into ``n_meas`` steps of
-   ``t / n_meas`` (``experiment.n_measurements``, default ``Ns``). After
+2. Split the total time ``evolution.t`` into ``nbr_time_evolution`` steps
+   of ``t / nbr_time_evolution`` (``experiment.nbr_time_evolution``,
+   default 5, independent of the qubit counts, issue #123). After
    each step, measure the system qubits with
    :class:`ProjectiveMeasurement` (each with probability
    ``projective_measurement.p``) and keep the collapsed state: row ``j`` of
    ``M[i]`` is the record of the ``j``-th measurement (issue #102).
 3. The features ``X[i]`` are the flattened record ``M[i]`` of shape
-   ``(n_meas, Ns)``, an unmeasured qubit counting as 0 (issue #91); the
+   ``(nbr_time_evolution, Ns)``, an unmeasured qubit counting as 0 (issue #91); the
    target ``Y[i]`` is ``<Z_0>`` on the ancilla in the final state.
 
 4. The entanglement entropy of the ancilla with the system in the final
@@ -128,11 +129,11 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         cfg: Composed config (``load_config`` or Hydra). Reads
             ``evolution.t``, ``samples.L``, ``samples.train_size``, the TFIM,
             embedding, measurement and training blocks, and the optional
-            ``experiment.n_measurements`` (default ``Ns = N - Nr``).
+            ``experiment.nbr_time_evolution`` (default 5).
 
     Returns:
         The arrays and metrics of the run: ``M`` (record of shape
-        ``(L, n_meas, Ns)``, ``NaN`` for an unmeasured qubit), ``X`` (with
+        ``(L, nbr_time_evolution, Ns)``, ``NaN`` for an unmeasured qubit), ``X`` (with
         the bias column), ``Y``, ``y_test``, ``y_pred``, ``W``, ``nmse``,
         ``r2``, ``accuracy``, ``accuracy_baseline``, ``balanced_accuracy``,
         the entropies of :data:`ENTROPIES` (bits, one
@@ -145,17 +146,28 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     # Qubit counts from the config, not from the model or the embedding
     # (issue #88): N in total, Ns system qubits, Nr ancillas.
     N, Ns, Nr = check_qubit_counts(cfg)
-    n_meas = int(OmegaConf.select(cfg, "experiment.n_measurements", default=Ns))
-    if n_meas < 1:
-        raise ValueError(f"experiment.n_measurements must be >= 1, got {n_meas}.")
-    dt = float(cfg.evolution.t) / n_meas
+    # The number of time-evolution steps is its own parameter, not tied to
+    # N, Ns or Nr (issue #123).
+    if OmegaConf.select(cfg, "experiment.n_measurements") is not None:
+        raise ValueError(
+            "experiment.n_measurements was renamed experiment.nbr_time_evolution "
+            "(issue #123)."
+        )
+    nbr_time_evolution = int(
+        OmegaConf.select(cfg, "experiment.nbr_time_evolution", default=5)
+    )
+    if nbr_time_evolution < 1:
+        raise ValueError(
+            f"experiment.nbr_time_evolution must be >= 1, got {nbr_time_evolution}."
+        )
+    dt = float(cfg.evolution.t) / nbr_time_evolution
     # Every sample starts from the embedded state, not from the collapsed
     # state of the previous sample (issue #101).
     rho0 = sector.rho()
     P = ProjectiveMeasurement.from_config(cfg)
 
     L = int(cfg.samples.L)
-    M = np.zeros((L, n_meas, Ns))
+    M = np.zeros((L, nbr_time_evolution, Ns))
     Y = np.zeros(L)
     S = {name: np.zeros(L) for name in ENTROPIES}
     # The system sector: every qubit but the Nr ancillas.
@@ -165,12 +177,12 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         model = TransverseFieldIsingModel.from_config(cfg)
         # U(dt) once per sample: model.evolve rebuilds exp(-i H dt) v from
         # products H @ v at every call, which gets slow when ||H|| dt is
-        # large (h = 10 J, dt = t / n_meas), while the n_meas steps of a
-        # sample all use the same U.
+        # large (h = 10 J, dt = t / nbr_time_evolution), while the
+        # nbr_time_evolution steps of a sample all use the same U.
         U = model.propagator(dt=dt)
         U_dag = U.conj().T
         rho = rho0
-        for j in range(n_meas):
+        for j in range(nbr_time_evolution):
             rho = U @ rho @ U_dag
             measure = P.measure(rho)
             rho = measure.rho
