@@ -30,6 +30,14 @@ def test_several_datasets_with_header_and_ragged_columns(tmp_path: Path) -> None
     np.testing.assert_allclose(curves["L=10"][1], [0.9, 0.3, 0.0])
 
 
+def test_swap_xy(tmp_path: Path) -> None:
+    path = tmp_path / "swapped.csv"
+    path.write_text("A,\nX,Y\n0.6,0.1\n0.2,0.5\n")
+    x, y = load_wpd_csv(path, swap_xy=True)["A"]
+    np.testing.assert_allclose(x, [0.1, 0.5])
+    np.testing.assert_allclose(y, [0.6, 0.2])
+
+
 def test_xy_header_only_and_bom(tmp_path: Path) -> None:
     path = tmp_path / "xy.csv"
     path.write_text("﻿X,Y\n1e-1,2E-1\n")
@@ -55,3 +63,5 @@ def test_compare_to_reference() -> None:
     assert stats["mean_diff"] == pytest.approx(-0.05)
     empty = compare_to_reference(x, y, np.array([3.0]), np.array([0.0]))
     assert empty["n_points"] == 0 and np.isnan(empty["rms_diff"])
+    none = compare_to_reference(np.array([]), np.array([]), x, y)
+    assert none["n_points"] == 0 and np.isnan(none["max_abs_diff"])

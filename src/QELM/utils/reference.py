@@ -30,7 +30,7 @@ def _is_number(cell: str) -> bool:
 
 
 def load_wpd_csv(
-    path: str | Path, default_name: str = "dataset"
+    path: str | Path, default_name: str = "dataset", swap_xy: bool = False
 ) -> dict[str, tuple[np.ndarray, np.ndarray]]:
     """Return the curves of a WebPlotDigitizer CSV export.
 
@@ -39,6 +39,9 @@ def load_wpd_csv(
         default_name: Name of the curves when the file has no header row;
             with several column pairs and no header they are numbered
             ``<default_name>_0``, ``<default_name>_1``, ...
+        swap_xy: ``True`` when the file holds ``(y, x)`` pairs, as when the
+            axes were calibrated the other way round in WebPlotDigitizer;
+            the columns are swapped before sorting.
 
     Returns:
         ``{name: (x, y)}``, with ``x`` sorted in increasing order and ``y``
@@ -78,7 +81,8 @@ def load_wpd_csv(
         for row in rows:
             cells = row[2 * k : 2 * k + 2]
             if len(cells) == 2 and cells[0] and cells[1]:
-                points.append((float(cells[0]), float(cells[1])))
+                x, y = float(cells[0]), float(cells[1])
+                points.append((y, x) if swap_xy else (x, y))
         if not points:
             continue
         xy = np.array(sorted(points), dtype=float)
@@ -107,11 +111,14 @@ def compare_to_reference(
     Returns:
         ``n_points`` (references inside our range), ``max_abs_diff``,
         ``rms_diff`` and ``mean_diff`` (signed bias); ``nan`` when no
-        reference point falls inside our range.
+        reference point falls inside our range or our curve is empty.
     """
     order = np.argsort(x)
     xs, ys = np.asarray(x, dtype=float)[order], np.asarray(y, dtype=float)[order]
     x_ref = np.asarray(x_ref, dtype=float)
+    if xs.size == 0:
+        nan = float("nan")
+        return {"n_points": 0, "max_abs_diff": nan, "rms_diff": nan, "mean_diff": nan}
     inside = (x_ref >= xs[0]) & (x_ref <= xs[-1])
     if not np.any(inside):
         nan = float("nan")
