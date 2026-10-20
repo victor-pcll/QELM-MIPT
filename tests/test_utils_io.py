@@ -53,6 +53,22 @@ def test_features_key_and_multi_axis_features(tmp_path: Path) -> None:
     assert metrics["n_samples"] == 10 and metrics["n_features"] == 6
 
 
+def test_extra_metrics_are_written(tmp_path: Path) -> None:
+    """exp_QELM_M adds the mean ancilla entropies to metrics.json."""
+    results = {**_results(), "S_vN_mean": np.float64(0.5), "S_renyi_1_mean": 0.5}
+    save_results(
+        results, tmp_path, "exp", extra_metrics=["S_vN_mean", "S_renyi_1_mean"]
+    )
+    metrics = json.loads((tmp_path / "metrics.json").read_text())
+    assert metrics["S_vN_mean"] == 0.5 and metrics["S_renyi_1_mean"] == 0.5
+    assert {"nmse", "r2", "n_samples", "n_test", "n_features"} <= set(metrics)
+
+
+def test_missing_extra_metric_is_an_error(tmp_path: Path) -> None:
+    with pytest.raises(KeyError, match="S_vN_mean"):
+        save_results(_results(), tmp_path, "exp", extra_metrics=["S_vN_mean"])
+
+
 @pytest.mark.parametrize("name", ["", "exp.npz", "sub/exp", "../exp"])
 def test_bad_exp_name_is_rejected(tmp_path: Path, name: str) -> None:
     with pytest.raises(ValueError, match="exp_name"):

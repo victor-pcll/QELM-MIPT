@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +15,7 @@ def save_results(
     out_dir: Path,
     exp_name: str,
     features: str = "X",
+    extra_metrics: Sequence[str] = (),
 ) -> Path:
     """Write the arrays to ``<exp_name>.npz`` and the scores to ``metrics.json``.
 
@@ -30,6 +31,9 @@ def save_results(
             Must be a plain name, without a directory or the ``.npz`` suffix.
         features: Key of the feature array: its first axis counts the
             samples and the product of the other axes the features.
+        extra_metrics: Keys of other scalar entries of ``results`` to copy
+            into ``metrics.json``, after the default ones, so that
+            :func:`QELM.utils.load_sweep` reads them back.
 
     Returns:
         Path of the ``.npz`` file.
@@ -37,6 +41,7 @@ def save_results(
     Raises:
         ValueError: If ``exp_name`` is empty, contains a path separator or
             ends with ``.npz``.
+        KeyError: If a key of ``extra_metrics`` is missing from ``results``.
     """
     if not exp_name or Path(exp_name).name != exp_name or exp_name.endswith(".npz"):
         raise ValueError(
@@ -56,5 +61,7 @@ def save_results(
         "n_test": int(np.asarray(results["y_test"]).shape[0]),
         "n_features": int(np.prod(X.shape[1:])),
     }
+    for key in extra_metrics:
+        metrics[key] = float(results[key])
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
     return npz_path
