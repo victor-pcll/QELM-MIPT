@@ -27,10 +27,23 @@ For each sample ``i`` (``samples.L`` in total):
    entangled with the system: the purification order parameter of the
    measurement-induced phase transition.
 
+5. The system sector ``S`` (the ``Ns`` qubits, ancilla excluded) gets its
+   own entropies in the final state (issue #124): the von Neumann entropy
+   ``S_vN_sys[i]`` and the Rényi entropy of order 2 ``S_renyi_2_sys[i]`` of
+   ``rho_S = Tr_R(rho)``, and the mean over the system qubits ``k`` of the
+   single-qubit entropies ``S(rho_k)``, ``S_vN_1q[i]`` and
+   ``S_renyi_2_1q[i]``. The global state stays pure (unitary steps and
+   projective measurements), so ``S_n(rho_S) = S_n(rho_R)`` for every
+   order: ``S_vN_sys`` repeats ``S_vN``, and ``S_renyi_2_sys`` is the
+   Rényi-2 entropy of the ancilla as well. The single-qubit means are new
+   information: they drop to 0 for the qubits measured at the last step and
+   track how entangled each system qubit is with the rest. All in bits.
+
 A ridge readout (``training`` block) is fitted on the first
 ``samples.train_size`` samples and scored on the rest with NMSE and R2.
 ``RidgeReadout`` fits no intercept, so a constant column of ones is appended
-to the features.
+to the features. Besides NMSE and R2, the readout is scored as a classifier
+of the sign of ``<Z_0>`` (``accuracy``, issue #124).
 
 Run from the repository root:
 
@@ -41,10 +54,11 @@ Everything is written to the Hydra run directory, by default
 
 - ``exp_QELM_M.npz``: ``M`` (measurement record), ``X`` (features, bias
   column included), ``Y``,
-  ``y_test``, ``y_pred``, the weights ``W`` and the entropies ``S_vN`` and
-  ``S_renyi_1`` of shape ``(L,)``;
-- ``metrics.json``: ``nmse``, ``r2``, the shapes used and the sample means
-  ``S_vN_mean`` and ``S_renyi_1_mean``;
+  ``y_test``, ``y_pred``, the weights ``W`` and the entropies ``S_vN``,
+  ``S_renyi_1``, ``S_vN_sys``, ``S_renyi_2_sys``, ``S_vN_1q`` and
+  ``S_renyi_2_1q`` of shape ``(L,)``;
+- ``metrics.json``: ``nmse``, ``r2``, ``accuracy``, the shapes used and the
+  sample mean ``<name>_mean`` of each entropy;
 - ``.hydra/config.yaml``: the full composed config, to reproduce the run.
 """
 
@@ -61,14 +75,27 @@ from tqdm import tqdm
 
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
 from QELM.embedding import AncillaChargeSectorEmbedding
-from QELM.evaluation import renyi_entropy, von_neumann_entropy
-from QELM.evaluation.metrics import NMSE, R2
+from QELM.evaluation import (
+    mean_single_qubit_entropy,
+    renyi_entropy,
+    von_neumann_entropy,
+)
+from QELM.evaluation.metrics import NMSE, R2, accuracy
 from QELM.physics import Z, local_expectation
 from QELM.training import ProjectiveMeasurement, RidgeReadout
 from QELM.utils import save_results
 
+# Per-sample entropies, each saved to the .npz with its mean in metrics.json.
+ENTROPIES = (
+    "S_vN",
+    "S_renyi_1",
+    "S_vN_sys",
+    "S_renyi_2_sys",
+    "S_vN_1q",
+    "S_renyi_2_1q",
+)
 # Scalars written to metrics.json besides nmse and r2.
-ENTROPY_METRICS = ("S_vN_mean", "S_renyi_1_mean")
+EXTRA_METRICS = ("accuracy", *(f"{name}_mean" for name in ENTROPIES))
 # The ancilla R, qubit 0, is the subsystem A of the entropies.
 SECTOR_A = [0]
 
@@ -86,8 +113,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         The arrays and metrics of the run: ``M`` (record of shape
         ``(L, n_meas, Ns)``, ``NaN`` for an unmeasured qubit), ``X`` (with
         the bias column), ``Y``, ``y_test``, ``y_pred``, ``W``, ``nmse``,
-        ``r2``, the ancilla entropies ``S_vN`` and ``S_renyi_1`` (bits, one
-        per sample) and their means ``S_vN_mean`` and ``S_renyi_1_mean``.
+        ``r2``, ``accuracy``, the entropies of :data:`ENTROPIES` (bits, one
+        per sample) and their means ``<name>_mean``.
     """
     set_seed(cfg)
 
@@ -108,8 +135,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     L = int(cfg.samples.L)
     M = np.zeros((L, n_meas, Ns))
     Y = np.zeros(L)
-    S_vN = np.zeros(L)
-    S_renyi_1 = np.zeros(L)
+    S = {name: np.zeros(L) for name in ENTROPIES}
+    # The system sector: every qubit but the Nr ancillas.
+    system = list(range(Nr, N))
 
     for i in tqdm(range(L)):
         model = TransverseFieldIsingModel.from_config(cfg)
@@ -127,8 +155,12 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             M[i, j] = measure.outcomes
         # <Z_0> on the ancilla from its 2 x 2 reduced state (issue #95).
         Y[i] = local_expectation(rho, Z, 0)
-        S_vN[i] = von_neumann_entropy(rho, SECTOR_A)
-        S_renyi_1[i] = renyi_entropy(rho, 1, SECTOR_A)
+        S["S_vN"][i] = von_neumann_entropy(rho, SECTOR_A)
+        S["S_renyi_1"][i] = renyi_entropy(rho, 1, SECTOR_A)
+        S["S_vN_sys"][i] = von_neumann_entropy(rho, system)
+        S["S_renyi_2_sys"][i] = renyi_entropy(rho, 2, system)
+        S["S_vN_1q"][i] = mean_single_qubit_entropy(rho, system)
+        S["S_renyi_2_1q"][i] = mean_single_qubit_entropy(rho, system, n=2)
 
     # Unmeasured qubits (p < 1) have NaN outcomes; the regression needs
     # numbers, so they count as 0, <Z> of a fully mixed qubit (issue #91).
@@ -151,10 +183,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "W": solver.W,
         "nmse": NMSE(y_test, y_pred),
         "r2": R2(y_test, y_pred),
-        "S_vN": S_vN,
-        "S_renyi_1": S_renyi_1,
-        "S_vN_mean": float(np.mean(S_vN)),
-        "S_renyi_1_mean": float(np.mean(S_renyi_1)),
+        "accuracy": accuracy(y_test, y_pred),
+        **S,
+        **{f"{name}_mean": float(np.mean(values)) for name, values in S.items()},
     }
 
 
@@ -167,12 +198,13 @@ def main(cfg: DictConfig) -> None:
     """
     results = run(cfg)
     out_dir = Path(HydraConfig.get().runtime.output_dir)
-    save_results(results, out_dir, Path(__file__).stem, extra_metrics=ENTROPY_METRICS)
+    save_results(results, out_dir, Path(__file__).stem, extra_metrics=EXTRA_METRICS)
     print(f"X: {results['X'].shape}  Y: {results['Y'].shape}")
     print(f"NMSE: {results['nmse']:.6g}")
     print(f"R2: {results['r2']:.6g}")
-    print(f"S_vN (mean, bits): {results['S_vN_mean']:.6g}")
-    print(f"S_renyi_1 (mean, bits): {results['S_renyi_1_mean']:.6g}")
+    print(f"accuracy: {results['accuracy']:.6g}")
+    for name in ENTROPIES:
+        print(f"{name} (mean, bits): {results[f'{name}_mean']:.6g}")
     print(f"Saved to {out_dir}")
 
 

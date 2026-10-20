@@ -9,6 +9,7 @@ from omegaconf import DictConfig
 
 from QELM.evaluation.entropy import (
     entanglement_spectrum,
+    mean_single_qubit_entropy,
     renyi_entropy,
     von_neumann_entropy,
 )
@@ -72,6 +73,7 @@ __all__ = [
     "entanglement_spectrum",
     "evaluate",
     "get_evaluator",
+    "mean_single_qubit_entropy",
     "metric_status",
     "render_plot",
     "renyi_entropy",

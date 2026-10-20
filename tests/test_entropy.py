@@ -16,6 +16,7 @@ from QELM import load_config
 from QELM.embedding import AncillaChargeSectorEmbedding
 from QELM.evaluation import (
     entanglement_spectrum,
+    mean_single_qubit_entropy,
     metrics,
     renyi_entropy,
     von_neumann_entropy,
@@ -273,3 +274,52 @@ def test_ancilla_entropy_of_the_embedding() -> None:
     )
     # Same answer for the complement, since the global state is pure.
     assert von_neumann_entropy(emb.state(), [1, 2, 3, 4]) == pytest.approx(1.0)
+
+
+# ---- mean single-qubit entropy (issue #124) -----------------------------------
+
+
+@pytest.mark.parametrize("n", [1.0, 2.0])
+def test_mean_single_qubit_entropy_is_the_average(n: float) -> None:
+    """The mean of S_n(rho_k) over the listed qubits, for a vector and rho."""
+    psi = _random_state(4, 3)
+    sites = [1, 2, 3]
+    expected = np.mean([renyi_entropy(psi, n, [k]) for k in sites])
+    assert mean_single_qubit_entropy(psi, sites, n=n) == pytest.approx(expected)
+    rho = np.outer(psi, psi.conj())
+    assert mean_single_qubit_entropy(rho, sites, n=n) == pytest.approx(expected)
+    assert mean_single_qubit_entropy(sp.csr_matrix(rho), sites, n=n) == (
+        pytest.approx(expected)
+    )
+
+
+def test_mean_single_qubit_entropy_known_states() -> None:
+    """Product state: 0. GHZ: every qubit maximally mixed, 1 bit each.
+    Bell pair on (0, 1) next to |0> on qubit 2: (1 + 1 + 0) / 3."""
+    assert mean_single_qubit_entropy(_kron(*[np.array([1, 0])] * 3), [0, 1, 2]) == (
+        pytest.approx(0.0, abs=1e-12)
+    )
+    for n in (1.0, 2.0):
+        assert mean_single_qubit_entropy(_ghz(3), [0, 1, 2], n=n) == pytest.approx(1)
+        state = _kron(BELL, np.array([1, 0]))
+        assert mean_single_qubit_entropy(state, [0, 1, 2], n=n) == pytest.approx(2 / 3)
+    assert mean_single_qubit_entropy(_ghz(3), [1], base=np.e) == pytest.approx(
+        math.log(2)
+    )
+
+
+def test_mean_single_qubit_entropy_misses_the_correlations() -> None:
+    """GHZ on 3 qubits: the sector {1, 2} has 1 bit of entropy, but each of
+    its qubits alone has 1 bit too, so the mean is not the sector entropy."""
+    psi = _ghz(3)
+    assert von_neumann_entropy(psi, [1, 2]) == pytest.approx(1.0)
+    assert mean_single_qubit_entropy(psi, [1, 2]) == pytest.approx(1.0)
+    psi = _kron(BELL, BELL)  # pairs (0, 1) and (2, 3)
+    assert von_neumann_entropy(psi, [0, 1]) == pytest.approx(0.0, abs=1e-12)
+    assert mean_single_qubit_entropy(psi, [0, 1]) == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("sites", [[], [3], [0, 0]])
+def test_mean_single_qubit_entropy_bad_sites(sites: list[int]) -> None:
+    with pytest.raises(ValueError, match="sites"):
+        mean_single_qubit_entropy(_ghz(3), sites)

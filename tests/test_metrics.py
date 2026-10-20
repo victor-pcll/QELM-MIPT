@@ -6,9 +6,9 @@ Les valeurs sont comparées à scikit-learn (``mean_squared_error``,
 
 import numpy as np
 import pytest
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.metrics import accuracy_score, mean_squared_error, r2_score
 
-from QELM.evaluation.metrics import MSE, NMSE, R2, _as_pair
+from QELM.evaluation.metrics import MSE, NMSE, R2, _as_pair, accuracy
 
 CASES = [
     ([3, -0.5, 2, 7], [2.5, 0.0, 2, 8]),  # exemple de la doc sklearn
@@ -110,3 +110,25 @@ def test_as_pair_returns_float_arrays() -> None:
 def test_as_pair_rejects_scalars() -> None:
     with pytest.raises(ValueError, match="1-dimensional"):
         _as_pair(1.0, 2.0)
+
+
+@pytest.mark.parametrize(("y_true", "y_pred"), CASES)
+def test_accuracy_matches_sklearn_on_the_signs(y_true, y_pred) -> None:
+    """Classe +1 si y >= 0, -1 sinon, pour la cible et la prédiction (#124)."""
+    expected = accuracy_score(np.asarray(y_true) >= 0, np.asarray(y_pred) >= 0)
+    assert accuracy(y_true, y_pred) == pytest.approx(expected)
+
+
+def test_accuracy_known_values() -> None:
+    y_true = [1.0, -1.0, 1.0, -1.0]
+    assert accuracy(y_true, [0.9, -0.2, -0.1, 0.3]) == 0.5
+    assert accuracy(y_true, y_true) == 1.0
+    assert accuracy(y_true, [-y for y in y_true]) == 0.0
+    # 0 tombe dans la classe +1 ; le seuil se déplace.
+    assert accuracy([0.0, -1e-3], [1.0, -1.0]) == 1.0
+    assert accuracy([0.4, 0.6], [0.6, 0.4], threshold=0.5) == 0.0
+
+
+def test_accuracy_rejects_bad_shapes() -> None:
+    with pytest.raises(ValueError):
+        accuracy([1.0, 2.0], [1.0])

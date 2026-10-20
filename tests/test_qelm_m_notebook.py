@@ -46,11 +46,21 @@ def test_notebook_runs_the_sweep_and_plots(
     assert "10/10" not in shown
     assert len(namespace["rows"]) == 4
     assert [(r["p"], r["n_runs"]) for r in namespace["table"]] == [(0.2, 2), (1.0, 2)]
-    # R2, NMSE and the two ancilla entropies (#119), each with a mean +- error
-    # plot and an error-only plot.
+    # R2, NMSE, the accuracy, the two ancilla entropies (#119) and the system
+    # entropies (#124), each with a mean +- error plot and an error-only plot.
     keys = [key for key, _, _ in namespace["METRICS"]]
-    assert keys == ["r2", "nmse", "S_vN_mean", "S_renyi_1_mean"]
-    assert namespace["axes"].shape == (4, 2)
+    assert keys == [
+        "r2",
+        "nmse",
+        "accuracy",
+        "S_vN_mean",
+        "S_renyi_1_mean",
+        "S_vN_sys_mean",
+        "S_renyi_2_sys_mean",
+        "S_vN_1q_mean",
+        "S_renyi_2_1q_mean",
+    ]
+    assert namespace["axes"].shape == (len(keys), 2)
     for key in keys:
         assert all(np.isfinite(r[f"{key}_sem"]) for r in namespace["table"])
     # p = 1 purifies the ancilla in every run, so the entropy and its error
