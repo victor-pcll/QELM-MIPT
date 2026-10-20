@@ -7,8 +7,9 @@ For each sample ``i`` (``samples.L`` in total):
    :class:`AncillaChargeSectorEmbedding`: the ancilla ``R`` (qubit 0)
    entangled with the charge of the ``N - 1`` system qubits.
 2. Split the total time ``evolution.t`` into ``nbr_time_evolution`` steps
-   of ``t / nbr_time_evolution`` (``experiment.nbr_time_evolution``,
-   default 5, independent of the qubit counts, issue #123). After
+   of ``t / nbr_time_evolution``
+   (``projective_measurement.nbr_time_evolution``, default 5, independent
+   of the qubit counts, issues #123 and #132). After
    each step, measure the system qubits with
    :class:`ProjectiveMeasurement` (each with probability
    ``projective_measurement.p``) and keep the collapsed state: row ``j`` of
@@ -120,6 +121,8 @@ EXTRA_METRICS = (
 )
 # The ancilla R, qubit 0, is the subsystem A of the entropies.
 SECTOR_A = [0]
+# Number of time-evolution steps, each followed by a measurement (issue #132).
+NBR_TIME_EVOLUTION = "projective_measurement.nbr_time_evolution"
 
 
 def run(cfg: DictConfig) -> dict[str, Any]:
@@ -129,7 +132,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         cfg: Composed config (``load_config`` or Hydra). Reads
             ``evolution.t``, ``samples.L``, ``samples.train_size``, the TFIM,
             embedding, measurement and training blocks, and the optional
-            ``experiment.nbr_time_evolution`` (default 5).
+            ``projective_measurement.nbr_time_evolution`` (default 5).
 
     Returns:
         The arrays and metrics of the run: ``M`` (record of shape
@@ -147,18 +150,18 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     # (issue #88): N in total, Ns system qubits, Nr ancillas.
     N, Ns, Nr = check_qubit_counts(cfg)
     # The number of time-evolution steps is its own parameter, not tied to
-    # N, Ns or Nr (issue #123).
-    if OmegaConf.select(cfg, "experiment.n_measurements") is not None:
-        raise ValueError(
-            "experiment.n_measurements was renamed experiment.nbr_time_evolution "
-            "(issue #123)."
-        )
-    nbr_time_evolution = int(
-        OmegaConf.select(cfg, "experiment.nbr_time_evolution", default=5)
-    )
+    # N, Ns or Nr (issue #123). It sets when the system is measured, so it
+    # lives in the measurement block (issue #132). The old keys fail loudly
+    # instead of being silently ignored.
+    for old in ("experiment.n_measurements", "experiment.nbr_time_evolution"):
+        if OmegaConf.select(cfg, old) is not None:
+            raise ValueError(
+                f"{old} was moved to {NBR_TIME_EVOLUTION} (issues #123, #132)."
+            )
+    nbr_time_evolution = int(OmegaConf.select(cfg, NBR_TIME_EVOLUTION, default=5))
     if nbr_time_evolution < 1:
         raise ValueError(
-            f"experiment.nbr_time_evolution must be >= 1, got {nbr_time_evolution}."
+            f"{NBR_TIME_EVOLUTION} must be >= 1, got {nbr_time_evolution}."
         )
     dt = float(cfg.evolution.t) / nbr_time_evolution
     # Every sample starts from the embedded state, not from the collapsed
