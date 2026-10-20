@@ -1,24 +1,33 @@
 #!/usr/bin/env python3
-"""Overlay a learnability sweep on the reference curves of Fig. 2b.
+"""Overlay a learnability sweep on the reference curves of Fig. 2b and 2c.
 
 Reads the run folders written by ``learnability.sh`` (one per ``N``, seed
 and ``p``), averages the observables over the seeds and draws, against the
-measurement probability ``p``, the panels of Fig. 2b of Barratt et al.,
-PRL 129, 200602 (2022): the accuracy of Eve's optimal classifier and, from
-its inset, the Binder ratio of ``P_corr``. The reference curves digitized
-from the paper (issue #113) are read from ``reference/`` next to this script
-when present:
+measurement probability ``p``, two figures after Fig. 2 of Barratt et al.,
+PRL 129, 200602 (2022):
 
-- ``barratt2022_fig2b_accuracy.csv``: accuracy (main panel);
-- ``barratt2022_fig2b_binder.csv``: Binder ratio of ``P_corr`` (inset).
+- Fig. 2b (issue #113), ``learnability.png``: the accuracy of Eve's optimal
+  classifier and, from its inset, the Binder ratio of ``P_corr``;
+- Fig. 2c (issue #115), ``learnability_fig2c.png``: the mean entropy
+  ``E[H(P_corr)]``, order parameter of the success transition, and, from its
+  inset, the Binder ratio of ``H(P_corr)``.
+
+The reference curves digitized from the paper are read from ``reference/``
+next to this script when present:
+
+- ``barratt2022_fig2b_accuracy.csv``: accuracy (Fig. 2b);
+- ``barratt2022_fig2b_binder.csv``: Binder ratio of ``P_corr`` (inset of 2b);
+- ``barratt2022_fig2c_entropy.csv``: mean entropy (Fig. 2c);
+- ``barratt2022_fig2c_binder.csv``: Binder ratio of the entropy (inset of 2c).
 
 Each is a WebPlotDigitizer CSV export (:func:`QELM.utils.load_wpd_csv`).
 For every reference curve of the same size, the script prints the deviation
 of our curve at the reference points (:func:`QELM.utils.compare_to_reference`).
 With several sizes it also locates where their Binder curves cross
-(:func:`binder_crossings`), to compare with the paper's ``p_tails ~ 0.1``.
-Both go to ``comparison.json`` in the sweep folder, next to
-``learnability.png``.
+(:func:`binder_crossings`), to compare with the paper's ``p_tails ~ 0.1``
+(Fig. 2b) and ``p_success ~ 0.2`` (Fig. 2c). Both go to ``comparison.json``
+(Fig. 2b) and ``comparison_fig2c.json`` (Fig. 2c) in the sweep folder, next
+to the figures.
 
 Error bars: with one seed, the bootstrap error over records; with several,
 the standard error over seeds.
@@ -69,6 +78,25 @@ PANELS: tuple[tuple[str, str, str], ...] = (
 P_TAILS = 0.1
 # Binder panels show 0 <= p <= BINDER_WINDOW * p_c around the transition.
 BINDER_WINDOW = 2.0
+# Fig. 2c: the mean entropy, order parameter of the success transition.
+PANELS_2C: tuple[tuple[str, str, str], ...] = (
+    ("entropy_mean", "barratt2022_fig2c_entropy", r"mean entropy $E[H(P_{corr})]$"),
+    ("entropy_binder", "barratt2022_fig2c_binder", "Binder ratio of the entropy"),
+)
+# Transition read off the Binder crossing of the inset of Fig. 2c.
+P_SUCCESS = 0.2
+# Every figure: (panels, (transition label, p), figure, comparison file).
+FIGURES: dict[
+    str, tuple[tuple[tuple[str, str, str], ...], tuple[str, float], str, str]
+] = {
+    "2b": (PANELS, (r"$p_{tails}$", P_TAILS), "learnability.png", "comparison.json"),
+    "2c": (
+        PANELS_2C,
+        (r"$p_{success}$", P_SUCCESS),
+        "learnability_fig2c.png",
+        "comparison_fig2c.json",
+    ),
+}
 # True if the exports hold (value, p) pairs instead of (p, value), as for the
 # Fig. 7 curves of issue #137 (see reference/README.md): the Fig. 2b export
 # of issue #113 is one of them.
@@ -178,8 +206,9 @@ def plot_sweep(
     panels: Sequence[tuple[str, str, str]] = PANELS,
     filename: str = "learnability.png",
     transition: tuple[str, float] | None = (r"$p_{tails}$", P_TAILS),
+    comparison_name: str = "comparison.json",
 ) -> dict[str, Any]:
-    """Draw the figure and write ``comparison.json`` in ``sweep_dir``.
+    """Draw the figure and write the comparison file in ``sweep_dir``.
 
     Args:
         sweep_dir: Folder of one sweep, holding the run folders.
@@ -189,6 +218,7 @@ def plot_sweep(
         filename: Name of the figure in ``sweep_dir``.
         transition: ``(label, p)`` of the paper's transition, drawn as a
             dotted line on the Binder panels; ``None`` draws none.
+        comparison_name: Name of the JSON file of the comparison.
 
     Returns:
         The comparison: ``{metric: {L<N>: {curve: deviation stats}}}`` and,
@@ -295,7 +325,7 @@ def plot_sweep(
     fig.suptitle("Charge learnability, Barratt et al. PRL 129, 200602 (2022), Fig. 2")
     fig.savefig(sweep_dir / filename, dpi=150)
     plt.close(fig)
-    (sweep_dir / "comparison.json").write_text(json.dumps(comparison, indent=2) + "\n")
+    (sweep_dir / comparison_name).write_text(json.dumps(comparison, indent=2) + "\n")
     return comparison
 
 
@@ -311,20 +341,28 @@ def main() -> None:
     parser.add_argument("--reference-dir", type=Path, default=REFERENCE_DIR)
     args = parser.parse_args()
     sweep_dir = args.sweep_dir or latest_sweep(Path("outputs") / "learnability")
-    comparison = plot_sweep(sweep_dir, args.reference_dir)
-    for metric, crossings in comparison.pop("binder_crossings", {}).items():
-        for pair, p in crossings.items():
-            where = "no crossing" if p is None else f"p = {p:.3f}"
-            print(f"{metric} crossing {pair}: {where}")
-    for metric, by_size in comparison.items():
-        for size, curves in by_size.items():
-            for name, stats in curves.items():
-                print(
-                    f"{metric} {size} vs {name}: max |diff| = "
-                    f"{stats['max_abs_diff']:.3g}, rms = {stats['rms_diff']:.3g} "
-                    f"({stats['n_points']} points)"
-                )
-    print(f"Figure: {sweep_dir / 'learnability.png'}")
+    for panels, transition, filename, comparison_name in FIGURES.values():
+        comparison = plot_sweep(
+            sweep_dir,
+            args.reference_dir,
+            panels,
+            filename,
+            transition=transition,
+            comparison_name=comparison_name,
+        )
+        for metric, crossings in comparison.pop("binder_crossings", {}).items():
+            for pair, p in crossings.items():
+                where = "no crossing" if p is None else f"p = {p:.3f}"
+                print(f"{metric} crossing {pair}: {where}")
+        for metric, by_size in comparison.items():
+            for size, curves in by_size.items():
+                for name, stats in curves.items():
+                    print(
+                        f"{metric} {size} vs {name}: max |diff| = "
+                        f"{stats['max_abs_diff']:.3g}, "
+                        f"rms = {stats['rms_diff']:.3g} ({stats['n_points']} points)"
+                    )
+        print(f"Figure: {sweep_dir / filename}")
 
 
 if __name__ == "__main__":

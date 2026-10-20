@@ -183,6 +183,19 @@ Two exact limits are checked by the tests: at `p = 0` every `P_corr` is 1/2
 and the accuracy is 1/2; at `p = 1` the first record gives the charge and
 the accuracy is 1.
 
+### Fig. 2c: the mean entropy (issue #115)
+
+The same runs give Fig. 2c, the success transition: `plot_learnability.py`
+also draws the mean entropy `E[H(P_corr)]` of the binary distribution
+`{P_corr, 1 - P_corr}` (in nats, as in the paper: `learnability.entropy_base`)
+and, from the inset, the Binder ratio of `H(P_corr)`, whose curves for
+several `L` cross at `p_success ~ 0.2` in the paper. The figure is
+`learnability_fig2c.png` and the comparison `comparison_fig2c.json`, against
+`reference/barratt2022_fig2c_entropy.csv` (`L = 6` and `L = 20`) and
+`reference/barratt2022_fig2c_binder.csv` when present. The mean entropy is
+`ln 2` at `p = 0` (Eve knows nothing) and 0 at `p = 1`.
+`notebooks/04_learnability_entropy.ipynb` runs the sweep and plots Fig. 2c.
+
 ## Write your own
 
 1. Copy the test script and make the copy executable:
