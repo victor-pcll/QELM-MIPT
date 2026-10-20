@@ -29,7 +29,7 @@ def test_notebook_runs_the_sweep_and_plots(
     shows: list[tuple] = []
     monkeypatch.setattr(plt, "show", lambda *args, **kwargs: shows.append(args))
     for key, value in {
-        "L": "30",
+        "N_SAMPLES": "30",
         "N_VALUES": "7",
         "SEEDS": "0 1",
         "GAMMA_VALUES": "0.0 0.5 1.0",

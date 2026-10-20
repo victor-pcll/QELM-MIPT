@@ -167,11 +167,11 @@ def test_bash_script_and_plot(tmp_path: Path) -> None:
         f"L = 6,,L = 20,\nX,Y,X,Y\n{v0},0.0,{v0},0.0\n1.0,1.0,0.9,0.5\n"
     )
     comparison = _load(PLOT).plot_sweep(sweep, ref)
-    stats = comparison["accuracy"]["L6"]["L = 6"]
+    stats = comparison["accuracy"]["N6"]["N = 6"]
     assert stats["n_points"] == 2
     assert stats["max_abs_diff"] == pytest.approx(0.0, abs=1e-12)
-    assert "L = 20" not in comparison["accuracy"]["L6"]
-    assert "L4-L6" in comparison["binder_crossings"]["P_corr_binder"]
+    assert "N = 20" not in comparison["accuracy"]["N6"]
+    assert "N4-N6" in comparison["binder_crossings"]["P_corr_binder"]
 
     # Fig. 2c (issue #115): the mean entropy is ln 2 at p = 0 and 0 at
     # p = 1, which the fake reference says too, exported as (value, p) like
@@ -190,10 +190,29 @@ def test_bash_script_and_plot(tmp_path: Path) -> None:
         transition=transition,
         comparison_name=comparison_name,
     )
-    stats = comparison["entropy_mean"]["L6"]["L = 6"]
+    stats = comparison["entropy_mean"]["N6"]["N = 6"]
     assert stats["n_points"] == 2
     assert stats["max_abs_diff"] == pytest.approx(0.0, abs=1e-12)
-    assert "L4-L6" in comparison["binder_crossings"]["entropy_binder"]
+    assert "N4-N6" in comparison["binder_crossings"]["entropy_binder"]
     saved = json.loads((sweep / "comparison_fig2c.json").read_text())
     assert "entropy_mean" in saved
     assert "accuracy" in json.loads((sweep / "comparison.json").read_text())
+
+
+def test_import_keeps_the_notebook_backend() -> None:
+    """Importing the plot script leaves the backend alone (issue #144).
+
+    It used to call ``matplotlib.use("Agg")`` at import: the notebooks that
+    import it lost their inline backend, and their ``plt.show()`` warned
+    "FigureCanvasAgg is non-interactive" instead of drawing the figure.
+    """
+    import matplotlib
+    import matplotlib.pyplot as plt
+
+    previous = matplotlib.get_backend()
+    plt.switch_backend("svg")  # stands for the notebook's inline backend
+    try:
+        _load(PLOT)
+        assert matplotlib.get_backend() == "svg"
+    finally:
+        plt.switch_backend(previous)
