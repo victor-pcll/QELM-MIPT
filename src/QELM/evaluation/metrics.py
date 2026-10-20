@@ -3,11 +3,11 @@ and the scaffold status line."""
 
 from __future__ import annotations
 
-from typing import cast
-
 import numpy as np
 import scipy.sparse as sp
 from numpy.typing import ArrayLike
+
+from QELM.evaluation import entropy
 
 
 def metric_status(names: list[str]) -> str:
@@ -139,8 +139,8 @@ def von_neumann_entropy(
 
     Args:
         rho: Global density matrix of shape ``(2**N, 2**N)``, dense or
-            sparse. A sparse matrix is traced block by block, without a
-            dense copy.
+            sparse. A sparse matrix is traced entry by entry, without a
+            dense copy (see :func:`QELM.physics.partial_trace`).
         N: Total number of qubits, ancilla included (``N >= 1``).
         base: Logarithm base: 2 for bits (default), ``np.e`` for nats.
         eps: Eigenvalues ``<= eps`` are dropped, so that rounding noise
@@ -162,25 +162,5 @@ def von_neumann_entropy(
         raise ValueError(
             f"rho must have shape ({dim}, {dim}) for N={N}, got {rho.shape}."
         )
-    dim_S = dim // 2
-    if sp.issparse(rho):
-        # rho_R[a, b] = Tr of the (a, b) block of size dim_S.
-        csr = sp.csr_matrix(cast(sp.csr_matrix, rho))
-        rho_R = np.array(
-            [
-                [
-                    csr[a * dim_S : (a + 1) * dim_S, b * dim_S : (b + 1) * dim_S]
-                    .diagonal()
-                    .sum()
-                    for b in range(2)
-                ]
-                for a in range(2)
-            ]
-        )
-    else:
-        rho_R = np.trace(np.asarray(rho).reshape(2, dim_S, 2, dim_S), axis1=1, axis2=3)
-    eigenvalues = np.linalg.eigvalsh(rho_R)
-    valid = eigenvalues[eigenvalues > eps]
-    if valid.size == 0:
-        return 0.0
-    return float(-np.sum(valid * np.log(valid)) / np.log(base))
+    # Same computation as the general entropy of a subsystem, with A = {0}.
+    return entropy.von_neumann_entropy(rho, [0], base=base, eps=eps)
