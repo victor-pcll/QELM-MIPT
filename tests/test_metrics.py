@@ -6,9 +6,22 @@ Les valeurs sont comparées à scikit-learn (``mean_squared_error``,
 
 import numpy as np
 import pytest
-from sklearn.metrics import accuracy_score, mean_squared_error, r2_score
+from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    mean_squared_error,
+    r2_score,
+)
 
-from QELM.evaluation.metrics import MSE, NMSE, R2, _as_pair, accuracy
+from QELM.evaluation.metrics import (
+    MSE,
+    NMSE,
+    R2,
+    _as_pair,
+    accuracy,
+    balanced_accuracy,
+    majority_accuracy,
+)
 
 CASES = [
     ([3, -0.5, 2, 7], [2.5, 0.0, 2, 8]),  # exemple de la doc sklearn
@@ -132,3 +145,40 @@ def test_accuracy_known_values() -> None:
 def test_accuracy_rejects_bad_shapes() -> None:
     with pytest.raises(ValueError):
         accuracy([1.0, 2.0], [1.0])
+
+
+@pytest.mark.parametrize(("y_true", "y_pred"), CASES)
+def test_balanced_accuracy_matches_sklearn_on_the_signs(y_true, y_pred) -> None:
+    """Moyenne des rappels des deux signes (#130), comme sklearn."""
+    expected = balanced_accuracy_score(np.asarray(y_true) >= 0, np.asarray(y_pred) >= 0)
+    assert balanced_accuracy(y_true, y_pred) == pytest.approx(expected)
+
+
+def test_constant_prediction_scores_half_whatever_the_imbalance() -> None:
+    """Issue #130 : 85 % de signes +, une prédiction constante positive a une
+    accuracy de 0.85 (la part majoritaire) mais une accuracy équilibrée de
+    0.5."""
+    y_true = np.array([0.5] * 85 + [-0.3] * 15)
+    y_pred = np.full(100, 0.42)
+    assert accuracy(y_true, y_pred) == pytest.approx(0.85)
+    assert balanced_accuracy(y_true, y_pred) == pytest.approx(0.5)
+    assert balanced_accuracy(y_true, -y_pred) == pytest.approx(0.5)
+    assert balanced_accuracy(y_true, y_true) == 1.0
+    assert balanced_accuracy(y_true, -y_true) == 0.0
+
+
+def test_majority_accuracy_known_values() -> None:
+    """Le classifieur du signe majoritaire de l'entraînement (#130)."""
+    y_train = [1.0, 0.5, -1.0]
+    assert majority_accuracy(y_train, [0.2, 0.3, -0.1, 0.4]) == 0.75
+    assert majority_accuracy([-1.0, -0.5, 1.0], [0.2, 0.3, -0.1, 0.4]) == 0.25
+    # Égalité : la classe +1 ; le seuil se déplace comme pour accuracy.
+    assert majority_accuracy([1.0, -1.0], [1.0, -1.0]) == 0.5
+    assert majority_accuracy([0.6, 0.7, 0.1], [0.55, 0.2], threshold=0.5) == 0.5
+
+
+def test_majority_accuracy_rejects_empty_or_2d() -> None:
+    with pytest.raises(ValueError, match="y_train"):
+        majority_accuracy([], [1.0])
+    with pytest.raises(ValueError, match="y_test"):
+        majority_accuracy([1.0], [[1.0]])
