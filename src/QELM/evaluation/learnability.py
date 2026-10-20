@@ -10,10 +10,20 @@ A chain of ``L`` qubits starts in the uniform superposition of the
 bitstrings of charge ``Q = sum_i b_i``, with ``Q`` one of two values
 (``Q0 = L // 2`` and ``Q1 = L // 2 - 1`` by default). It evolves for ``T``
 time steps (``T = L`` by default). One step is a full period of a
-brickwork of random U(1) gates (:mod:`QELM.models.circuits`, even then odd
-bonds), after which every site is measured in the computational basis with
-probability ``p``. Each record is drawn with its Born probability, for a
-fresh circuit; half of the records start at ``Q0``, half at ``Q1``.
+brickwork of random U(1) gates (:mod:`QELM.models.circuits`), an even then
+an odd layer of bonds. Every site is measured in the computational basis
+with probability ``p`` after each layer (``measure_every="layer"``, the
+default, ``2 T`` rounds) or only after each full step
+(``measure_every="period"``, ``T`` rounds). Each record is drawn with its
+Born probability, for a fresh circuit; half of the records start at
+``Q0``, half at ``Q1``.
+
+The paper says that a time step is two layers of gates and that the sites
+are measured "at each time step", without saying when within the step.
+Against the digitized curve of Fig. 2c at ``L = 6`` (issue #115),
+measuring after each layer matches (rms 0.02 nats on the mean entropy);
+measuring once per step learns the charge about twice too slowly in ``p``
+(rms 0.18 nats).
 
 An eavesdropper, Eve, sees the record ``m`` (which sites were measured and
 the outcomes) but not the gates, and guesses ``Q``. Averaged over the Haar
@@ -83,22 +93,37 @@ def site_bits(L: int) -> np.ndarray:
     return np.asarray((x >> shifts) & 1)
 
 
-def brickwork_bonds(L: int, boundary: str = "open") -> list[tuple[int, int]]:
-    """Return the bonds of one time step, even half-layer first.
+MEASURE_EVERY = ("layer", "period")
 
-    The bonds are those of :class:`~QELM.models.circuits.U1BrickworkCircuit`
-    with no ancilla, so the quantum circuit and the SEP see the same
-    geometry.
+
+def measurement_rounds(
+    L: int, depth: int, measure_every: str = "layer", boundary: str = "open"
+) -> list[list[tuple[int, int]]]:
+    """Return the bonds of the gates applied before each measurement round.
 
     Args:
         L: Number of sites, at least 2.
+        depth: Number of time steps ``T``, each an even then an odd layer.
+        measure_every: ``"layer"`` for a round after each layer (``2 T``
+            rounds, alternating even and odd bonds), ``"period"`` for a
+            round after each full step (``T`` rounds).
         boundary: ``"open"`` or ``"periodic"``.
 
     Returns:
-        The pairs ``(i, j)`` in the order the gates are applied.
+        One list of bonds per round, in the order the gates are applied.
+
+    Raises:
+        ValueError: If ``measure_every`` is unknown.
     """
     geometry = U1BrickworkCircuit({"N": L, "Nr": 0, "depth": 0, "boundary": boundary})
-    return geometry.bonds(0) + geometry.bonds(1)
+    even, odd = geometry.bonds(0), geometry.bonds(1)
+    if measure_every == "layer":
+        return [even, odd] * depth
+    if measure_every == "period":
+        return [even + odd] * depth
+    raise ValueError(
+        f"measure_every must be one of {MEASURE_EVERY}, got {measure_every!r}."
+    )
 
 
 def charge_state(L: int, Q: int) -> np.ndarray:
@@ -179,17 +204,22 @@ class Records:
     """Measurement records and the charges they were drawn from.
 
     Attributes:
-        outcomes: Integer array of shape ``(n, T, L)``: the outcome (0 or 1)
-            of site ``i`` at step ``t``, or ``UNMEASURED`` (-1).
+        outcomes: Integer array of shape ``(n, rounds, L)``: the outcome (0
+            or 1) of site ``i`` at measurement round ``r``, or
+            ``UNMEASURED`` (-1). There are ``2 T`` rounds with
+            ``measure_every="layer"``, ``T`` with ``"period"``.
         charge: True charge of each record, shape ``(n,)``.
         charges: The candidate charges, the hypotheses of Eve.
         boundary: Boundary of the brickwork, ``"open"`` or ``"periodic"``.
+        measure_every: ``"layer"`` or ``"period"``, see
+            :func:`measurement_rounds`.
     """
 
     outcomes: np.ndarray
     charge: np.ndarray
     charges: tuple[int, ...]
     boundary: str = "open"
+    measure_every: str = "layer"
 
     @property
     def L(self) -> int:
@@ -205,6 +235,7 @@ def sample_records(
     depth: int | None = None,
     charges: Sequence[int] | None = None,
     boundary: str = "open",
+    measure_every: str = "layer",
     rng: np.random.Generator | None = None,
 ) -> Records:
     """Draw measurement records from random U(1) circuits, by the Born rule.
@@ -212,8 +243,9 @@ def sample_records(
     Record ``k`` starts from :func:`charge_state` at ``charges[k % 2]`` (so
     the charges alternate, half each for an even ``n_records``), with its
     own random circuit. At each of the ``depth`` steps the even then odd
-    bonds get a gate, then every site is measured with probability ``p``;
-    the outcome is drawn with its Born probability and the state projected.
+    bonds get a gate, and every site is measured with probability ``p``
+    after each layer (or after each step, ``measure_every="period"``); the
+    outcome is drawn with its Born probability and the state projected.
 
     Args:
         L: Number of sites, at least 2.
@@ -223,6 +255,8 @@ def sample_records(
         charges: Candidate charges; ``None`` for :func:`default_charges`.
             Records cycle through them.
         boundary: ``"open"`` (default) or ``"periodic"``.
+        measure_every: ``"layer"`` (default) or ``"period"``, see
+            :func:`measurement_rounds`.
         rng: Random generator. ``None`` draws one from the global NumPy
             state, seeded by :func:`QELM.seed.set_seed`.
 
@@ -244,14 +278,14 @@ def sample_records(
     qs = tuple(default_charges(L) if charges is None else (int(q) for q in charges))
     if len(qs) < 2 or len(set(qs)) != len(qs):
         raise ValueError(f"Need at least two distinct charges, got {qs}.")
+    rounds = measurement_rounds(L, T, measure_every, boundary)
     gen = _generator(rng)
-    bonds = brickwork_bonds(L, boundary)
     bits = site_bits(L)
 
     charge = np.array([qs[k % len(qs)] for k in range(n_records)])
     psi = np.stack([charge_state(L, q) for q in charge]).astype(complex)
-    outcomes = np.full((n_records, T, L), UNMEASURED, dtype=np.int8)
-    for t in range(T):
+    outcomes = np.full((n_records, len(rounds), L), UNMEASURED, dtype=np.int8)
+    for t, bonds in enumerate(rounds):
         for i, j in bonds:
             psi = apply_gates(psi, random_u1_gates(n_records, gen), i, j)
         measured = gen.random((n_records, L)) < p
@@ -268,44 +302,62 @@ def sample_records(
             kept /= np.linalg.norm(kept, axis=1, keepdims=True)
             psi[rows] = kept
             outcomes[rows, t, site] = outcome
-    return Records(outcomes=outcomes, charge=charge, charges=qs, boundary=boundary)
+    return Records(
+        outcomes=outcomes,
+        charge=charge,
+        charges=qs,
+        boundary=boundary,
+        measure_every=measure_every,
+    )
 
 
 def sep_log_likelihood(
-    outcomes: np.ndarray, Q: int, boundary: str = "open"
+    outcomes: np.ndarray,
+    Q: int,
+    boundary: str = "open",
+    measure_every: str = "layer",
 ) -> np.ndarray:
     """Return ``log P(m | Q)`` of each record under the Haar-averaged dynamics.
 
     The SEP distribution starts uniform on the configurations of charge
     ``Q``. A gate on ``(i, j)`` maps ``v`` to ``(v + v o swap_ij) / 2``; a
     measurement zeroes the configurations that disagree with its outcome.
-    The total weight left after the last step is ``P(m | Q)``; it is
-    renormalized after each step and the logarithms summed, so long records
+    The total weight left after the last round is ``P(m | Q)``; it is
+    renormalized after each round and the logarithms summed, so long records
     do not underflow.
 
     Args:
-        outcomes: Records of shape ``(n, T, L)``, as in :class:`Records`.
+        outcomes: Records of shape ``(n, rounds, L)``, as in :class:`Records`.
         Q: Charge of the hypothesis.
         boundary: ``"open"`` or ``"periodic"``, as used to draw the records.
+        measure_every: ``"layer"`` or ``"period"``, as used to draw the
+            records; with ``"layer"`` the number of rounds must be even.
 
     Returns:
         Array of shape ``(n,)``; ``-inf`` where the record is impossible for
         ``Q`` (an outcome needs more or fewer particles than ``Q``).
     """
     outcomes = np.asarray(outcomes)
-    n, T, L = outcomes.shape
+    n, n_rounds, L = outcomes.shape
+    per_step = 2 if measure_every == "layer" else 1
+    if n_rounds % per_step:
+        raise ValueError(
+            f"measure_every='layer' needs an even number of rounds, got {n_rounds}."
+        )
+    rounds = measurement_rounds(L, n_rounds // per_step, measure_every, boundary)
     bits = site_bits(L)
     configs = np.arange(2**L)
-    swaps = []
-    for i, j in brickwork_bonds(L, boundary):
+
+    def swap(i: int, j: int) -> np.ndarray:
         flip = (1 << (L - 1 - i)) | (1 << (L - 1 - j))
-        differ = bits[:, i] != bits[:, j]
-        swaps.append(np.where(differ, configs ^ flip, configs))
+        return np.where(bits[:, i] != bits[:, j], configs ^ flip, configs)
+
+    swaps = [[swap(i, j) for i, j in bonds] for bonds in rounds]
 
     v = np.tile(charge_state(L, Q) ** 2, (n, 1))
     log_p = np.zeros(n)
-    for t in range(T):
-        for perm in swaps:
+    for t in range(n_rounds):
+        for perm in swaps[t]:
             v = 0.5 * (v + v[:, perm])
         m = outcomes[:, t, :]
         for site in range(L):
@@ -322,14 +374,18 @@ def sep_log_likelihood(
 
 
 def sep_posterior(
-    outcomes: np.ndarray, charges: Sequence[int], boundary: str = "open"
+    outcomes: np.ndarray,
+    charges: Sequence[int],
+    boundary: str = "open",
+    measure_every: str = "layer",
 ) -> np.ndarray:
     """Return Eve's posterior ``P(Q | m)`` for each record, flat prior.
 
     Args:
-        outcomes: Records of shape ``(n, T, L)``.
+        outcomes: Records of shape ``(n, rounds, L)``.
         charges: The candidate charges.
         boundary: ``"open"`` or ``"periodic"``.
+        measure_every: ``"layer"`` or ``"period"``.
 
     Returns:
         Array of shape ``(n, len(charges))`` whose rows sum to 1.
@@ -337,7 +393,10 @@ def sep_posterior(
     Raises:
         ValueError: If a record is impossible under every charge.
     """
-    log_p = np.stack([sep_log_likelihood(outcomes, q, boundary) for q in charges], 1)
+    log_p = np.stack(
+        [sep_log_likelihood(outcomes, q, boundary, measure_every) for q in charges],
+        axis=1,
+    )
     top = log_p.max(axis=1, keepdims=True)
     if not np.all(np.isfinite(top)):
         raise ValueError("A record has zero probability under every charge.")
@@ -354,7 +413,9 @@ def correct_probability(records: Records) -> np.ndarray:
     Returns:
         Array of shape ``(n,)`` with values in ``[0, 1]``.
     """
-    post = sep_posterior(records.outcomes, records.charges, records.boundary)
+    post = sep_posterior(
+        records.outcomes, records.charges, records.boundary, records.measure_every
+    )
     column = np.array([records.charges.index(int(q)) for q in records.charge])
     return np.asarray(post[np.arange(post.shape[0]), column])
 

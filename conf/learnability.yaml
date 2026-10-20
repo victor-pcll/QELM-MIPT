@@ -24,8 +24,12 @@ samples:
 # charges: the two charges Eve chooses between, null for (L // 2, L // 2 - 1)
 #   as in the paper.
 # boundary: open or periodic (the paper does not say; open by default).
-# entropy_base: logarithm base of the binary entropy H(P_corr), 2 for bits
-#   (H = 1 at p = 0), e = 2.718281828459045 for nats.
+# measure_every: layer to measure after each layer of the brickwork (2 t_f
+#   rounds), period to measure only after each full step (t_f rounds). The
+#   paper does not say; layer matches the digitized Fig. 2c (issue #115).
+# entropy_base: logarithm base of the binary entropy H(P_corr):
+#   e = 2.718281828459045 for nats, as in Fig. 2c (H = ln 2 at p = 0,
+#   issue #115), 2 for bits.
 # n_boot: bootstrap resamples for the error bars.
 # batch: records simulated at once; memory grows as batch * 2**L.
 learnability:
@@ -34,6 +38,7 @@ learnability:
   depth: ${Ns}
   charges: null
   boundary: open
-  entropy_base: 2
+  measure_every: layer
+  entropy_base: 2.718281828459045
   n_boot: 200
   batch: 4000

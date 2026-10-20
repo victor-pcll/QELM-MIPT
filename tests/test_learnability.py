@@ -13,12 +13,12 @@ from QELM.evaluation.learnability import (
     Records,
     apply_gates,
     binary_entropy,
-    brickwork_bonds,
     charge_state,
     correct_probability,
     default_charges,
     learnability_bootstrap_errors,
     learnability_statistics,
+    measurement_rounds,
     random_u1_gates,
     sample_records,
     sep_log_likelihood,
@@ -52,11 +52,18 @@ def test_default_charges() -> None:
     assert default_charges(7) == (3, 2)
 
 
-def test_bonds_match_the_brickwork_circuit() -> None:
+def test_measurement_rounds_follow_the_brickwork_circuit() -> None:
+    """Un pas = une période du brickwork de models.circuits, pair puis impair."""
     for L, boundary in [(6, "open"), (5, "open"), (6, "periodic")]:
         c = U1BrickworkCircuit({"N": L, "Nr": 0, "depth": 1, "boundary": boundary})
-        assert brickwork_bonds(L, boundary) == [(i, j) for i, j, _ in c.layers[0]]
-    assert brickwork_bonds(6) == [(0, 1), (2, 3), (4, 5), (1, 2), (3, 4)]
+        step = [(i, j) for i, j, _ in c.layers[0]]
+        period = measurement_rounds(L, 3, "period", boundary)
+        assert period == [step] * 3
+        layer = measurement_rounds(L, 3, "layer", boundary)
+        assert len(layer) == 6 and layer[0] + layer[1] == step
+    assert measurement_rounds(6, 1) == [[(0, 1), (2, 3), (4, 5)], [(1, 2), (3, 4)]]
+    with pytest.raises(ValueError, match="measure_every"):
+        measurement_rounds(6, 1, "gate")
 
 
 def test_random_u1_gates_are_unitary_and_conserve_charge() -> None:
@@ -89,12 +96,16 @@ def test_apply_gates_matches_the_single_state_version() -> None:
 def test_sample_records_shape_and_charges() -> None:
     r = sample_records(4, 0.5, 7, rng=np.random.default_rng(0))
     assert isinstance(r, Records)
-    assert r.outcomes.shape == (7, 4, 4)
+    # T = L = 4 steps, measured after each of their 2 layers: 8 rounds.
+    assert r.outcomes.shape == (7, 8, 4)
     assert r.L == 4
     assert r.charges == (2, 1)
+    assert r.measure_every == "layer"
     np.testing.assert_array_equal(r.charge, [2, 1, 2, 1, 2, 1, 2])
     assert set(np.unique(r.outcomes)) <= {UNMEASURED, 0, 1}
-    assert sample_records(4, 0.5, 3, depth=2).outcomes.shape == (3, 2, 4)
+    assert sample_records(4, 0.5, 3, depth=2).outcomes.shape == (3, 4, 4)
+    period = sample_records(4, 0.5, 3, depth=2, measure_every="period")
+    assert period.outcomes.shape == (3, 2, 4)
 
 
 def test_sample_records_measurement_rate() -> None:
@@ -137,11 +148,12 @@ def _all_records(L: int, T: int) -> list[np.ndarray]:
     ]
 
 
-def test_sep_probabilities_of_a_fixed_mask_sum_to_one() -> None:
+@pytest.mark.parametrize("measure_every", ["layer", "period"])
+def test_sep_probabilities_of_a_fixed_mask_sum_to_one(measure_every: str) -> None:
     """Pour un masque de mesure fixé, sum_m P(m | Q) = 1 (règle de Born moyenne)."""
     L, T = 3, 2
     records = np.stack(_all_records(L, T))
-    P = np.exp(sep_log_likelihood(records, 1))
+    P = np.exp(sep_log_likelihood(records, 1, measure_every=measure_every))
     masks = records != UNMEASURED
     for mask in np.unique(masks.reshape(len(records), -1), axis=0):
         same = np.all(masks.reshape(len(records), -1) == mask, axis=1)
@@ -151,23 +163,38 @@ def test_sep_probabilities_of_a_fixed_mask_sum_to_one() -> None:
 def test_sep_two_sites_by_hand() -> None:
     """L = 2, Q = 1 : |01) et |10) équiprobables, le SEP les garde ainsi."""
     one = np.array([[[0, UNMEASURED]], [[1, UNMEASURED]], [[1, 1]], [[0, 1]]])
-    P = np.exp(sep_log_likelihood(one, 1))
+    P = np.exp(sep_log_likelihood(one, 1, measure_every="period"))
     np.testing.assert_allclose(P, [0.5, 0.5, 0.0, 0.5])
+    with pytest.raises(ValueError, match="even number of rounds"):
+        sep_log_likelihood(one, 1)
 
 
-def test_quantum_records_follow_the_sep_distribution() -> None:
+@pytest.mark.parametrize(("measure_every", "depth"), [("period", 2), ("layer", 1)])
+def test_quantum_records_follow_the_sep_distribution(
+    measure_every: str, depth: int
+) -> None:
     """Moyennée sur les portes de Haar, la règle de Born est exactement le SEP.
 
-    On tire des records à p = 1 (L = 4, T = 2, Q = 2) depuis les circuits
-    quantiques et on compare leurs fréquences aux probabilités du SEP.
+    On tire des records à p = 1 (L = 4, 2 rondes de mesure, Q = 2) depuis les
+    circuits quantiques et on compare leurs fréquences aux probabilités du SEP.
     """
     n = 30000
-    r = sample_records(4, 1.0, n, depth=2, charges=[2, 1], rng=np.random.default_rng(5))
+    r = sample_records(
+        4,
+        1.0,
+        n,
+        depth=depth,
+        charges=[2, 1],
+        measure_every=measure_every,
+        rng=np.random.default_rng(5),
+    )
     outcomes = r.outcomes[r.charge == 2]
     keys, counts = np.unique(
         outcomes.reshape(len(outcomes), -1), axis=0, return_counts=True
     )
-    P = np.exp(sep_log_likelihood(keys.reshape(-1, 2, 4), 2))
+    P = np.exp(
+        sep_log_likelihood(keys.reshape(-1, 2, 4), 2, measure_every=measure_every)
+    )
     assert np.isclose(P.sum(), 1.0)
     freq = counts / len(outcomes)
     sigma = np.sqrt(P * (1 - P) / len(outcomes))

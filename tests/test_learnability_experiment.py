@@ -57,7 +57,8 @@ def test_config_composes_with_the_paper_parameters() -> None:
 def test_run_shapes_and_ranges() -> None:
     out = _load(SCRIPT).run(_cfg("learnability.p=0.2"))
     assert out["P_corr"].shape == (200,)
-    assert out["outcomes"].shape == (200, 6, 6)
+    # t_f = 6 steps, measured after each of their 2 layers: 12 rounds.
+    assert out["outcomes"].shape == (200, 12, 6)
     assert set(np.unique(out["outcomes"])) <= {-1, 0, 1}
     # Batches of 64 keep the charges alternating: half of each.
     assert sorted(np.unique(out["charge"], return_counts=True)[1]) == [100, 100]
@@ -74,7 +75,7 @@ def test_no_measurement_is_a_blind_guess() -> None:
     np.testing.assert_allclose(out["P_corr"], 0.5)
     assert out["accuracy"] == 0.5
     assert out["accuracy_strict"] == 0.0
-    assert out["entropy_mean"] == pytest.approx(1.0)
+    assert out["entropy_mean"] == pytest.approx(np.log(2))
     assert out["measured_fraction"] == 0.0
 
 

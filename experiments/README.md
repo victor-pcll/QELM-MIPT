@@ -147,8 +147,12 @@ config is `conf/learnability.yaml`; the simulation is
   records) or `Q1 = L // 2 - 1` (the other half).
 - It evolves for `t_f = L` time steps (`learnability.depth`), each a full
   period of a random U(1) brickwork (`QELM.models.circuits`), with a new
-  circuit for every record. After each step every site is measured in Z with
-  probability `learnability.p`, by the Born rule.
+  circuit for every record. After each layer of the brickwork (so twice per
+  step, `learnability.measure_every=layer`) every site is measured in Z with
+  probability `learnability.p`, by the Born rule. The paper does not say
+  when within a step the sites are measured; this choice matches the
+  digitized Fig. 2c within 0.02 nats, while measuring once per step
+  (`measure_every=period`) learns the charge about twice too slowly in `p`.
 - Eve sees the record but not the gates. Her optimal classifier is the Bayes
   posterior `P(Q | m)` computed with the Haar-averaged dynamics, a symmetric
   exclusion process. `P_corr = P(Q* | m)` is the posterior of the true charge.

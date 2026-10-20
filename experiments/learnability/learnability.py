@@ -37,8 +37,9 @@ Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
 
 - ``learnability.npz``: ``P_corr`` and ``charge`` (one per record, shape
-  ``(n,)``) and the records ``outcomes`` (shape ``(n, t_f, L)``, 0 or 1 for
-  a measured site, -1 for an unmeasured one);
+  ``(n,)``) and the records ``outcomes`` (shape ``(n, rounds, L)``, with
+  ``rounds = 2 t_f`` for ``learnability.measure_every=layer`` and ``t_f``
+  for ``period``; 0 or 1 for a measured site, -1 for an unmeasured one);
 - ``metrics.json``: ``p``, the statistics, their bootstrap errors
   ``<name>_err`` and the measured fraction of the sites;
 - ``.hydra/config.yaml``: the full composed config, to reproduce the run.
@@ -85,7 +86,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     Returns:
         ``P_corr`` and ``charge`` (shape ``(n,)``), ``outcomes`` (shape
-        ``(n, t_f, L)``), ``p``, ``L``, ``measured_fraction`` and the
+        ``(n, rounds, L)``), ``p``, ``L``, ``measured_fraction`` and the
         :data:`STATISTICS` with their ``_err``.
     """
     seed = set_seed(cfg)
@@ -112,6 +113,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             depth=int(params.depth),
             charges=charges,
             boundary=str(params.boundary),
+            measure_every=str(params.measure_every),
             rng=rng,
         )
         P_corr.append(correct_probability(records))
