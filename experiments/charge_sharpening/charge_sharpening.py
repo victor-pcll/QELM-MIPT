@@ -46,6 +46,18 @@ charge and ``S_R`` drops to 0: the charge sharpens.
 The state stays pure (unitary gates and Kraus operators on a pure state),
 so trajectories are simulated with state vectors of size ``2**N``.
 
+Charge conservation is checked along every trajectory (issue #134). The
+total charge of the ``N`` qubits, ancilla included, is ``Ns // 2`` in both
+branches of Eq. (B1), and every gate and Kraus operator conserves it, so
+the state never leaves that sector. After the scrambling, every layer and
+every measurement round, :func:`QELM.physics.charge_leakage` gives the
+weight outside the sector; the largest one of a trajectory is its
+``charge_leakage``, exactly 0 for a correct simulation. With
+``charge_conservation.filter_non_conserved_charge=true`` the trajectories
+whose leakage exceeds ``charge_conservation.atol`` are dropped before the
+statistics; by default every trajectory is kept and the check is only
+reported.
+
 Run from the repository root:
 
     uv run python experiments/charge_sharpening/charge_sharpening.py \
@@ -55,10 +67,15 @@ Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
 
 - ``charge_sharpening.npz``: ``S_R`` (one entropy per trajectory, shape
-  ``(L,)``) and ``M`` (measurement record, shape ``(L, rounds, Ns)``, 1 for
-  a click);
+  ``(L,)``), ``M`` (measurement record, shape ``(L, rounds, Ns)``, 1 for
+  a click), ``charge_leakage`` (shape ``(L,)``) and ``kept`` (shape
+  ``(L,)``, the trajectories used by the statistics), for every
+  trajectory, kept or not;
 - ``metrics.json``: ``gamma``, ``S_R_mean``, ``S_R_var``, ``binder``, their
-  bootstrap errors ``<name>_err`` and the click rate;
+  bootstrap errors ``<name>_err``, the click rate (over the kept
+  trajectories), ``n_samples`` (kept trajectories) and the charge check:
+  ``max_charge_leakage``, ``n_non_conserved``, ``n_discarded`` and
+  ``discarded_fraction``;
 - ``.hydra/config.yaml``: the full composed config, to reproduce the run.
 """
 
@@ -78,10 +95,12 @@ from QELM import check_qubit_counts, set_seed
 from QELM.embedding import AncillaChargeSectorEmbedding
 from QELM.evaluation import (
     bootstrap_errors,
+    charge_filter,
     sharpening_statistics,
     von_neumann_entropy,
 )
 from QELM.models.circuits import U1BrickworkCircuit
+from QELM.physics import charge_leakage, sharp_charge
 from QELM.training import WeakMeasurement
 
 # The ancilla R, qubit 0, is the subsystem of S_R.
@@ -96,7 +115,11 @@ METRICS = (
     "S_R_var_err",
     "binder_err",
     "click_rate",
+    "max_charge_leakage",
+    "discarded_fraction",
 )
+# Integer counts written to metrics.json.
+COUNTS = ("n_non_conserved", "n_discarded")
 
 
 def run(cfg: DictConfig) -> dict[str, Any]:
@@ -105,12 +128,19 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Args:
         cfg: Composed config (``load_config(config_name="charge_sharpening")``
             or Hydra). Reads ``samples.L``, ``ancilla_charge_sector``,
-            ``U1_circuit``, ``weak_measurement`` and ``charge_sharpening``.
+            ``U1_circuit``, ``weak_measurement``, ``charge_sharpening`` and
+            ``charge_conservation``.
 
     Returns:
         ``S_R`` (shape ``(L,)``), ``M`` (shape ``(L, rounds, Ns)``, with
         ``rounds = depth - 1``, or ``depth`` when measuring after the last
-        layer) and the scalars of :data:`METRICS`.
+        layer), ``charge_leakage`` and ``kept`` (shape ``(L,)``), for every
+        trajectory, and the scalars of :data:`METRICS` and :data:`COUNTS`,
+        computed on the kept trajectories.
+
+    Raises:
+        ValueError: If the initial state has no sharp total charge, or the
+            filter drops every trajectory.
     """
     set_seed(cfg)
     N, Ns, Nr = check_qubit_counts(cfg)
@@ -123,7 +153,10 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     # of a sweep sees the same circuit for a given seed.
     circuit = U1BrickworkCircuit.from_config(cfg)
     psi0 = sector.state()
+    # Total charge of R + S, Ns // 2 in both branches of Eq. (B1).
+    Q = sharp_charge(psi0)
     psi_scrambled = circuit.scramble(psi0)
+    leak_scrambled = charge_leakage(psi_scrambled, Q)
 
     L = int(cfg.samples.L)
     depth = circuit.depth
@@ -132,29 +165,39 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     measured = [t for t in range(depth) if t < depth - 1 or measure_last]
     S_R = np.zeros(L)
     M = np.zeros((L, len(measured), Ns))
+    leakage = np.zeros(L)
     for i in tqdm(range(L)):
         if circuit.fixed_instance:
             psi = psi_scrambled
+            leak = leak_scrambled
         else:
             circuit.redraw()
             psi = circuit.scramble(psi0)
+            leak = charge_leakage(psi, Q)
         for t in range(depth):
             psi = circuit.apply_layer(psi, t)
+            leak = max(leak, charge_leakage(psi, Q))
             if t in measured:
                 result = measurement.measure(psi)
                 psi = result.rho
                 M[i, t] = result.outcomes
+                leak = max(leak, charge_leakage(psi, Q))
         S_R[i] = von_neumann_entropy(psi, SECTOR_R, base=base)
+        leakage[i] = leak
 
-    stats = sharpening_statistics(S_R)
-    errors = bootstrap_errors(S_R, n_boot=int(cfg.charge_sharpening.n_boot))
+    kept, check = charge_filter(leakage, cfg.charge_conservation)
+    stats = sharpening_statistics(S_R[kept])
+    errors = bootstrap_errors(S_R[kept], n_boot=int(cfg.charge_sharpening.n_boot))
     return {
         "S_R": S_R,
         "M": M,
+        "charge_leakage": leakage,
+        "kept": kept,
         "gamma": gamma,
         **stats,
         **errors,
-        "click_rate": float(np.mean(M)) if M.size else 0.0,
+        "click_rate": float(np.mean(M[kept])) if M[kept].size else 0.0,
+        **check,
     }
 
 
@@ -170,9 +213,16 @@ def save(results: dict[str, Any], out_dir: Path) -> Path:
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     npz_path = out_dir / f"{Path(__file__).stem}.npz"
-    np.savez(npz_path, S_R=results["S_R"], M=results["M"])
-    metrics = {key: float(results[key]) for key in METRICS}
-    metrics["n_samples"] = int(results["S_R"].shape[0])
+    np.savez(
+        npz_path,
+        S_R=results["S_R"],
+        M=results["M"],
+        charge_leakage=results["charge_leakage"],
+        kept=results["kept"],
+    )
+    metrics: dict[str, float | int] = {key: float(results[key]) for key in METRICS}
+    metrics.update({key: int(results[key]) for key in COUNTS})
+    metrics["n_samples"] = int(np.count_nonzero(results["kept"]))
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
     return npz_path
 
@@ -190,10 +240,16 @@ def main(cfg: DictConfig) -> None:
     results = run(cfg)
     out_dir = Path(HydraConfig.get().runtime.output_dir)
     save(results, out_dir)
-    print(f"gamma: {results['gamma']:.4g}  samples: {results['S_R'].shape[0]}")
+    n_kept = int(np.count_nonzero(results["kept"]))
+    print(f"gamma: {results['gamma']:.4g}  samples: {n_kept}")
     print(f"S_R: {results['S_R_mean']:.4f} +- {results['S_R_mean_err']:.4f}")
     print(f"var S_R: {results['S_R_var']:.4f} +- {results['S_R_var_err']:.4f}")
     print(f"Binder: {results['binder']:.4f} +- {results['binder_err']:.4f}")
+    print(
+        f"charge: max leakage {results['max_charge_leakage']:.3g}, "
+        f"{results['n_non_conserved']} non-conserving, "
+        f"{results['n_discarded']} discarded"
+    )
     print(f"Saved to {out_dir}")
 
 

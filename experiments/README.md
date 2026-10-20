@@ -119,7 +119,8 @@ SEEDS="0 1 2 3 4" L=10000 ./experiments/charge_sharpening/charge_sharpening.sh
 ```
 
 Each run lands in `outputs/charge_sharpening/<date_time>/N<N>_seed<seed>_g<gamma>/`
-with `charge_sharpening.npz` (`S_R`, the click record `M`), `metrics.json` and
+with `charge_sharpening.npz` (`S_R`, the click record `M`, the charge check
+`charge_leakage` and `kept`), `metrics.json` and
 `.hydra/config.yaml`. At the end, `plot_charge_sharpening.py` draws the three
 panels of Fig. 7 in `charge_sharpening.png`, over the curves digitized from
 the paper in `experiments/charge_sharpening/reference/` (see the README there),
@@ -134,6 +135,30 @@ Two exact limits are checked by the tests: `S_R = 1` in every trajectory at
 `gamma = 0` (gates on the system cannot change the ancilla's entropy) and
 `S_R = 0` at `gamma = 1` (a projective record of every qubit reveals the
 charge).
+
+## Charge conservation check (issue #134)
+
+Both U(1) benchmarks (charge sharpening and learnability) check along every
+trajectory or record that the global charge is conserved. After each step,
+`QELM.physics.charge_leakage` gives the weight of the state outside the
+sector of its starting charge (the total charge of `R + S`, `Ns // 2`, for
+charge sharpening; the charge `Q` of the record for learnability). The
+largest value over the evolution is saved per run as `charge_leakage`; it is
+exactly 0 for a correct simulation, because every gate and measurement is
+block-diagonal in the charge. `metrics.json` reports `max_charge_leakage`,
+`n_non_conserved` (runs with a leakage above `charge_conservation.atol`,
+default `1e-10`), `n_discarded` and `discarded_fraction`.
+
+The filter is off by default, so the baseline results do not change. Turn it
+on to drop the non-conserving runs before the statistics:
+
+```bash
+uv run python experiments/charge_sharpening/charge_sharpening.py \
+    charge_conservation.filter_non_conserved_charge=true
+```
+
+The `.npz` keeps every run; its boolean `kept` marks the ones the statistics
+used.
 
 ## Run the charge-learnability benchmark (issue #113)
 
@@ -175,7 +200,8 @@ N_VALUES="6 8 10" SEEDS="0 1 2" ./experiments/learnability/learnability.sh
 ```
 
 Each run lands in `outputs/learnability/<date_time>/N<N>_seed<seed>_p<p>/`
-with `learnability.npz` (`P_corr`, `charge`, the records `outcomes`),
+with `learnability.npz` (`P_corr`, `charge`, the records `outcomes`, the
+charge check `charge_leakage` and `kept`),
 `metrics.json` and `.hydra/config.yaml`. At the end,
 `plot_learnability.py` draws the accuracy and the Binder ratio against `p`
 in `learnability.png`, over the curves digitized from the paper in

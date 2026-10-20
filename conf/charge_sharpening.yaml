@@ -54,3 +54,15 @@ charge_sharpening:
   # Logarithm base of S_R: e for nats (S_R <= ln 2), as in the paper's Fig. 7;
   # 2 for bits (S_R <= 1).
   entropy_base: 2.718281828459045
+
+# Check that the total charge of R + S (Ns // 2) is conserved along every
+# trajectory (issue #134, QELM.physics.charge). The largest weight outside the
+# charge sector, over the trajectory, is its charge_leakage, saved in the .npz;
+# it is exactly 0 when the simulation is correct.
+# atol: a trajectory conserves the charge if its leakage is at most atol.
+# filter_non_conserved_charge: true drops the other trajectories before the
+#   statistics (their count goes to metrics.json as n_discarded); false keeps
+#   every trajectory and only reports the check, the baseline behaviour.
+charge_conservation:
+  atol: 1.0e-10
+  filter_non_conserved_charge: false
