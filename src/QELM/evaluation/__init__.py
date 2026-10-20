@@ -7,6 +7,11 @@ from typing import Any
 
 from omegaconf import DictConfig
 
+from QELM.evaluation.entropy import (
+    entanglement_spectrum,
+    renyi_entropy,
+    von_neumann_entropy,
+)
 from QELM.evaluation.metrics import metric_status
 from QELM.evaluation.plots import render_plot
 
@@ -63,4 +68,12 @@ def get_evaluator(name: str) -> Evaluator:
         raise KeyError(f"Unknown evaluation {name!r}. Known: {known}.") from exc
 
 
-__all__ = ["evaluate", "get_evaluator", "metric_status", "render_plot"]
+__all__ = [
+    "entanglement_spectrum",
+    "evaluate",
+    "get_evaluator",
+    "metric_status",
+    "render_plot",
+    "renyi_entropy",
+    "von_neumann_entropy",
+]

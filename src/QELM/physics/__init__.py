@@ -1,4 +1,5 @@
-"""Quantum primitives: Pauli matrices and their embedding in an N-qubit chain.
+"""Quantum primitives: Pauli matrices, their embedding in an N-qubit chain,
+and the partial trace.
 
 Measurements and feature extraction live in :mod:`QELM.training`.
 """
@@ -16,6 +17,7 @@ from QELM.physics.operators import (
     pauli,
     qubit_counts,
 )
+from QELM.physics.partial_trace import partial_trace
 
 __all__ = [
     "PAULIS",
@@ -25,6 +27,7 @@ __all__ = [
     "Z",
     "get_site_operator",
     "local_expectation",
+    "partial_trace",
     "qubit_counts",
     "pauli",
 ]
