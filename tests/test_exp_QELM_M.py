@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -186,11 +187,55 @@ def test_bash_launcher_dry_run(tmp_path: Path) -> None:
     ]
     for run in runs:
         assert (run / "metrics.json").is_file()
+        metrics = json.loads((run / "metrics.json").read_text())
+        assert {"nmse", "r2", "S_vN_mean", "S_renyi_1_mean"} <= set(metrics)
         assert (run / "exp_QELM_M.npz").is_file()
         with np.load(run / "exp_QELM_M.npz") as data:
             assert data["X"].shape == (10, 2 * 2 + 1)
+            assert data["S_vN"].shape == data["S_renyi_1"].shape == (10,)
+            assert metrics["S_vN_mean"] == pytest.approx(np.mean(data["S_vN"]))
 
 
 def test_n_measurements_must_be_positive() -> None:
     with pytest.raises(ValueError, match="n_measurements"):
         _load_script().run(load_config([*OVERRIDES, "+experiment.n_measurements=0"]))
+
+
+def _binary_entropy(q: np.ndarray) -> np.ndarray:
+    """H(q) = -q log2 q - (1 - q) log2(1 - q), with 0 log 0 = 0."""
+    q = np.clip(q, 0.0, 1.0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        h = -q * np.log2(q) - (1 - q) * np.log2(1 - q)
+    return np.nan_to_num(h, nan=0.0)
+
+
+@pytest.mark.parametrize("p", [1.0, 0.5, 0.1])
+def test_ancilla_entropies_are_recorded(p: float) -> None:
+    """One von Neumann and one Rényi-1 entropy of the ancilla per sample, in
+    bits, equal to each other (Rényi order 1 is von Neumann), between 0 and
+    1, with their means in the results."""
+    out = _load_script().run(load_config([*OVERRIDES, f"projective_measurement.p={p}"]))
+    S_vN, S_renyi_1 = out["S_vN"], out["S_renyi_1"]
+    assert S_vN.shape == S_renyi_1.shape == (L,)
+    np.testing.assert_array_equal(S_vN, S_renyi_1)
+    # Rounding: an eigenvalue 1 + 1e-16 gives S = -1e-16.
+    assert np.all(S_vN >= -1e-12) and np.all(S_vN <= 1.0 + 1e-12)
+    assert out["S_vN_mean"] == pytest.approx(np.mean(S_vN))
+    assert out["S_renyi_1_mean"] == pytest.approx(np.mean(S_renyi_1))
+    # Dephasing rho_R in the Z basis can only raise its entropy, so S(rho_R)
+    # is at most the binary entropy of its diagonal (1 +- <Z_0>) / 2.
+    assert np.all(S_vN <= _binary_entropy((1 + out["Y"]) / 2) + 1e-9)
+
+
+def test_measuring_every_qubit_purifies_the_ancilla() -> None:
+    """p = 1: the record fixes the charge, hence the ancilla (|<Z_0>| = 1,
+    issue #104), so the ancilla is no longer entangled: S = 0."""
+    out = _load_script().run(load_config(OVERRIDES))
+    np.testing.assert_allclose(out["S_vN"], 0.0, atol=1e-9)
+
+
+def test_rare_measurements_leave_the_ancilla_entangled() -> None:
+    """p = 0.1: most samples keep the ancilla entangled with the system, so
+    the mean entropy is well above the p = 1 value of 0."""
+    out = _load_script().run(load_config([*OVERRIDES, "projective_measurement.p=0.1"]))
+    assert out["S_vN_mean"] > 0.1
