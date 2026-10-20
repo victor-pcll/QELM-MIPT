@@ -67,8 +67,9 @@ PANELS: tuple[tuple[str, str, str], ...] = (
 # Transition read off the Binder crossing of the inset of Fig. 2b.
 P_TAILS = 0.1
 # True if the exports hold (value, p) pairs instead of (p, value), as for the
-# Fig. 7 curves of issue #137 (see reference/README.md).
-SWAP_XY = False
+# Fig. 7 curves of issue #137 (see reference/README.md): the Fig. 2b export
+# of issue #113 is one of them.
+SWAP_XY = True
 # Categorical slots in fixed order: ours first, then the reference curves.
 COLORS = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#6250d6", "#d63a8a")
 

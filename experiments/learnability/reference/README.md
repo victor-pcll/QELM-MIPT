@@ -7,7 +7,7 @@ Phys. Rev. Lett. 129, 200602 (2022), arXiv:2206.12429.
 
 | File | Panel | Source |
 | --- | --- | --- |
-| `barratt2022_fig2b_accuracy.csv` | Fig. 2b: accuracy of the classifier, `L = 6` and `L = 20` | `wpd_datasets.csv`, attached to issue #113 |
+| `barratt2022_fig2b_accuracy.csv` | Fig. 2b: accuracy of the classifier, `L = 6` and `L = 20` | `wpd_datasets.csv`, attached to issue #113; columns hold **(value, p)**, read with `SWAP_XY = True` in `plot_learnability.py` |
 
 `plot_learnability.py` reads every file of this folder named after one of
 its panels (`PANELS`), with `QELM.utils.load_wpd_csv`. A curve whose name
