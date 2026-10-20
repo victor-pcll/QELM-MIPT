@@ -7,6 +7,12 @@ from typing import Any
 
 from omegaconf import DictConfig
 
+from QELM.evaluation.charge_sharpening import (
+    binder_ratio,
+    bootstrap_errors,
+    central_moment,
+    sharpening_statistics,
+)
 from QELM.evaluation.entropy import (
     entanglement_spectrum,
     mean_single_qubit_entropy,
@@ -70,6 +76,9 @@ def get_evaluator(name: str) -> Evaluator:
 
 
 __all__ = [
+    "binder_ratio",
+    "bootstrap_errors",
+    "central_moment",
     "entanglement_spectrum",
     "evaluate",
     "get_evaluator",
@@ -77,5 +86,6 @@ __all__ = [
     "metric_status",
     "render_plot",
     "renyi_entropy",
+    "sharpening_statistics",
     "von_neumann_entropy",
 ]
