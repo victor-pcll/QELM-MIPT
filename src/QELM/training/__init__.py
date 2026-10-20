@@ -5,7 +5,7 @@ and one module per child class:
 
 - :mod:`QELM.training.measurements`: measurement schemes with back-action
   (``base.py``: :class:`Readout`; ``projective.py``:
-  :class:`ProjectiveMeasurement`).
+  :class:`ProjectiveMeasurement`; ``weak.py``: :class:`WeakMeasurement`).
 - :mod:`QELM.training.readout`: features computed from the final state
   (``base.py``: :class:`Observables`; ``single.py``:
   :class:`SingleObservable`; ``double.py``: :class:`DoubleObservable`).
@@ -25,6 +25,7 @@ from QELM.training.measurements import (
     ProjectiveMeasurement,
     Readout,
     ReadoutResult,
+    WeakMeasurement,
     measure_projective_rho,
 )
 from QELM.training.readout import DoubleObservable, Observables, SingleObservable
@@ -37,6 +38,7 @@ _TRAINERS: dict[str, type[Trainer]] = {
 
 _READOUTS: dict[str, type[Readout]] = {
     ProjectiveMeasurement.name: ProjectiveMeasurement,
+    WeakMeasurement.name: WeakMeasurement,
 }
 
 
@@ -89,6 +91,7 @@ __all__ = [
     "RidgeReadout",
     "SingleObservable",
     "Trainer",
+    "WeakMeasurement",
     "create_qelm_dataset",
     "get_readout",
     "get_trainer",

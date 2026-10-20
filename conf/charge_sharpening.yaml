@@ -1,0 +1,56 @@
+# Charge-sharpening benchmark against Agrawal et al., PRX 14, 041012 (2024),
+# Fig. 7 (issue #137). Primary config of
+# experiments/charge_sharpening/charge_sharpening.py: the main config, with the
+# weak measurement instead of the projective one and the blocks below.
+#
+#   uv run python experiments/charge_sharpening/charge_sharpening.py weak_measurement.gamma=0.4
+defaults:
+  - config
+  - override training/measurements: weak
+  - _self_
+
+# The paper's L = 6 system qubits plus the ancilla R: N = Ns + Nr = 7.
+N: 7
+
+# Initial state, Eq. (B1): (|0>_R |010101> + |1>_R |010100>) / sqrt(2), the
+# product states of charge Ns // 2 and Ns // 2 - 1, then scrambled by the
+# scrambling layers of the circuit.
+ancilla_charge_sector:
+  N: ${N}
+  initial: product
+
+# Brickwork of random U(1) gates on the system qubits (QELM.models.circuits).
+# depth: number of brickwork layers t, the paper's t = L / 2 = Ns / 2. One layer
+#   is a full period of the brickwork (even then odd half-layer). Every system
+#   qubit is weakly measured between two layers (t - 1 rounds), see
+#   charge_sharpening.measure_after_last_layer.
+# scrambling_layers: all-to-all random U(1) layers applied once to the initial
+#   state, before the monitored dynamics (5 in the paper).
+# boundary: open (a chain of trapped ions) or periodic.
+# fixed_instance: true keeps one draw of the gates for every trajectory, as in
+#   the paper; false draws new gates for every trajectory (average over
+#   circuits). With true, the seed selects the circuit instance.
+U1_circuit:
+  N: ${N}
+  Nr: ${Nr}
+  depth: ${int:${div:${Ns},2}}
+  scrambling_layers: 5
+  boundary: open
+  fixed_instance: true
+
+weak_measurement:
+  gamma: 0.5
+
+# Number of trajectories per gamma (10 000 in the paper).
+samples:
+  L: 10000
+
+charge_sharpening:
+  # false: measure between layers only (t - 1 rounds), which matches the
+  # digitized Fig. 7; true: also measure after the last layer (t rounds).
+  measure_after_last_layer: false
+  # Bootstrap resamples for the error bars of the variance and the Binder ratio.
+  n_boot: 200
+  # Logarithm base of S_R: e for nats (S_R <= ln 2), as in the paper's Fig. 7;
+  # 2 for bits (S_R <= 1).
+  entropy_base: 2.718281828459045

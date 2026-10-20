@@ -24,13 +24,13 @@ uv sync
 | --- | --- |
 | `conf/` | Hydra YAML: `config.yaml` plus groups `models`, `training/{measurements,readout,regression}`, `evaluation`, mirroring `src/QELM/` |
 | `data/` | Local time series and training datasets (gitignored) |
-| `src/QELM/models/` | Hamiltonians and time evolution (transverse-field Ising model, Kitaev scaffold) |
+| `src/QELM/models/` | Hamiltonians and time evolution (transverse-field Ising model, Kitaev scaffold), random U(1) circuits (`circuits.py`) |
 | `src/QELM/physics/` | Quantum primitives: Pauli matrices and site operators |
 | `src/QELM/embedding/` | Initial-state embeddings (`Embedding` base, ancilla + charge-sector state) |
 | `src/QELM/training/` | Measurements, feature extraction and readout fitting (`LinearReadout` scaffold, `RidgeReadout` closed-form ridge regression) |
 | `src/QELM/evaluation/` | Metrics and plot scaffolds |
 | `notebooks/series.ipynb` | Plot a local series from `data/`; the library call stays a scaffold |
-| `experiments/` | One folder per experiment, each with its Python script and its bash launcher: `example/` (the `run_experiment.py` template and `test_experiment.sh`), `projective/`, `QELM_Z/`, `QELM_M/`; `scratch/` for local outputs (gitignored) |
+| `experiments/` | One folder per experiment, each with its Python script and its bash launcher: `example/` (the `run_experiment.py` template and `test_experiment.sh`), `projective/`, `QELM_Z/`, `QELM_M/`, `charge_sharpening/` (benchmark against Agrawal et al. 2024, Fig. 7); `scratch/` for local outputs (gitignored) |
 | `main.py` | Entrypoint. Routes `models` → model → training → evaluation |
 
 ## Run the pipeline

@@ -7,6 +7,7 @@ from QELM.embedding.charge_sector import (
     AncillaChargeSectorEmbedding,
     charge_sector_indices,
     charge_sector_state,
+    product_charge_index,
 )
 
 _EMBEDDINGS: dict[str, type[Embedding]] = {
@@ -39,4 +40,5 @@ __all__ = [
     "charge_sector_indices",
     "charge_sector_state",
     "get_embedding",
+    "product_charge_index",
 ]
