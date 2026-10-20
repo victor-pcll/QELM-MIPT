@@ -35,13 +35,11 @@ import re
 from pathlib import Path
 from typing import Any
 
-import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.figure import Figure
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
-
-from QELM.utils import (  # noqa: E402
+from QELM.utils import (
     compare_to_reference,
     latest_sweep,
     load_sweep,
@@ -89,8 +87,10 @@ def load_references(
     return refs
 
 
-def plot_sweep(sweep_dir: Path, reference_dir: Path = REFERENCE_DIR) -> dict[str, Any]:
-    """Draw ``charge_sharpening.png`` and write ``comparison.json`` in ``sweep_dir``.
+def draw_sweep(
+    sweep_dir: Path, reference_dir: Path = REFERENCE_DIR
+) -> tuple[Figure, dict[str, Any]]:
+    """Draw the three panels of Fig. 7 for a sweep, over the reference curves.
 
     Args:
         sweep_dir: Folder of one sweep, holding the run folders.
@@ -98,7 +98,9 @@ def plot_sweep(sweep_dir: Path, reference_dir: Path = REFERENCE_DIR) -> dict[str
             skipped.
 
     Returns:
-        The comparison, ``{metric: {N<N>: {curve: deviation stats}}}``.
+        The open figure (the notebook shows it, :func:`plot_sweep` saves and
+        closes it) and the comparison,
+        ``{metric: {N<N>: {curve: deviation stats}}}``.
     """
     rows = load_sweep(sweep_dir, keys=KEYS)
     metrics = [m for m, _, _ in PANELS]
@@ -188,6 +190,21 @@ def plot_sweep(sweep_dir: Path, reference_dir: Path = REFERENCE_DIR) -> dict[str
         ax.spines[["top", "right"]].set_visible(False)
     axes[0].legend(frameon=False, fontsize=8)
     fig.suptitle("Charge sharpening, Agrawal et al. PRX 14, 041012 (2024), Fig. 7")
+    return fig, comparison
+
+
+def plot_sweep(sweep_dir: Path, reference_dir: Path = REFERENCE_DIR) -> dict[str, Any]:
+    """Draw ``charge_sharpening.png`` and write ``comparison.json`` in ``sweep_dir``.
+
+    Args:
+        sweep_dir: Folder of one sweep, holding the run folders.
+        reference_dir: Folder of the reference CSV files; missing files are
+            skipped.
+
+    Returns:
+        The comparison, ``{metric: {N<N>: {curve: deviation stats}}}``.
+    """
+    fig, comparison = draw_sweep(sweep_dir, reference_dir)
     fig.savefig(sweep_dir / "charge_sharpening.png", dpi=150)
     plt.close(fig)
     (sweep_dir / "comparison.json").write_text(json.dumps(comparison, indent=2) + "\n")
@@ -196,6 +213,9 @@ def plot_sweep(sweep_dir: Path, reference_dir: Path = REFERENCE_DIR) -> dict[str
 
 def main() -> None:
     """Parse the command line and plot one sweep."""
+    # No window from the command line: draw to the PNG only. The notebook
+    # imports this module without this, so its figures show inline.
+    plt.switch_backend("Agg")
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument(
         "sweep_dir",

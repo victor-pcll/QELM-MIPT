@@ -125,6 +125,11 @@ panels of Fig. 7 in `charge_sharpening.png`, over the curves digitized from
 the paper in `experiments/charge_sharpening/reference/` (see the README there),
 and writes the deviation at the reference points to `comparison.json`.
 
+`notebooks/charge_sharpening_benchmark.ipynb` runs this sweep from Jupyter
+with one progress bar for the whole sweep, then shows the three panels over
+the paper's curves, prints the deviation from its `L = 6` curve, and plots
+the distribution of `S_R` over the trajectories at a few values of `gamma`.
+
 Two exact limits are checked by the tests: `S_R = 1` in every trajectory at
 `gamma = 0` (gates on the system cannot change the ancilla's entropy) and
 `S_R = 0` at `gamma = 1` (a projective record of every qubit reveals the
