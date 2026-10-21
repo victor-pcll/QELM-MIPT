@@ -51,7 +51,8 @@ around their mean.
 The same readout is also fitted, separately, on six feature sets read from
 the same final states (issue #163, follow-up): the one-site ``<X_k>``,
 ``<Y_k>``, ``<Z_k>`` and the two-site correlators ``<X_i X_j>``,
-``<Y_i Y_j>``, ``<Z_i Z_j>`` over the pairs ``i < j`` of system qubits. The
+``<Y_i Y_j>``, ``<Z_i Z_j>`` over the pairs ``i < j`` of system qubits, and
+the cross correlators ``<X_i Y_j>``, ``<Y_i X_j>`` (set ``XY``). The
 TFIM and the Z measurements conserve the parity of ``Q``, while ``X_k`` and
 ``Y_k`` flip it, so ``<X_k> = <Y_k> = 0`` exactly: these two sets are the
 chance level. ``<X_i X_j>`` and ``<Y_i Y_j>`` keep the parity and are
@@ -122,9 +123,10 @@ from QELM.training.measurements.projective import measure_projective_rho
 from QELM.utils import save_config, save_results
 
 # Feature sets, each fitted with its own readout: one-site expectation values
-# and two-site correlators over the pairs i < j of system qubits.
+# and two-site correlators over the pairs i < j of system qubits; "XY" holds
+# both cross correlators <X_i Y_j> and <Y_i X_j> of each pair.
 PAULIS = {"X": PAULI_X, "Y": PAULI_Y, "Z": Z}
-FEATURE_SETS = ("X", "Y", "Z", "XX", "YY", "ZZ")
+FEATURE_SETS = ("X", "Y", "Z", "XX", "YY", "ZZ", "XY")
 # Scalars written to metrics.json besides nmse, nmse_err and r2.
 EXTRA_METRICS = (
     "accuracy",
@@ -187,25 +189,29 @@ def observable_features(rho: np.ndarray, system: list[int], name: str) -> np.nda
         system: The system qubits.
         name: ``"X"``, ``"Y"`` or ``"Z"`` for ``<P_k>`` on each qubit of
             ``system``; ``"XX"``, ``"YY"`` or ``"ZZ"`` for ``<P_i P_j>`` on
-            each pair ``i < j``, from the two-qubit reduced state.
+            each pair ``i < j``, from the two-qubit reduced state; ``"XY"``
+            for ``<X_i Y_j>`` then ``<Y_i X_j>`` on each pair.
 
     Returns:
-        Real array of length ``len(system)`` or ``len(system) choose 2``.
+        Real array of length ``len(system)``, ``len(system) choose 2``, or
+        twice that for ``"XY"``.
 
     Raises:
         ValueError: If ``name`` is not a set of :data:`FEATURE_SETS`.
     """
     if name not in FEATURE_SETS:
         raise ValueError(f"Unknown feature set {name!r}, expected {FEATURE_SETS}.")
-    P = PAULIS[name[0]]
     if len(name) == 1:
-        return np.array([local_expectation(rho, P, k) for k in system])
-    PP = np.kron(P, P)
+        return np.array([local_expectation(rho, PAULIS[name], k) for k in system])
+    products = [np.kron(PAULIS[name[0]], PAULIS[name[1]])]
+    if name[0] != name[1]:
+        products.append(np.kron(PAULIS[name[1]], PAULIS[name[0]]))
     return np.array(
         [
             np.real(np.trace(PP @ partial_trace(rho, [i, j])))
             for n, i in enumerate(system)
             for j in system[n + 1 :]
+            for PP in products
         ]
     )
 

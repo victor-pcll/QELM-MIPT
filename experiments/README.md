@@ -155,7 +155,8 @@ notebook) completes an interrupted sweep without redoing the finished runs.
 
 It runs `experiments/QELM_Q/exp_QELM_Q.py` for every combination of
 `N_VALUES` (default `4`), `H_VALUES` (the transverse field `TFIM.h`, default
-`10`, i.e. `10 J`), `SEEDS` (default `42`) and `P_VALUES`
+`10`, i.e. `10 J`), `T_VALUES` (the total time `evolution.t`, default `10`,
+i.e. `10 / J`), `SEEDS` (default `42`) and `P_VALUES`
 (`projective_measurement.p`, default `0.0 0.2 0.5 0.8 1.0`) and `FINAL_VALUES`
 (`projective_measurement.final_measurement`, default `false`), with `L=200`
 samples per run by default. The ancilla `R` is measured in Z first, which
@@ -172,17 +173,20 @@ two charges), with `accuracy_baseline` and `balanced_accuracy` as in
 `exp_QELM_M`, plus `S_half_mean`, the mean half-system entanglement entropy of
 the final state. The readout is also fitted, separately, on five other
 feature sets of the same final states, `<X_k>`, `<Y_k>` and the correlators
-`<X_i X_j>`, `<Y_i Y_j>`, `<Z_i Z_j>` (`accuracy_<name>`, `r2_<name>` in
+`<X_i X_j>`, `<Y_i Y_j>`, `<Z_i Z_j>` and the cross correlators
+`<X_i Y_j>`, `<Y_i X_j>` (set `XY`) (`accuracy_<name>`, `r2_<name>` in
 `metrics.json`). The measurements draw from their own generator, so at
 `p = 0` the run is exactly the standard QELM, one unitary `exp(-i H t)` per
 sample. Each run lands in
-`outputs/exp_QELM_Q/<date_time>/N<N>_h<h>_final<final>_seed<seed>_p<p>/`.
+`outputs/exp_QELM_Q/<date_time>/N<N>_h<h>_t<t>_final<final>_seed<seed>_p<p>/`.
 
 `notebooks/results/04_QELM_Q_measurements.ipynb` checks the `p = 0` baseline,
 runs the sweep in `outputs/QELM_Q/<date_time>/` and plots the accuracy, R2
 and `S_half` against `p` for each `N` and `h`, one row of panels without and
 one with the final round, then the accuracy of each feature set
-(`accuracy_by_observable_<setting>.png`) (`accuracy_vs_p.png` and
+(`accuracy_by_observable_<setting>.png`), and finally sweeps the evolution
+time at `N = 6` in its own folder `outputs/QELM_Q_time/<date_time>/`
+(`accuracy_vs_p_time.png`) (`accuracy_vs_p.png` and
 `.json` in the sweep folder).
 
 ## Run the charge-sharpening benchmark (issue #137)

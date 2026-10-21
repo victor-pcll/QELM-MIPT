@@ -107,7 +107,8 @@ def test_six_feature_sets() -> None:
     pairs = Ns * (Ns - 1) // 2
     for name in module.FEATURE_SETS:
         phi = out[f"features_{name}"]
-        assert phi.shape == (L, (Ns if len(name) == 1 else pairs) + 1)
+        width = {1: Ns, 2: pairs}[len(name)] * (2 if name == "XY" else 1)
+        assert phi.shape == (L, width + 1)
         assert np.all(np.abs(phi) <= 1 + 1e-12)
         for score in ("accuracy", "balanced_accuracy", "r2"):
             assert np.isfinite(out[f"{score}_{name}"])
@@ -127,25 +128,29 @@ def test_observable_features_match_the_full_operators() -> None:
     rho = np.outer(psi, psi.conj())
     system = [0, 1, 2]
     for name in module.FEATURE_SETS:
-        P = module.PAULIS[name[0]]
         if len(name) == 1:
+            P = module.PAULIS[name]
             expected = [
                 np.real(np.trace(get_site_operator(P, k, n) @ rho)) for k in system
             ]
         else:
+            orders = [name] if name[0] == name[1] else [name, name[::-1]]
             expected = [
                 np.real(
                     np.trace(
-                        get_site_operator(P, i, n) @ get_site_operator(P, j, n) @ rho
+                        get_site_operator(module.PAULIS[a], i, n)
+                        @ get_site_operator(module.PAULIS[b], j, n)
+                        @ rho
                     )
                 )
                 for i, j in ((0, 1), (0, 2), (1, 2))
+                for a, b in orders
             ]
         np.testing.assert_allclose(
             module.observable_features(rho, system, name), expected, atol=1e-12
         )
     with pytest.raises(ValueError, match="feature set"):
-        module.observable_features(rho, system, "XY")
+        module.observable_features(rho, system, "XZ")
 
 
 def test_reproducible_with_the_seed() -> None:
@@ -202,7 +207,7 @@ def test_bash_sweep_writes_one_folder_per_run(tmp_path: Path) -> None:
     subprocess.run(["bash", str(BASH_SCRIPT)], check=True, env=env, cwd=tmp_path)
     runs = sorted(p.parent.name for p in tmp_path.glob("*/metrics.json"))
     assert runs == sorted(
-        f"N3_h{h}_final{final}_seed42_p{p}"
+        f"N3_h{h}_t10_final{final}_seed42_p{p}"
         for h in (10, 1)
         for final in ("false", "true")
         for p in ("0.0", "1.0")
