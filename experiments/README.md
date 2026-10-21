@@ -147,6 +147,30 @@ whose folder already holds `config_used.yaml`, the last file a run writes, is
 skipped, so launching again with the same `OUT_DIR` (`RESUME` in the
 notebook) completes an interrupted sweep without redoing the finished runs.
 
+### Haar and Clifford dynamics (issue #171)
+
+`models=haar_circuit` and `models=clifford_circuit` replace the TFIM of
+`exp_QELM_M` (and so of `exp_QELM_M_ratio`) by a brickwork circuit on the
+system qubits: Haar-random two-qubit gates of U(4), or two-qubit Clifford
+gates drawn uniformly from the 11 520 elements of the group
+(`QELM.models.circuits`). Each time-evolution step applies `layers_per_step`
+brickwork layers (default 1, each a full period, even then odd bonds), each
+with its own gates, and every sample gets new gates, as every TFIM sample
+gets a new disorder (`fixed_instance: false`). The initial state, the
+measurements, the record, the target and the scores are those of the TFIM
+run. Both launchers take the model from `MODEL`:
+
+```bash
+MODEL=clifford_circuit P_VALUES="0.2 0.5 1.0" ./experiments/QELM_M/exp_QELM_M_ratio.sh
+```
+
+`notebooks/results/05_QELM_M_circuits.ipynb` runs the ratio sweep once per
+model in `outputs/QELM_M_circuits/<date_time>/<model>/`, draws the curves
+and heatmaps of notebook 03 for each, and compares the three dynamics
+(`comparison_models.png`): the balanced accuracy of the readout and the
+Bayes accuracy `accuracy_optimal` against `p`, and the NMSE against the
+ratio.
+
 ## Run the charge-sharpening benchmark (issue #137)
 
 ```bash

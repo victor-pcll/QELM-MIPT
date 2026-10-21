@@ -1,0 +1,25 @@
+# @package _global_
+
+# Brickwork circuit of random two-qubit Clifford gates, each drawn uniformly from the
+# 11 520 elements of the two-qubit Clifford group
+# (QELM.models.circuits.CliffordBrickworkCircuit, issue #171).
+# It replaces the TFIM as the unitary dynamics of the QELM experiments on the
+# measurement record (experiments/QELM_M), with models=clifford_circuit. The gates
+# act on the Ns system qubits only, never on the Nr ancillas.
+models: clifford_circuit
+
+# Total number of qubits, ancilla included (N = Ns + Nr, see conf/config.yaml).
+# Override it with N=6, not clifford_circuit.N=6.
+N: 10
+
+clifford_circuit:
+  N: ${N} # number of qubits, always the top-level N
+  Nr: ${Nr} # ancillas, left untouched by the gates
+  # Brickwork layers per time-evolution step, each a full period (gates on
+  # the even bonds, then on the odd ones), each with its own gates. A sample
+  # runs projective_measurement.nbr_time_evolution * layers_per_step layers.
+  layers_per_step: 1
+  boundary: open # open or periodic
+  # false: new gates for every sample, as the TFIM draws a new disorder per
+  # sample; true: one draw of the gates for every sample, set by the seed.
+  fixed_instance: false

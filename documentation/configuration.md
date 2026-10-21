@@ -27,6 +27,8 @@ Group files:
 | File | Contents |
 | --- | --- |
 | `conf/models/TFIM.yaml` | `models: TFIM`, the `TFIM` block (`N`, `J`, `h = 10 J`, `RUNS` random Hamiltonians) and the evolution block `evolution` (`t = 10 / J`, `n_steps = d = 4 N`, `dt = t / d`) |
+| `conf/models/haar_circuit.yaml` | `models: haar_circuit`, a `haar_circuit` block (`N`, `Nr`, `layers_per_step: 1`, `boundary: open`, `fixed_instance: false`): a brickwork of Haar-random two-qubit gates on the system qubits, the unitary dynamics of `experiments/QELM_M` in place of the TFIM (issue #171) |
+| `conf/models/clifford_circuit.yaml` | `models: clifford_circuit`, the same block for a brickwork of uniformly random two-qubit Clifford gates (issue #171) |
 | `conf/models/kitaev.yaml` | `models: kitaev`, a `kitaev` block with only `N`, and a fixed `evolution` block (`dt: 0.01`, `n_steps: 100`) |
 | `conf/training/measurements/projective.yaml` | The `projective_measurement` block (`qubits: null`, `Nr: 1`, `p: 1.0`), placed by its `# @package projective_measurement` header |
 | `conf/training/readout/single.yaml` | The `single_observable` block (`N`, `observables: [Z]`), placed by `training/readout@single_observable` in the defaults list |

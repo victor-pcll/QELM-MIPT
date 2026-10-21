@@ -16,6 +16,8 @@
 #     N_VALUES="4 6"          total numbers of qubits, ancilla included
 #     SEEDS="42 43 44"        seeds (one disorder and measurement draw each)
 #     P_VALUES="0.1 0.5 1.0"  measurement probabilities
+#     MODEL=haar_circuit      unitary dynamics: TFIM (default), haar_circuit
+#                             or clifford_circuit (issue #171)
 
 # Stop at the first failing command, unset variable or failing pipe.
 set -euo pipefail
@@ -36,7 +38,7 @@ unset VIRTUAL_ENV
 
 # ---- Parameters -------------------------------------------------------------
 EXPERIMENT="exp_QELM_M"
-MODEL="TFIM"
+MODEL="${MODEL:-TFIM}"
 read -r -a N_VALUES <<< "${N_VALUES:-4}"   # number of qubits, ancilla included
 L="${L:-12}"                                # samples per run (samples.L)
 # ALPHA, when set, overrides training.alpha; otherwise the default of

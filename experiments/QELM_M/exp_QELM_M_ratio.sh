@@ -14,6 +14,8 @@
 # back. Environment variables change the defaults (lists are space-separated):
 #     OUT_ROOT=/tmp/qelm          write under /tmp/qelm instead of outputs
 #     OUT_DIR=/tmp/qelm/sweep     write the runs exactly there (the notebook)
+#     MODEL=TFIM                  unitary dynamics: TFIM, haar_circuit or
+#                                 clifford_circuit (issue #171)
 #     N_TEST=200                  test samples per run (experiment.n_test)
 #     ALPHA=1e-3                  ridge penalty (training.alpha), not the ratio
 #     N_VALUES="4"                total numbers of qubits, ancilla included
@@ -47,7 +49,7 @@ unset VIRTUAL_ENV
 
 # ---- Parameters -------------------------------------------------------------
 EXPERIMENT="exp_QELM_M_ratio"
-MODEL="TFIM"
+MODEL="${MODEL:-TFIM}"   # TFIM, haar_circuit or clifford_circuit (issue #171)
 read -r -a N_VALUES <<< "${N_VALUES:-4}"   # number of qubits, ancilla included
 N_TEST="${N_TEST:-200}"                     # test samples (experiment.n_test)
 # Ridge penalty, independent of the ratio. It must stay > 0 for ratios < 1.
