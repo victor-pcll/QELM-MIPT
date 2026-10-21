@@ -246,7 +246,7 @@ def test_bash_launcher_dry_run(tmp_path: Path) -> None:
     for run in runs:
         assert (run / "metrics.json").is_file()
         metrics = json.loads((run / "metrics.json").read_text())
-        expected_keys = {"nmse", "r2", *_load_script().EXTRA_METRICS}
+        expected_keys = {"nmse", "nmse_err", "r2", *_load_script().EXTRA_METRICS}
         assert expected_keys <= set(metrics)
         # Without ALPHA the run keeps the config default (issue #92).
         hydra_cfg = OmegaConf.load(run / ".hydra" / "config.yaml")
