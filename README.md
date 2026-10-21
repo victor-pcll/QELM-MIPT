@@ -32,7 +32,7 @@ uv sync
 | `src/QELM/utils/plots/` | Plotting helpers shared by the scripts and the notebooks: one style (no grid, closed box, large titles), sweep curves, reference overlays, `save_figure` (figure and its data in the run's output folder) |
 | `notebooks/benchmarks/` | Benchmark notebooks: reproductions of published figures (learnability, Barratt et al. 2022, Fig. 2b and 2c; charge sharpening, Agrawal et al. 2024, Fig. 7) |
 | `notebooks/results/` | Notebooks producing new results (TFIM reservoir, QELM on the measurement record M) |
-| `experiments/` | One folder per experiment, each with its Python script and its bash launcher: `example/` (the `run_experiment.py` template and `test_experiment.sh`), `projective/`, `QELM_Z/`, `QELM_M/`, `charge_sharpening/` (benchmark against Agrawal et al. 2024, Fig. 7); `scratch/` for local outputs (gitignored) |
+| `experiments/` | One folder per experiment, each with its Python script and its bash launcher: `example/` (the `run_experiment.py` template and `test_experiment.sh`), `projective/`, `QELM_Z/`, `QELM_M/`, `QELM_Q/`, `charge_sharpening/` (benchmark against Agrawal et al. 2024, Fig. 7); `scratch/` for local outputs (gitignored) |
 | `main.py` | Entrypoint. Routes `models` → model → training → evaluation |
 
 ## Run the pipeline

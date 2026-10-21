@@ -5,7 +5,7 @@ parameters, calls the Hydra entry point once per combination, and writes every
 run to its own folder under `outputs/`, which git ignores (see `.gitignore`).
 
 Next to `metrics.json`, every Python experiment script (`projective/`,
-`QELM_Z/`, `QELM_M/`, `charge_sharpening/`, `learnability/`) writes
+`QELM_Z/`, `QELM_M/`, `QELM_Q/`, `charge_sharpening/`, `learnability/`) writes
 `resolved_config.json`, the config of the run with every interpolation
 evaluated (`QELM.utils.save_config`, issue #85). `.hydra/config.yaml` keeps the
 formulas as written in `conf/`, such as `depth: ${int:${div:${Ns},2}}`;
@@ -173,6 +173,48 @@ ratio. Its last section runs the same sweep of the two circuits with one
 fixed draw of their gates per seed (`EXTRA_OVERRIDES="<model>.fixed_instance=true"`,
 any Hydra overrides added to every run of the ratio launcher), in
 `<model>_fixed/`, and compares the two (`comparison_fixed_circuit.png`).
+
+## Run the QELM experiment on the charge Q under intermediate measurements (issue #163)
+
+```bash
+./experiments/QELM_Q/exp_QELM_Q.sh
+```
+
+It runs `experiments/QELM_Q/exp_QELM_Q.py` for every combination of
+`N_VALUES` (default `4`), `H_VALUES` (the transverse field `TFIM.h`, default
+`10`, i.e. `10 J`), `T_VALUES` (the total time `evolution.t`, default `10`,
+i.e. `10 / J`), `SEEDS` (default `42`) and `P_VALUES`
+(`projective_measurement.p`, default `0.0 0.2 0.5 0.8 1.0`) and `FINAL_VALUES`
+(`projective_measurement.final_measurement`, default `false`), with `L=200`
+samples per run by default. The ancilla `R` is measured in Z first, which
+fixes the charge sector of the system: the target is that charge,
+`Y = Q` (`Ns // 2` or `Ns // 2 - 1`). The system evolves in
+`projective_measurement.nbr_time_evolution` steps (default 5), and **between**
+two steps each system qubit is measured in Z with probability `p`; by
+default there is no measurement after the last step, and
+`final_measurement=true` adds one, so that the features are read right after
+a collapse. The features are only the final
+`<Z_k> = Tr(Z_k rho)` of the system qubits, never the outcomes. The primary
+metric is `accuracy` (the prediction on the right side of the midpoint of the
+two charges), with `accuracy_baseline` and `balanced_accuracy` as in
+`exp_QELM_M`, plus `S_half_mean`, the mean half-system entanglement entropy of
+the final state. The readout is also fitted, separately, on five other
+feature sets of the same final states, `<X_k>`, `<Y_k>` and the correlators
+`<X_i X_j>`, `<Y_i Y_j>`, `<Z_i Z_j>` and the cross correlators
+`<X_i Y_j>`, `<Y_i X_j>` (set `XY`) (`accuracy_<name>`, `r2_<name>` in
+`metrics.json`). The measurements draw from their own generator, so at
+`p = 0` the run is exactly the standard QELM, one unitary `exp(-i H t)` per
+sample. Each run lands in
+`outputs/exp_QELM_Q/<date_time>/N<N>_h<h>_t<t>_final<final>_seed<seed>_p<p>/`.
+
+`notebooks/results/04_QELM_Q_measurements.ipynb` checks the `p = 0` baseline,
+runs the sweep in `outputs/QELM_Q/<date_time>/` and plots the accuracy, R2
+and `S_half` against `p` for each `N` and `h`, one row of panels without and
+one with the final round, then the accuracy of each feature set
+(`accuracy_by_observable_<setting>.png`), and finally sweeps the evolution
+time at `N = 6` in its own folder `outputs/QELM_Q_time/<date_time>/`
+(`accuracy_vs_p_time.png`) (`accuracy_vs_p.png` and
+`.json` in the sweep folder).
 
 ## Run the charge-sharpening benchmark (issue #137)
 
