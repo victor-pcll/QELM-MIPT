@@ -83,6 +83,19 @@ def test_notebook_runs_the_sweep_and_plots(
         line.get_linestyle() == ":" and set(line.get_ydata()) == {0.5}
         for line in bal_ax.lines
     )
+    # The Bayes-accuracy plot carries the accuracy of the readout, dashed in
+    # the color of the same N, with its own error bars.
+    bayes_ax = namespace["axes"][keys.index("accuracy_optimal"), 0]
+    model = next(
+        c for c in bayes_ax.containers if c.get_label() == "N = 3, model accuracy"
+    )
+    assert model.lines[0].get_linestyle() == "--"
+    bayes = next(c for c in bayes_ax.containers if c.get_label() == "N = 3")
+    assert model.lines[0].get_color() == bayes.lines[0].get_color()
+    np.testing.assert_allclose(
+        model.lines[0].get_ydata(),
+        [r["accuracy_mean"] for r in namespace["table"]],
+    )
     for key in keys:
         assert all(np.isfinite(r[f"{key}_sem"]) for r in namespace["table"])
     # p = 1 purifies the ancilla in every run, so the entropy and its error
@@ -98,4 +111,14 @@ def test_notebook_runs_the_sweep_and_plots(
     data = json.loads(namespace["figure_path"].with_suffix(".json").read_text())
     assert len(data["panels"]) == 2 * len(keys)
     assert len(data["extra"]["table"]) == 2
+    bayes_panel = data["panels"][2 * keys.index("accuracy_optimal")]
+    saved = next(
+        c for c in bayes_panel["curves"] if c["label"] == "N = 3, model accuracy"
+    )
+    np.testing.assert_allclose(
+        saved["y"], [r["accuracy_mean"] for r in data["extra"]["table"]]
+    )
+    np.testing.assert_allclose(
+        saved["yerr_upper"], [r["accuracy_sem"] for r in data["extra"]["table"]]
+    )
     os.chdir(REPO_ROOT)

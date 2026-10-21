@@ -17,6 +17,7 @@ from QELM.utils.plots import (
     STYLE,
     color_map,
     compare_same_size,
+    draw_companion,
     draw_curve,
     draw_references,
     figure_data,
@@ -153,6 +154,42 @@ def test_log_curve_keeps_its_lower_bar_above_zero(tmp_path: Path) -> None:
     # 0.6 stays 0.1, so check the bound only.
     y, low = np.array(drawn["y"]), np.array(drawn["yerr_lower"])
     assert np.all(y - low > 0)
+
+
+def test_draw_companion_overlays_a_second_metric_dashed(tmp_path: Path) -> None:
+    """The companion curve is dashed, in the given color, with the error bars
+    of its own metric, and saved with them (issue #104: the model accuracy
+    on the panel of its Bayes ceiling)."""
+    rows = [{**r, "ceiling": r["acc"] + 0.1} for r in _rows()]
+    summary = summarize(rows, by=("N", "p"), metrics=["acc", "ceiling"])
+    fig, ax = subplots()
+    draw_curve(ax, sweep_curve(summary, 4, "p", "ceiling"), "#2a78d6", label="N = 4")
+    bars = draw_companion(
+        ax, summary, 4, "p", "acc", "#2a78d6", label="N = 4, model accuracy"
+    )
+    assert bars is not None
+    line = bars.lines[0]
+    assert line.get_linestyle() == "--"
+    assert line.get_color() == "#2a78d6"
+    np.testing.assert_allclose(line.get_ydata(), [0.2, 0.6])
+    # The main curve stays solid.
+    main = next(c for c in ax.containers if c.get_label() == "N = 4")
+    assert main.lines[0].get_linestyle() == "-"
+    save_figure(fig, tmp_path, "companion")
+    (panel,) = json.loads((tmp_path / "companion.json").read_text())["panels"]
+    drawn = next(c for c in panel["curves"] if c["label"] == "N = 4, model accuracy")
+    np.testing.assert_allclose(drawn["y"], [0.2, 0.6])
+    # Two seeds at N = 4, 0 and 0.2 apart: standard error 0.1.
+    np.testing.assert_allclose(drawn["yerr_lower"], [0.1, 0.1])
+    np.testing.assert_allclose(drawn["yerr_upper"], [0.1, 0.1])
+
+
+def test_draw_companion_skips_a_missing_metric() -> None:
+    """An older sweep without the metric draws nothing and does not fail."""
+    fig, ax = subplots()
+    assert draw_companion(ax, _summary(), 4, "p", "accuracy") is None
+    assert draw_companion(ax, _summary(), 8, "p", "acc") is None
+    assert not ax.lines and not ax.containers
 
 
 @pytest.mark.parametrize("name", ["", "a/b", "fig.png"])

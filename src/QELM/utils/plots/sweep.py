@@ -114,6 +114,7 @@ def draw_curve(
     label: str | None = None,
     band: bool = False,
     log: bool = False,
+    linestyle: str = "-",
 ) -> Any:
     """Draw a curve with its error bars, and optionally its seed spread.
 
@@ -125,6 +126,9 @@ def draw_curve(
         band: Shade ``mean +- std`` when every point has several runs.
         log: The y axis is logarithmic: a lower bar is stopped at half the
             mean, since a bar below 0 cannot be drawn.
+        linestyle: Style of the line joining the points, e.g. ``"--"`` for a
+            companion curve (:func:`draw_companion`); the error bars stay
+            solid.
 
     Returns:
         The ``ErrorbarContainer`` of ``ax.errorbar``.
@@ -137,6 +141,7 @@ def draw_curve(
         color=color,
         marker="o",
         capsize=3,
+        linestyle=linestyle,
         label=label,
     )
     if band and curve.n_runs.size and np.all(curve.n_runs > 1):
@@ -151,6 +156,48 @@ def draw_curve(
     if log:
         ax.set_yscale("log")
     return bars
+
+
+def draw_companion(
+    ax: Axes,
+    summary: Sequence[Mapping[str, Any]],
+    size: int,
+    x_key: str,
+    metric: str,
+    color: str | None = None,
+    label: str | None = None,
+    log: bool = False,
+    size_key: str = "N",
+) -> Any | None:
+    """Overlay a second metric of the same sweep on a panel, dashed.
+
+    For a reference level read from the sweep itself, e.g. the chance level
+    of the accuracy on the accuracy panel (issue #130), or the accuracy of
+    the readout on the panel of its Bayes ceiling (issue #104). The curve is
+    drawn with :func:`draw_curve`, so it keeps its error bars and
+    :func:`~QELM.utils.plots.save_figure` saves them.
+
+    Args:
+        ax: Axis to draw on.
+        summary: Output of :func:`QELM.utils.summarize`, as for
+            :func:`sweep_curve`.
+        size: Value of ``size_key`` to keep.
+        x_key: Row key of the swept parameter.
+        metric: Metric to overlay, ``<metric>_mean`` being read.
+        color: Line color, usually that of the main curve of the same size.
+        label: Legend label.
+        log: The y axis is logarithmic, as in :func:`draw_curve`.
+        size_key: Row key of the size.
+
+    Returns:
+        The ``ErrorbarContainer``, or ``None`` when the summary has no
+        ``metric`` for this size (an older sweep): nothing is drawn.
+    """
+    rows = [r for r in summary if int(r[size_key]) == size]
+    if not rows or any(f"{metric}_mean" not in r for r in rows):
+        return None
+    curve = sweep_curve(rows, size, x_key, metric, size_key=size_key)
+    return draw_curve(ax, curve, color, label=label, log=log, linestyle="--")
 
 
 def draw_references(

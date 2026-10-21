@@ -27,6 +27,7 @@ from QELM.utils.plots.style import (
 from QELM.utils.plots.sweep import (
     SweepCurve,
     compare_same_size,
+    draw_companion,
     draw_curve,
     draw_references,
     draw_residuals,
@@ -43,6 +44,7 @@ __all__ = [
     "apply_style",
     "color_map",
     "compare_same_size",
+    "draw_companion",
     "draw_curve",
     "draw_references",
     "draw_residuals",
