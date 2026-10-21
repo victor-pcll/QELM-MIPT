@@ -11,7 +11,10 @@ Phys. Rev. X 14, 041012 (2024), arXiv:2311.00058. Attached to issue #137.
 | `agrawal2024_fig7_S_R_var.csv` | center: variance of `S_R` | `wpd_datasets-5.csv` |
 | `agrawal2024_fig7_binder.csv` | right: Binder ratio | `wpd_datasets-6.csv` |
 
-Each file has two curves, `L = 6` and `L = 20`. The axes were calibrated
+Each file has two curves, `L = 6` and `L = 20`, the paper's number of
+system sites. `plot_charge_sharpening.py` renames them `N = 7` and `N = 21`,
+our total number of qubits with the ancilla `R`, and compares each with our
+curve of the same `N`. The axes were calibrated
 the other way round when digitizing, so each pair of columns holds
 **(value, gamma)**, not (gamma, value): read them with
 `QELM.utils.load_wpd_csv(path, swap_xy=True)`, as `plot_charge_sharpening.py`

@@ -27,7 +27,7 @@ uv run python main.py checkpoint.dir=/tmp/qrc-run checkpoint.use_uuid=true
 
 ## Notebook
 
-In a notebook, `load_config` composes the same config as the command line. It finds `conf/` from the package location, so it works from `notebooks/`, and it clears Hydra's global state, so the cell can be re-run:
+In a notebook, `load_config` composes the same config as the command line. It finds `conf/` from the package location, so it works from any folder of `notebooks/`, and it clears Hydra's global state, so the cell can be re-run:
 
 ```python
 from QELM import TransverseFieldIsingModel, load_config, set_seed
@@ -37,7 +37,7 @@ set_seed(cfg)
 model = TransverseFieldIsingModel.from_config(cfg)
 ```
 
-From the repository root, run `uv sync`, then open `notebooks/series.ipynb`. When `data/series.npy` is a 1D or 2D numeric array, the notebook writes `outputs/series.png`. Both paths are gitignored. That figure is the local file. The pipeline still records the evolution as a scaffold, so that figure is not a plot of the dynamics.
+From the repository root, run `uv sync`, then open a notebook of `notebooks/benchmarks/` (reproductions of published figures) or `notebooks/results/` (new results); `notebooks/README.md` lists them. Each notebook saves its figures, with the data they show, in the output folder of the sweep it ran (`outputs/<experiment>/<date_time>/`, gitignored), through `QELM.utils.plots.save_figure`.
 
 ### Experimenting without blocking `git pull`
 
@@ -45,12 +45,12 @@ The notebooks in `notebooks/` are templates tracked by git. To experiment, copy 
 
 ```bash
 mkdir -p notebooks/scratch
-cp notebooks/01-QELM-MIPT.ipynb notebooks/scratch/
+cp notebooks/results/01_TFIM_reservoir.ipynb notebooks/scratch/
 ```
 
 `git pull` never touches that folder, so there is nothing to stash. Code changes in `src/` go on their own branch and become a pull request; `main` stays clean.
 
-The template notebooks start with `%load_ext autoreload` and `%autoreload 2`. `uv sync` installs `QELM` in editable mode, so after `git pull && uv sync` the running kernel picks up the new code in `src/` without a restart.
+The TFIM notebook starts with `%load_ext autoreload` and `%autoreload 2`. `uv sync` installs `QELM` in editable mode, so after `git pull && uv sync` the running kernel picks up the new code in `src/` without a restart.
 
 ## Experiment scripts
 

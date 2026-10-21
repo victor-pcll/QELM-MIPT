@@ -10,7 +10,7 @@ Code is committed. Datasets and run artifacts are not.
 - `outputs/` — Hydra run directories and checkpoints.
 - `wandb/` — local Weights & Biases files. The pipeline does not create this directory.
 
-`.env` is ignored. `results/` is ignored. Payload suffixes are ignored too, including `*.h5`, `*.hdf5`, `*.csv`, `*.npy`, and `*.npz`.
+`.env` is ignored. `results/` at the repository root is ignored (`notebooks/results/` holds tracked notebooks). Payload suffixes are ignored too, including `*.h5`, `*.hdf5`, `*.csv`, `*.npy`, and `*.npz`.
 
 DVC is not set up.
 

@@ -1,4 +1,4 @@
-"""notebooks/02_QELM_M_analysis.ipynb runs end to end on a small sweep (#94).
+"""notebooks/results/02_QELM_M_analysis.ipynb runs end to end on a small sweep (#94).
 
 The code cells are executed in order, as Jupyter would, with the sweep
 shrunk through the environment variables the notebook reads.
@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = REPO_ROOT / "notebooks" / "02_QELM_M_analysis.ipynb"
+NOTEBOOK = REPO_ROOT / "notebooks" / "results" / "02_QELM_M_analysis.ipynb"
 
 
 # Agg has no window: plt.show() in the notebook warns "FigureCanvasAgg is
@@ -31,7 +31,7 @@ def test_notebook_runs_the_sweep_and_plots(
     shows: list[tuple] = []
     monkeypatch.setattr(plt, "show", lambda *args, **kwargs: shows.append(args))
     for key, value in {
-        "N_SAMPLES": "10",
+        "L": "10",
         "N_VALUES": "3",
         "SEEDS": "42 43",
         "P_VALUES": "0.2 1.0",
@@ -39,7 +39,7 @@ def test_notebook_runs_the_sweep_and_plots(
         "RUN": "1",
     }.items():
         monkeypatch.setenv(key, value)
-    monkeypatch.chdir(REPO_ROOT / "notebooks")  # where Jupyter starts
+    monkeypatch.chdir(NOTEBOOK.parent)  # where Jupyter starts
 
     cells = json.loads(NOTEBOOK.read_text())["cells"]
     namespace: dict = {}
@@ -92,4 +92,8 @@ def test_notebook_runs_the_sweep_and_plots(
     assert namespace["figure_path"].is_file()
     assert len(shows) == 1  # the notebook still asks to show its figure
     assert namespace["figure_path"].parent.parent == tmp_path / "exp_QELM_M"
+    # The plotted data is saved next to the figure (#147).
+    data = json.loads(namespace["figure_path"].with_suffix(".json").read_text())
+    assert len(data["panels"]) == 2 * len(keys)
+    assert len(data["extra"]["table"]) == 2
     os.chdir(REPO_ROOT)
