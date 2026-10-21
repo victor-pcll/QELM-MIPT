@@ -169,7 +169,10 @@ model in `outputs/QELM_M_circuits/<date_time>/<model>/`, draws the curves
 and heatmaps of notebook 03 for each, and compares the three dynamics
 (`comparison_models.png`): the balanced accuracy of the readout and the
 Bayes accuracy `accuracy_optimal` against `p`, and the NMSE against the
-ratio.
+ratio. Its last section runs the same sweep of the two circuits with one
+fixed draw of their gates per seed (`EXTRA_OVERRIDES="<model>.fixed_instance=true"`,
+any Hydra overrides added to every run of the ratio launcher), in
+`<model>_fixed/`, and compares the two (`comparison_fixed_circuit.png`).
 
 ## Run the charge-sharpening benchmark (issue #137)
 

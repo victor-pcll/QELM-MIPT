@@ -1,7 +1,8 @@
 """notebooks/results/05_QELM_M_circuits.ipynb runs end to end on a small sweep.
 
 Issue #171: the ratio sweep of notebook 03 once per unitary dynamics (TFIM,
-Haar and Clifford circuits), its curves, heatmaps and comparison figure.
+Haar and Clifford circuits), its curves, heatmaps and comparison figure, then
+the same sweep of the circuits with one fixed draw of their gates.
 The code cells are executed in order, as Jupyter would, with the sweep
 shrunk through the environment variables the notebook reads.
 """
@@ -39,6 +40,7 @@ def test_notebook_runs_the_three_sweeps_and_plots(
         "OUT_ROOT": str(tmp_path),
         "RUN": "1",
         "TQDM_DISABLE": "1",
+        "FIXED": "1",
     }.items():
         monkeypatch.setenv(key, value)
     monkeypatch.chdir(NOTEBOOK.parent)  # where Jupyter starts
@@ -85,9 +87,37 @@ def test_notebook_runs_the_three_sweeps_and_plots(
         labels = ax.get_legend_handles_labels()[1]
         assert [lab for lab in labels if lab in MODELS] == list(MODELS)
     assert axes_cmp[0, 2].get_yscale() == "log"
-    assert len(shows) == 3
+    assert len(shows) == 6  # 3 figures, then 3 for the fixed circuits
     for name in ("metrics_vs_alpha_ratio", "heatmaps_p_alpha_ratio"):
         assert (sweep_dir / f"{name}.png").is_file()
     data = json.loads((sweep_dir / "comparison_models.json").read_text())
     assert set(data["extra"]["comparison"]) == {f"{m} N=3" for m in MODELS}
+
+    # Fixed circuit: one subfolder per circuit, every run with
+    # fixed_instance=true (read back and checked by the notebook), and the
+    # same gates for every sample of a run.
+    fixed = namespace["tables_fixed"]
+    assert list(fixed) == ["haar_circuit", "clifford_circuit"]
+    for model in fixed:
+        runs = sorted((sweep_dir / f"{model}_fixed").glob("N3_*"))
+        assert len(runs) == 8
+        for run in runs:
+            assert "fixed_instance: true" in (run / "config_used.yaml").read_text()
+        assert [r["n_runs"] for r in fixed[model]] == [2] * 4
+    assert namespace["axes_fixed"].shape == (2, 3)
+    assert namespace["axes_maps_fixed"].shape == (2, 4)
+    assert (
+        namespace["axes_maps_fixed"][0, 0].get_title().endswith("haar_circuit, N = 3")
+    )
+    # Error-bar containers carry the labels; lines[0] is the data line.
+    styles = {
+        c.get_label(): c.lines[0].get_linestyle()
+        for c in namespace["axes_cmp_fixed"][0, 0].containers
+    }
+    assert styles["clifford_circuit"] == "-"
+    assert styles["clifford_circuit, fixed"] == "--"
+    data = json.loads((sweep_dir / "comparison_fixed_circuit.json").read_text())
+    assert set(data["extra"]["comparison"]) == {f"{m} N=3" for m in MODELS} | {
+        f"{m}, fixed N=3" for m in fixed
+    }
     os.chdir(REPO_ROOT)

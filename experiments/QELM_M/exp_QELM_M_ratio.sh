@@ -23,6 +23,9 @@
 #     P_VALUES="0.5 1.0"          measurement probabilities
 #     ALPHA_RATIOS="0.5 1.0 2.0"  training samples per weight
 #     MAX_ATTEMPTS=2              tries per run before it is given up
+#     EXTRA_OVERRIDES="haar_circuit.fixed_instance=true"
+#                                 more Hydra overrides for every run,
+#                                 space-separated
 #
 # A sweep survives a crashing run (issue #168): a run that exits with an error
 # (a segmentation fault is exit code 139) is tried again, up to MAX_ATTEMPTS
@@ -58,6 +61,7 @@ read -r -a SEEDS <<< "${SEEDS:-42}"
 read -r -a P_VALUES <<< "${P_VALUES:-1.0}"
 read -r -a ALPHA_RATIOS <<< "${ALPHA_RATIOS:-0.5 1.0 1.5 2.0 5.0 10.0}"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-2}"
+read -r -a EXTRA_OVERRIDES <<< "${EXTRA_OVERRIDES:-}"
 # -----------------------------------------------------------------------------
 
 STAMP="$(date +%Y-%m-%d_%H-%M-%S)"
@@ -80,7 +84,7 @@ for N in "${N_VALUES[@]}"; do
         RUN_DIR="$OUT_DIR/N${N}_seed${SEED}_p${p}_a${RATIO}"
         # The "--- " line announces a run (one step of the notebook's bar),
         # also for a skipped one.
-        echo "--- models=$MODEL N=$N seed=$SEED p=$p alpha_ratio=$RATIO n_test=$N_TEST training.alpha=$ALPHA"
+        echo "--- models=$MODEL N=$N seed=$SEED p=$p alpha_ratio=$RATIO n_test=$N_TEST training.alpha=$ALPHA${EXTRA_OVERRIDES[*]:+ ${EXTRA_OVERRIDES[*]}}"
         if [[ -f "$RUN_DIR/config_used.yaml" ]]; then
           echo "already done, skipped: $RUN_DIR"
           n_skipped=$((n_skipped + 1))
@@ -96,7 +100,8 @@ for N in "${N_VALUES[@]}"; do
             "experiment.alpha_ratio=$RATIO" \
             "experiment.n_test=$N_TEST" \
             "training.alpha=$ALPHA" \
-            "hydra.run.dir=$RUN_DIR" || status=$?
+            "hydra.run.dir=$RUN_DIR" \
+            ${EXTRA_OVERRIDES[@]+"${EXTRA_OVERRIDES[@]}"} || status=$?
           if [[ $status -eq 0 ]]; then
             break
           fi

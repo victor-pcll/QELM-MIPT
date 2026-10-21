@@ -156,10 +156,12 @@ def test_unsupported_model_is_rejected() -> None:
 
 
 def test_ratio_launcher_runs_a_circuit(tmp_path: Path) -> None:
-    """MODEL=clifford_circuit reaches every run of the ratio sweep."""
+    """MODEL=clifford_circuit and EXTRA_OVERRIDES reach every run of the
+    ratio sweep."""
     env = {
         **os.environ,
         "MODEL": "clifford_circuit",
+        "EXTRA_OVERRIDES": "clifford_circuit.fixed_instance=true",
         "N_VALUES": "3",
         "P_VALUES": "1.0",
         "ALPHA_RATIOS": "2.0",
@@ -173,5 +175,7 @@ def test_ratio_launcher_runs_a_circuit(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert "models=clifford_circuit" in result.stdout
     run = tmp_path / "N3_seed42_p1.0_a2.0"
-    assert OmegaConf.load(run / "config_used.yaml").models == "clifford_circuit"
+    used = OmegaConf.load(run / "config_used.yaml")
+    assert used.models == "clifford_circuit"
+    assert used.clifford_circuit.fixed_instance is True
     assert json.loads((run / "metrics.json").read_text())["n_train"] == 22
