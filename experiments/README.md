@@ -80,6 +80,41 @@ run folders back with `QELM.utils.load_sweep` and plots the metrics against
 figure and its data go to the sweep folder, `metrics_vs_p.png` and
 `metrics_vs_p.json`.
 
+### Sample-to-parameter ratio sweep (issue #96)
+
+```bash
+./experiments/QELM_M/exp_QELM_M_ratio.sh
+```
+
+It runs `experiments/QELM_M/exp_QELM_M_ratio.py`, the same experiment with
+the number of training samples set by the ratio
+`alpha_ratio = n_train / n_params` (`experiment.alpha_ratio`, config
+`conf/QELM_M_ratio.yaml`), where `n_params = nbr_time_evolution * Ns + 1` is
+the number of weights of the ridge readout (16 at `N = 4`). The script sets
+`samples.train_size = round(alpha_ratio * n_params)` and
+`samples.L = train_size + n_test`, with a test set of fixed size
+`experiment.n_test` (default 200), checks that `X` has `n_params` columns,
+then runs `exp_QELM_M.run`. `alpha_ratio < 1` is underdetermined and needs a
+ridge penalty `training.alpha > 0` (the script stops otherwise);
+`alpha_ratio` and `training.alpha` are independent keys. The launcher sweeps
+`ALPHA_RATIOS` (default `0.5 1.0 1.5 2.0 5.0 10.0`), `P_VALUES`, `SEEDS` and
+`N_VALUES`:
+
+```bash
+SEEDS="42 43 44" P_VALUES="0.2 0.5 1.0" ./experiments/QELM_M/exp_QELM_M_ratio.sh
+```
+
+Each run lands in
+`outputs/exp_QELM_M_ratio/<date_time>/N<N>_seed<seed>_p<p>_a<alpha_ratio>/`
+with the files of `exp_QELM_M`, `metrics.json` adding `alpha_ratio`,
+`n_train`, `n_params` and `train_ratio`, and `config_used.yaml`, the config
+with the sample counts actually used (Hydra writes `.hydra/config.yaml`
+before the script sets them). `notebooks/results/03_QELM_M_alpha_ratio.ipynb`
+runs the sweep in `outputs/QELM_M_ratio/<date_time>/` and plots the test
+NMSE, R2 and balanced accuracy against the ratio, with the interpolation
+threshold `alpha_ratio = 1` dashed (`metrics_vs_alpha_ratio.png` and
+`.json` in the sweep folder).
+
 ## Run the charge-sharpening benchmark (issue #137)
 
 ```bash
