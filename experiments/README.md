@@ -131,13 +131,21 @@ with the files of `exp_QELM_M`, `metrics.json` adding `alpha_ratio`,
 with the sample counts actually used (Hydra writes `.hydra/config.yaml`
 before the script sets them). `notebooks/results/03_QELM_M_alpha_ratio.ipynb`
 runs the sweep in `outputs/QELM_M_ratio/<date_time>/` and plots the test
-NMSE, R2 and balanced accuracy against the ratio, with the interpolation
-threshold `alpha_ratio = 1` dashed (`metrics_vs_alpha_ratio.png` and
-`.json` in the sweep folder). Its default grid is `p` from 0 to 1 and
-`alpha_ratio` from 0.25 to 10 on a log scale, and its last section draws one
-heatmap per metric (NMSE, R2, accuracy, balanced accuracy) over
-`(p, alpha_ratio)`, with `alpha_ratio = 1` dashed
-(`heatmaps_p_alpha_ratio.png` and `.json`, issue #164).
+NMSE, R2 and balanced accuracy against the ratio, one row of panels per `N`,
+with the interpolation threshold `alpha_ratio = 1` dashed
+(`metrics_vs_alpha_ratio.png` and `.json` in the sweep folder). Its default
+grid is `p` from 0 to 1 and `alpha_ratio` from 0.25 to 10 on a log scale, and
+its last section draws one heatmap per metric (NMSE, R2, accuracy, balanced
+accuracy) and per `N`, `alpha_ratio` on the x axis and `p` on the y axis, with
+`alpha_ratio = 1` dashed (`heatmaps_p_alpha_ratio.png` and `.json`, issues
+#164 and #167).
+
+A run that fails (a segmentation fault is exit code 139) does not stop the
+sweep (issue #168): it is tried again, up to `MAX_ATTEMPTS` times
+(default 2), then listed in `failed_runs.txt` in the sweep folder. A run
+whose folder already holds `config_used.yaml`, the last file a run writes, is
+skipped, so launching again with the same `OUT_DIR` (`RESUME` in the
+notebook) completes an interrupted sweep without redoing the finished runs.
 
 ## Run the QELM experiment on the charge Q under intermediate measurements (issue #163)
 
