@@ -55,6 +55,8 @@ Everything is written to the Hydra run directory, by default
   records) and the charge check: ``max_charge_leakage``,
   ``n_non_conserved``, ``n_discarded`` and ``discarded_fraction``;
 - ``.hydra/config.yaml``: the full composed config, to reproduce the run.
+- ``resolved_config.json``: the same config with every ``${...}`` evaluated,
+  the numbers the run used (issue #85).
 """
 
 from __future__ import annotations
@@ -77,6 +79,7 @@ from QELM.evaluation.learnability import (
     learnability_statistics,
     sample_records,
 )
+from QELM.utils import save_config
 
 # Statistics written to metrics.json, each with its bootstrap error.
 STATISTICS = (
@@ -213,6 +216,7 @@ def main(cfg: DictConfig) -> None:
     results = run(cfg)
     out_dir = Path(HydraConfig.get().runtime.output_dir)
     save(results, out_dir)
+    save_config(cfg, out_dir)
     n_kept = int(np.count_nonzero(results["kept"]))
     print(f"L: {results['L']}  p: {results['p']:.4g}  records: {n_kept}")
     for key in STATISTICS:

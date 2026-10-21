@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from omegaconf import DictConfig, OmegaConf
+
+# File written by save_config next to metrics.json (issue #85).
+RESOLVED_CONFIG = "resolved_config.json"
 
 
 def save_results(
@@ -67,3 +71,27 @@ def save_results(
         metrics[key] = float(results[key])
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
     return npz_path
+
+
+def save_config(cfg: DictConfig, out_dir: Path) -> Path:
+    """Write the config with every interpolation evaluated to ``resolved_config.json``.
+
+    Hydra saves ``.hydra/config.yaml`` with the interpolations as written in
+    ``conf/``, for example ``depth: ${int:${div:${Ns},2}}``. This file holds
+    the values they evaluate to, plain numbers, so that the parameters of a
+    run read back with ``json.load`` (issue #85). The scripts call it after
+    ``run``, so a value that ``run`` sets in ``cfg`` is the value written.
+
+    Args:
+        cfg: Config of the run. The ``mul``, ``sub``, ``div`` and ``int``
+            resolvers are registered by ``import QELM``.
+        out_dir: Destination folder, created if needed.
+
+    Returns:
+        Path of the JSON file.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    resolved = OmegaConf.to_container(cfg, resolve=True)
+    path = out_dir / RESOLVED_CONFIG
+    path.write_text(json.dumps(resolved, indent=2) + "\n")
+    return path

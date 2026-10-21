@@ -1,4 +1,5 @@
-"""QELM.utils.save_results, the save shared by the experiment scripts (issue #87)."""
+"""QELM.utils.save_results and save_config, the saves shared by the experiment
+scripts (issues #87 and #85)."""
 
 from __future__ import annotations
 
@@ -7,8 +8,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from omegaconf import OmegaConf
 
-from QELM.utils import save_results
+from QELM import load_config
+from QELM.utils import save_config, save_results
 
 
 def _results(features: str = "X", shape: tuple[int, ...] = (10, 4)) -> dict:
@@ -77,3 +80,48 @@ def test_missing_extra_metric_is_an_error(tmp_path: Path) -> None:
 def test_bad_exp_name_is_rejected(tmp_path: Path, name: str) -> None:
     with pytest.raises(ValueError, match="exp_name"):
         save_results(_results(), tmp_path, name)
+
+
+def test_config_interpolations_are_written_as_numbers(tmp_path: Path) -> None:
+    """The example of issue #85: h and dt are derived with the resolvers, and
+    resolved_config.json holds the floats they evaluate to."""
+    cfg = OmegaConf.create(
+        {
+            "TFIM": {"N": 4, "J": 2.0, "h": "${mul:10.0,${TFIM.J}}"},
+            "evolution": {
+                "t": "${div:10.0,${TFIM.J}}",
+                "n_steps": "${int:${mul:4,${TFIM.N}}}",
+                "dt": "${div:${evolution.t},${evolution.n_steps}}",
+            },
+        }
+    )
+    path = save_config(cfg, tmp_path / "run")
+    assert path == tmp_path / "run" / "resolved_config.json"
+    assert "${" not in path.read_text()
+    resolved = json.loads(path.read_text())
+    assert resolved == {
+        "TFIM": {"N": 4, "J": 2.0, "h": 20.0},
+        "evolution": {"t": 5.0, "n_steps": 16, "dt": 5.0 / 16},
+    }
+    assert isinstance(resolved["evolution"]["dt"], float)
+    assert isinstance(resolved["evolution"]["n_steps"], int)
+
+
+def test_composed_config_is_resolved(tmp_path: Path) -> None:
+    """On conf/charge_sharpening.yaml, Ns = N - Nr and depth = Ns // 2, which
+    .hydra/config.yaml keeps as ${...}, are written as integers."""
+    cfg = load_config(["N=7"], config_name="charge_sharpening")
+    resolved = json.loads(save_config(cfg, tmp_path).read_text())
+    assert resolved["N"] == 7 and resolved["Nr"] == 1 and resolved["Ns"] == 6
+    assert resolved["U1_circuit"]["depth"] == 3
+    assert resolved["U1_circuit"]["N"] == 7
+    assert resolved == OmegaConf.to_container(cfg, resolve=True)
+
+
+def test_config_follows_changes_made_by_the_run(tmp_path: Path) -> None:
+    """A value the script sets in cfg before saving is the value written,
+    and the values derived from it follow."""
+    cfg = OmegaConf.create({"N": 4, "Nr": 1, "Ns": "${int:${sub:${N},${Nr}}}"})
+    cfg.N = 6
+    resolved = json.loads(save_config(cfg, tmp_path).read_text())
+    assert resolved == {"N": 6, "Nr": 1, "Ns": 5}
