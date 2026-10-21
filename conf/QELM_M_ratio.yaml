@@ -1,0 +1,25 @@
+# Sample-to-parameter ratio sweep of the QELM on the measurement record M
+# (issue #96). Primary config of experiments/QELM_M/exp_QELM_M_ratio.py: the
+# main config, with the block below.
+#
+#   uv run python experiments/QELM_M/exp_QELM_M_ratio.py experiment.alpha_ratio=0.5
+defaults:
+  - config
+  - _self_
+
+# alpha_ratio = n_train / n_features: the number of training samples per
+# learnable weight of the ridge readout. n_features = nbr_time_evolution * Ns
+# + 1 (the flattened record M and the bias column) does not depend on p, an
+# unmeasured qubit still being a feature, equal to 0. The script sets
+#   samples.train_size = max(1, round(alpha_ratio * n_features))
+#   samples.L          = samples.train_size + n_test
+# so alpha_ratio < 1 is the underdetermined regime (fewer equations than
+# weights) and alpha_ratio > 1 the overdetermined one. The test set keeps
+# n_test samples whatever alpha_ratio, so the test NMSE of two ratios is
+# measured on the same number of samples.
+# alpha_ratio is not the ridge penalty, training.alpha: the two are
+# independent keys. null runs exp_QELM_M unchanged, with samples.L and
+# samples.train_fraction.
+experiment:
+  alpha_ratio: 1.0
+  n_test: 200

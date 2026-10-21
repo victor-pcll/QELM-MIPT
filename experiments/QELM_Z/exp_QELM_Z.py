@@ -31,7 +31,7 @@ Everything is written to the Hydra run directory, by default
 
 - ``exp_QELM_Z.npz``: ``X`` (features, bias column included), ``Y``,
   ``y_test``, ``y_pred`` and the weights ``W``;
-- ``metrics.json``: ``nmse``, ``r2`` and the shapes used;
+- ``metrics.json``: ``nmse``, ``nmse_err``, ``r2`` and the shapes used;
 - ``.hydra/config.yaml``: the full composed config, to reproduce the run.
 """
 
@@ -48,7 +48,7 @@ from tqdm import tqdm
 
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
 from QELM.embedding import AncillaChargeSectorEmbedding
-from QELM.evaluation.metrics import NMSE, R2
+from QELM.evaluation.metrics import NMSE, R2, NMSE_err
 from QELM.training import RidgeReadout, SingleObservable
 from QELM.utils import save_results
 
@@ -66,7 +66,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     Returns:
         The arrays and metrics of the run: ``X`` (with the bias column),
-        ``Y``, ``y_test``, ``y_pred``, ``W``, ``nmse`` and ``r2``.
+        ``Y``, ``y_test``, ``y_pred``, ``W``, ``nmse``, ``nmse_err`` and ``r2``.
     """
     set_seed(cfg)
     labels = list(
@@ -111,6 +111,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "y_pred": y_pred,
         "W": solver.W,
         "nmse": NMSE(y_test, y_pred),
+        "nmse_err": NMSE_err(y_test, y_pred),
         "r2": R2(y_test, y_pred),
     }
 
@@ -126,7 +127,7 @@ def main(cfg: DictConfig) -> None:
     out_dir = Path(HydraConfig.get().runtime.output_dir)
     save_results(results, out_dir, Path(__file__).stem)
     print(f"X: {results['X'].shape}  Y: {results['Y'].shape}")
-    print(f"NMSE: {results['nmse']:.6g}")
+    print(f"NMSE: {results['nmse']:.6g} +- {results['nmse_err']:.2g}")
     print(f"R2: {results['r2']:.6g}")
     print(f"Saved to {out_dir}")
 

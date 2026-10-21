@@ -42,3 +42,15 @@ learnability:
   entropy_base: 2.718281828459045
   n_boot: 200
   batch: 4000
+
+# Check that the charge of every record is conserved by its circuit and its
+# measurements (issue #134, QELM.physics.charge). The largest weight outside
+# the starting charge sector, over the record, is its charge_leakage, saved in
+# the .npz; it is exactly 0 when the simulation is correct.
+# atol: a record conserves the charge if its leakage is at most atol.
+# filter_non_conserved_charge: true drops the other records before the
+#   statistics (their count goes to metrics.json as n_discarded); false keeps
+#   every record and only reports the check, the baseline behaviour.
+charge_conservation:
+  atol: 1.0e-10
+  filter_non_conserved_charge: false
