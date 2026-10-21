@@ -29,7 +29,9 @@ uv sync
 | `src/QELM/embedding/` | Initial-state embeddings (`Embedding` base, ancilla + charge-sector state) |
 | `src/QELM/training/` | Measurements, feature extraction and readout fitting (`LinearReadout` scaffold, `RidgeReadout` closed-form ridge regression) |
 | `src/QELM/evaluation/` | Metrics and plot scaffolds |
-| `notebooks/series.ipynb` | Plot a local series from `data/`; the library call stays a scaffold |
+| `src/QELM/utils/plots/` | Plotting helpers shared by the scripts and the notebooks: one style (no grid, closed box, large titles), sweep curves, reference overlays, `save_figure` (figure and its data in the run's output folder) |
+| `notebooks/benchmarks/` | Benchmark notebooks: reproductions of published figures (learnability, Barratt et al. 2022, Fig. 2b and 2c; charge sharpening, Agrawal et al. 2024, Fig. 7) |
+| `notebooks/results/` | Notebooks producing new results (TFIM reservoir, QELM on the measurement record M) |
 | `experiments/` | One folder per experiment, each with its Python script and its bash launcher: `example/` (the `run_experiment.py` template and `test_experiment.sh`), `projective/`, `QELM_Z/`, `QELM_M/`, `charge_sharpening/` (benchmark against Agrawal et al. 2024, Fig. 7); `scratch/` for local outputs (gitignored) |
 | `main.py` | Entrypoint. Routes `models` → model → training → evaluation |
 
@@ -44,7 +46,7 @@ uv run python main.py models=TFIM N=12 evolution.dt=0.05
 
 `models=TFIM` selects `conf/models/TFIM.yaml` and the transverse-field Ising model. `training/regression=ridge` (default) or `training/regression=linear` selects the trainer. `N`, `J`, and `dt` stay in YAML or CLI overrides.
 
-## Notebook
+## Notebooks
 
 From the repository root:
 
@@ -52,9 +54,7 @@ From the repository root:
 uv sync
 ```
 
-Then open `notebooks/series.ipynb`. `uv sync` installs `ipykernel` and Matplotlib from the dev group, so the kernel can use `.venv`.
-
-The notebook reads `data/series.npy` (a 1D or 2D numeric array) and, when that file is present, writes `outputs/series.png`. Both directories are gitignored. The figure is the local file, not the Ising trajectory.
+Then open a notebook of `notebooks/benchmarks/` or `notebooks/results/` (see `notebooks/README.md`). `uv sync` installs `ipykernel` and Matplotlib from the dev group, so the kernel can use `.venv`. Each notebook launches its sweep, reads it back and saves every figure with the data it shows in the sweep's folder under `outputs/` (gitignored).
 
 ## Data and checkpoints
 

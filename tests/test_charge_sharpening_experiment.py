@@ -181,6 +181,7 @@ def test_bash_script_and_plot(tmp_path: Path) -> None:
         f"L=6,\nX,Y\n{ln2},0.0\n{ln2 / 2},0.5\n0.0,1.0\n"
     )
     comparison = _load(PLOT).plot_sweep(sweep, ref)
-    stats = comparison["S_R_mean"]["N7"]["L=6"]
+    # The paper's "L=6" (system sites) is renamed N = 7 (ancilla included).
+    stats = comparison["S_R_mean"]["N7"]["N = 7"]
     assert stats["n_points"] == 3
     assert stats["max_abs_diff"] == pytest.approx(0.0, abs=1e-9)

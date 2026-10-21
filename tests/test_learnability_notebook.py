@@ -1,4 +1,4 @@
-"""notebooks/03_learnability_accuracy.ipynb runs end to end on a small sweep (#113).
+"""notebooks/benchmarks/01_learnability_accuracy.ipynb runs end to end (#113).
 
 The code cells are executed in order, as Jupyter would, with the sweep
 shrunk through the environment variables the notebook reads.
@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = REPO_ROOT / "notebooks" / "03_learnability_accuracy.ipynb"
+NOTEBOOK = REPO_ROOT / "notebooks" / "benchmarks" / "01_learnability_accuracy.ipynb"
 
 
 @pytest.mark.filterwarnings("error:.*FigureCanvasAgg is non-interactive:UserWarning")
@@ -26,7 +26,7 @@ def test_notebook_runs_the_sweep_and_plots(
     shows: list[tuple] = []
     monkeypatch.setattr(plt, "show", lambda *args, **kwargs: shows.append(args))
     for key, value in {
-        "N_SAMPLES": "20",
+        "L": "20",
         "N_VALUES": "4 6",
         "SEEDS": "0 1",
         "P_VALUES": "0.0 1.0",
@@ -34,7 +34,7 @@ def test_notebook_runs_the_sweep_and_plots(
         "RUN": "1",
     }.items():
         monkeypatch.setenv(key, value)
-    monkeypatch.chdir(REPO_ROOT / "notebooks")  # where Jupyter starts
+    monkeypatch.chdir(NOTEBOOK.parent)  # where Jupyter starts
 
     cells = json.loads(NOTEBOOK.read_text())["cells"]
     namespace: dict = {}
@@ -55,6 +55,7 @@ def test_notebook_runs_the_sweep_and_plots(
     for r in table:
         assert r["accuracy_mean"] == pytest.approx(0.5 if r["p"] == 0 else 1.0)
     assert namespace["figure_path"].is_file()
+    assert namespace["figure_path"].with_suffix(".json").is_file()  # #147
     assert "N4-N6" in namespace["comparison"]["binder_crossings"]["P_corr_binder"]
     assert len(shows) == 1
     os.chdir(REPO_ROOT)

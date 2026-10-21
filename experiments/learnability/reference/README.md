@@ -11,9 +11,10 @@ Phys. Rev. Lett. 129, 200602 (2022), arXiv:2206.12429.
 | `barratt2022_fig2c_entropy.csv` | Fig. 2c: mean entropy `E[H(P_corr)]` in nats (`<= ln 2`), `L = 20` and `L = 6` | `wpd_datasets-2.csv`, attached to issue #115; columns hold **(value, p)** too (`SWAP_XY = True`); values used as digitized |
 
 `plot_learnability.py` reads every file of this folder named after one of
-its panels (`PANELS`), with `QELM.utils.load_wpd_csv`. A curve whose name
-gives a size (`L = 6`) is compared with our curve of the same `L`; the other
-curves are drawn for reference only. If the axes were calibrated the other
+its panels (`PANELS`), with `QELM.utils.load_wpd_csv`. The paper writes
+its chain length `L`; there is no ancilla, so a curve named `L = 6` is
+renamed `N = 6` (our total number of qubits) and compared with our curve of
+the same `N`; the other curves are drawn for reference only. If the axes were calibrated the other
 way round when digitizing, so that the columns hold (value, p), set
 `SWAP_XY = True` in `plot_learnability.py`, as for the Fig. 7 curves of
 issue #137. The `.gitignore` lets `experiments/*/reference/*.csv` through,

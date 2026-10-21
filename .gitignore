@@ -61,7 +61,8 @@ data/
 *.out
 *.err
 outputs/
-results/
+# Root-level results only: notebooks/results/ holds tracked notebooks (#147).
+/results/
 wandb/
 
 # =========================

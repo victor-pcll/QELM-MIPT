@@ -29,10 +29,14 @@ With several sizes it also locates where their Binder curves cross
 (Fig. 2b) and ``comparison_fig2c.json`` (Fig. 2c) in the sweep folder, next
 to the figures.
 
-Notation: ``N`` is the chain length everywhere here, the ``L`` of the paper
-(no ancilla). The paper's curve names (``L = 6``) are read as ``N = 6``, so
-that our curve ``N6`` is compared to the reference ``N = 6``. The number of
-records per run is ``samples.L`` in the config, ``n_records`` here.
+Notation (issue #147): ``N`` is the total number of qubits, here the chain
+length since there is no ancilla, and ``L`` the number of records per run
+(``samples.L`` in the config, ``n_records`` in the rows). The paper writes
+its chain length ``L``: its curve names (``L = 6``) are renamed ``N = 6``,
+so that our curve ``N6`` is compared to the reference ``N = 6``.
+
+Each figure is written with its data (:func:`QELM.utils.plots.save_figure`):
+``learnability.png`` with ``learnability.json``, and so on.
 
 Error bars: with one seed, the bootstrap error over records; with several,
 the standard error over seeds.
@@ -53,14 +57,20 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.figure import Figure
 from scipy.special import erf
 
-from QELM.utils import (
-    compare_to_reference,
-    latest_sweep,
-    load_sweep,
-    load_wpd_csv,
-    summarize,
+from QELM.utils import latest_sweep, load_sweep, load_wpd_csv, summarize
+from QELM.utils.plots import (
+    color_map,
+    compare_same_size,
+    draw_curve,
+    draw_references,
+    print_comparison,
+    save_figure,
+    sizes,
+    subplots,
+    sweep_curve,
 )
 
 HERE = Path(__file__).resolve().parent
@@ -71,26 +81,43 @@ KEYS = (
     ("p", "learnability.p"),
     ("n_records", "samples.L"),
 )
-# (metric, reference file stem, axis label), one panel each, as in Fig. 2b.
-PANELS: tuple[tuple[str, str, str], ...] = (
-    ("accuracy", "barratt2022_fig2b_accuracy", "accuracy"),
-    ("P_corr_binder", "barratt2022_fig2b_binder", r"Binder ratio of $P_{corr}$"),
+# (metric, reference file stem, axis label, panel title), one panel each.
+Panel = tuple[str, str, str, str]
+# Fig. 2b: the accuracy of Eve's classifier and, from its inset, the Binder
+# ratio of P_corr.
+PANELS: tuple[Panel, ...] = (
+    ("accuracy", "barratt2022_fig2b_accuracy", "accuracy", "Accuracy"),
+    (
+        "P_corr_binder",
+        "barratt2022_fig2b_binder",
+        r"Binder ratio of $P_{corr}$",
+        r"Binder ratio of $P_{corr}$",
+    ),
 )
+SOURCE = "Barratt et al. 2022"
 # Transition read off the Binder crossing of the inset of Fig. 2b.
 P_TAILS = 0.1
 # Binder panels show 0 <= p <= BINDER_WINDOW * p_c around the transition.
 BINDER_WINDOW = 2.0
 # Fig. 2c: the mean entropy, order parameter of the success transition.
-PANELS_2C: tuple[tuple[str, str, str], ...] = (
-    ("entropy_mean", "barratt2022_fig2c_entropy", r"mean entropy $E[H(P_{corr})]$"),
-    ("entropy_binder", "barratt2022_fig2c_binder", "Binder ratio of the entropy"),
+PANELS_2C: tuple[Panel, ...] = (
+    (
+        "entropy_mean",
+        "barratt2022_fig2c_entropy",
+        r"mean entropy $E[H(P_{corr})]$ (nats)",
+        "Mean entropy",
+    ),
+    (
+        "entropy_binder",
+        "barratt2022_fig2c_binder",
+        "Binder ratio of the entropy",
+        "Binder ratio of the entropy",
+    ),
 )
 # Transition read off the Binder crossing of the inset of Fig. 2c.
 P_SUCCESS = 0.2
 # Every figure: (panels, (transition label, p), figure, comparison file).
-FIGURES: dict[
-    str, tuple[tuple[tuple[str, str, str], ...], tuple[str, float], str, str]
-] = {
+FIGURES: dict[str, tuple[tuple[Panel, ...], tuple[str, float], str, str]] = {
     "2b": (PANELS, (r"$p_{tails}$", P_TAILS), "learnability.png", "comparison.json"),
     "2c": (
         PANELS_2C,
@@ -112,12 +139,10 @@ SWAP_XY = True
 VALUE_AXIS = {"barratt2022_fig2b_accuracy": (0.564, 1.0)}
 # The paper's chain length "L = 6" in a curve name, renamed to our "N = 6".
 PAPER_SIZE = re.compile(r"\bL\s*=")
-# Categorical slots in fixed order: ours first, then the reference curves.
-COLORS = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#6250d6", "#d63a8a")
 
 
 def load_references(
-    reference_dir: Path, panels: Sequence[tuple[str, str, str]] = PANELS
+    reference_dir: Path, panels: Sequence[Panel] = PANELS
 ) -> dict[str, dict[str, tuple[np.ndarray, np.ndarray]]]:
     """Return ``{metric: {curve name: (p, value)}}`` for the reference files found.
 
@@ -125,12 +150,10 @@ def load_references(
     length (``L = 6``); they are renamed to our ``N`` (``N = 6``).
     """
     refs = {}
-    for metric, stem, _ in panels:
+    for metric, stem, _, _ in panels:
         path = reference_dir / f"{stem}.csv"
         if path.is_file():
-            curves = load_wpd_csv(
-                path, default_name="Barratt et al. 2022", swap_xy=SWAP_XY
-            )
+            curves = load_wpd_csv(path, default_name=SOURCE, swap_xy=SWAP_XY)
             low, high = VALUE_AXIS.get(stem, (0.0, 1.0))
             refs[metric] = {
                 PAPER_SIZE.sub("N =", name): (x, low + (high - low) * y)
@@ -197,9 +220,8 @@ def binder_crossings(
         ``{"N<a>-N<b>": p of the first crossing, or None}``, on the ``p``
         values that both sizes share.
     """
-    sizes = sorted({int(r["N"]) for r in summary})
     out: dict[str, float | None] = {}
-    for a, b in itertools.combinations(sizes, 2):
+    for a, b in itertools.combinations(sizes(summary), 2):
         ya = {r["p"]: r[f"{metric}_mean"] for r in summary if int(r["N"]) == a}
         yb = {r["p"]: r[f"{metric}_mean"] for r in summary if int(r["N"]) == b}
         p = np.array(sorted(set(ya) & set(yb)), dtype=float)
@@ -209,99 +231,57 @@ def binder_crossings(
     return out
 
 
-def plot_sweep(
+def draw_sweep(
     sweep_dir: Path,
     reference_dir: Path = REFERENCE_DIR,
-    panels: Sequence[tuple[str, str, str]] = PANELS,
-    filename: str = "learnability.png",
+    panels: Sequence[Panel] = PANELS,
     transition: tuple[str, float] | None = (r"$p_{tails}$", P_TAILS),
-    comparison_name: str = "comparison.json",
-) -> dict[str, Any]:
-    """Draw the figure and write the comparison file in ``sweep_dir``.
+) -> tuple[Figure, dict[str, Any]]:
+    """Draw one figure of a sweep over the reference curves.
 
     Args:
         sweep_dir: Folder of one sweep, holding the run folders.
         reference_dir: Folder of the reference CSV files; missing files are
             skipped.
-        panels: ``(metric, reference stem, label)``, one panel each.
-        filename: Name of the figure in ``sweep_dir``.
+        panels: ``(metric, reference stem, label, title)``, one panel each.
         transition: ``(label, p)`` of the paper's transition, drawn as a
             dotted line on the Binder panels; ``None`` draws none.
-        comparison_name: Name of the JSON file of the comparison.
 
     Returns:
-        The comparison: ``{metric: {N<N>: {curve: deviation stats}}}`` and,
-        under ``"binder_crossings"``, :func:`binder_crossings` of every
-        Binder metric drawn.
+        The open figure (the notebooks show it, :func:`plot_sweep` saves and
+        closes it) and the comparison: ``{metric: {N<N>: {curve: deviation
+        stats}}}`` and, under ``"binder_crossings"``, :func:`binder_crossings`
+        of every Binder metric drawn.
     """
     rows = load_sweep(sweep_dir, keys=KEYS)
-    metrics = [m for m, _, _ in panels]
+    metrics = [m for m, _, _, _ in panels]
     summary = summarize(
         rows, by=("N", "p"), metrics=[*metrics, *(f"{m}_err" for m in metrics)]
     )
     refs = load_references(reference_dir, panels)
-    sizes = sorted({int(row["N"]) for row in summary})
+    Ns = sizes(summary)
     comparison: dict[str, Any] = {}
     # One color per curve, the same in every panel: ours first, then the
     # reference curves by name.
     ref_names = sorted({name for curves in refs.values() for name in curves})
-    color_of = {
-        key: COLORS[k % len(COLORS)]
-        for k, key in enumerate([*(f"N{N}" for N in sizes), *ref_names])
-    }
+    colors = color_map([*(f"N{N}" for N in Ns), *ref_names])
 
-    fig, axes = plt.subplots(
-        1, len(panels), figsize=(5.5 * len(panels), 4), constrained_layout=True
-    )
-    for ax, (metric, _, label) in zip(np.atleast_1d(axes), panels, strict=True):
-        for N in sizes:
-            sel = sorted((r for r in summary if int(r["N"]) == N), key=lambda r: r["p"])
-            p = np.array([r["p"] for r in sel], dtype=float)
-            mean = np.array([r[f"{metric}_mean"] for r in sel])
-            n_runs = np.array([r["n_runs"] for r in sel])
-            # One seed: bootstrap error; several: error over seeds.
-            err = np.where(
-                n_runs > 1,
-                [r[f"{metric}_sem"] for r in sel],
-                [r[f"{metric}_err_mean"] for r in sel],
-            )
-            ax.errorbar(
-                p,
-                mean,
-                yerr=err,
-                color=color_of[f"N{N}"],
-                lw=2,
-                marker="o",
-                ms=5,
-                capsize=2,
-                label=f"this work, N={N}",
-            )
-            for name, (x_ref, y_ref) in refs.get(metric, {}).items():
-                # Compare to the reference of the same size only, when the
-                # curve name gives one ("N = 6").
-                size = re.search(r"N\s*=\s*(\d+)", name)
-                if size is not None and int(size.group(1)) != N:
-                    continue
-                stats = compare_to_reference(p, mean, x_ref, y_ref)
-                comparison.setdefault(metric, {}).setdefault(f"N{N}", {})[name] = stats
-        for name, (x_ref, y_ref) in refs.get(metric, {}).items():
-            ax.plot(
-                x_ref,
-                y_ref,
-                color=color_of[name],
-                lw=2,
-                ls="--",
-                marker="s",
-                ms=5,
-                label=f"Barratt et al. 2022: {name}",
-            )
+    fig, axes = subplots(1, len(panels), figsize=(6.5 * len(panels), 5))
+    for ax, (metric, _, label, title) in zip(np.atleast_1d(axes), panels, strict=True):
+        for N in Ns:
+            curve = sweep_curve(summary, N, "p", metric)
+            draw_curve(ax, curve, colors[f"N{N}"], label=f"this work, N = {N}")
+            stats = compare_same_size(curve, N, refs.get(metric, {}))
+            if stats:
+                comparison.setdefault(metric, {})[f"N{N}"] = stats
+        draw_references(ax, refs.get(metric, {}), colors, SOURCE)
         if "binder" in metric:
             comparison.setdefault("binder_crossings", {})[metric] = binder_crossings(
                 summary, metric
             )
             if transition is not None:
                 name, p_c = transition
-                ax.axvline(p_c, color="gray", ls=":", lw=1, label=f"{name} = {p_c:g}")
+                ax.axvline(p_c, color="gray", ls=":", lw=1.5, label=f"{name} = {p_c:g}")
                 # As the insets of Fig. 2: 0 <= p <= 2 p_c. Further out the
                 # Binder ratio plunges to large negative values (rare
                 # outliers) and would flatten the crossing.
@@ -316,7 +296,7 @@ def plot_sweep(
                     ax.set_xlim(0.0, BINDER_WINDOW * p_c)
                     ax.set_ylim(min(window) - pad, max(window) + pad)
         if metric.startswith("accuracy"):
-            ax.axhline(0.5, color="gray", ls=":", lw=1)
+            ax.axhline(0.5, color="gray", ls=":", lw=1.5)
             p_grid = np.linspace(0.0, max(float(r["p"]) for r in summary), 101)
             ax.plot(
                 p_grid,
@@ -326,13 +306,39 @@ def plot_sweep(
                 lw=1.5,
                 label="lower bound, Eq. (1)",
             )
-        ax.set_xlabel(r"measurement probability $p$")
-        ax.set_ylabel(label)
-        ax.grid(alpha=0.25, lw=0.5)
-        ax.spines[["top", "right"]].set_visible(False)
-        ax.legend(frameon=False, fontsize=8)
+        ax.set(xlabel=r"measurement probability $p$", ylabel=label, title=title)
+        ax.legend()
     fig.suptitle("Charge learnability, Barratt et al. PRL 129, 200602 (2022), Fig. 2")
-    fig.savefig(sweep_dir / filename, dpi=150)
+    return fig, comparison
+
+
+def plot_sweep(
+    sweep_dir: Path,
+    reference_dir: Path = REFERENCE_DIR,
+    panels: Sequence[Panel] = PANELS,
+    filename: str = "learnability.png",
+    transition: tuple[str, float] | None = (r"$p_{tails}$", P_TAILS),
+    comparison_name: str = "comparison.json",
+) -> dict[str, Any]:
+    """Write the figure, its data and the comparison file in ``sweep_dir``.
+
+    The figure goes to ``filename`` and the data it shows to the JSON file
+    of the same stem (:func:`QELM.utils.plots.save_figure`).
+
+    Args:
+        sweep_dir: Folder of one sweep, holding the run folders.
+        reference_dir: Folder of the reference CSV files; missing files are
+            skipped.
+        panels: ``(metric, reference stem, label, title)``, one panel each.
+        filename: Name of the PNG figure in ``sweep_dir``.
+        transition: As in :func:`draw_sweep`.
+        comparison_name: Name of the JSON file of the comparison.
+
+    Returns:
+        The comparison of :func:`draw_sweep`.
+    """
+    fig, comparison = draw_sweep(sweep_dir, reference_dir, panels, transition)
+    save_figure(fig, sweep_dir, Path(filename).stem)
     plt.close(fig)
     (sweep_dir / comparison_name).write_text(json.dumps(comparison, indent=2) + "\n")
     return comparison
@@ -362,18 +368,7 @@ def main() -> None:
             transition=transition,
             comparison_name=comparison_name,
         )
-        for metric, crossings in comparison.pop("binder_crossings", {}).items():
-            for pair, p in crossings.items():
-                where = "no crossing" if p is None else f"p = {p:.3f}"
-                print(f"{metric} crossing {pair}: {where}")
-        for metric, by_size in comparison.items():
-            for size, curves in by_size.items():
-                for name, stats in curves.items():
-                    print(
-                        f"{metric} {size} vs {name}: max |diff| = "
-                        f"{stats['max_abs_diff']:.3g}, "
-                        f"rms = {stats['rms_diff']:.3g} ({stats['n_points']} points)"
-                    )
+        print_comparison(comparison)
         print(f"Figure: {sweep_dir / filename}")
 
 

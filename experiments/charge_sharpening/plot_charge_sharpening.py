@@ -15,7 +15,15 @@ read from ``reference/`` next to this script when present:
 Each is a WebPlotDigitizer CSV export (:func:`QELM.utils.load_wpd_csv`).
 For every reference curve the script prints the deviation of our curve at
 the reference points (:func:`QELM.utils.compare_to_reference`) and writes it
-to ``comparison.json`` in the sweep folder, next to ``charge_sharpening.png``.
+to ``comparison.json`` in the sweep folder, next to ``charge_sharpening.png``
+and the plotted data ``charge_sharpening.json``
+(:func:`QELM.utils.plots.save_figure`).
+
+Notation (issue #147): ``N`` is the total number of qubits, the ancilla
+``R`` included, and ``L`` the number of trajectories per run
+(``samples.L``). The paper counts the system sites only: its curves,
+named ``L = 6`` and ``L = 20`` in the exports, are renamed ``N = 7`` and
+``N = 21`` here, so that our curve ``N7`` is compared to ``N = 7``.
 
 Error bars: with one seed, the bootstrap error over trajectories; with
 several, the standard error over circuit instances, and the shaded band is
@@ -39,12 +47,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
-from QELM.utils import (
-    compare_to_reference,
-    latest_sweep,
-    load_sweep,
-    load_wpd_csv,
-    summarize,
+from QELM.utils import latest_sweep, load_sweep, load_wpd_csv, summarize
+from QELM.utils.plots import (
+    color_map,
+    compare_same_size,
+    draw_curve,
+    draw_references,
+    print_comparison,
+    save_figure,
+    sizes,
+    subplots,
+    sweep_curve,
 )
 
 HERE = Path(__file__).resolve().parent
@@ -56,34 +69,43 @@ KEYS = (
     ("gamma", "weak_measurement.gamma"),
     ("L", "samples.L"),
 )
-# (metric, reference file stem, axis label), one panel each, as in Fig. 7.
+# (metric, reference file stem, axis label, panel title), as in Fig. 7.
 PANELS = (
-    ("S_R_mean", "agrawal2024_fig7_S_R", r"$S_R$ (nats)"),
-    ("S_R_var", "agrawal2024_fig7_S_R_var", r"Var $S_R$ (nats$^2$)"),
-    ("binder", "agrawal2024_fig7_binder", r"Binder ratio $B$"),
+    ("S_R_mean", "agrawal2024_fig7_S_R", r"$S_R$ (nats)", "Ancilla entropy"),
+    ("S_R_var", "agrawal2024_fig7_S_R_var", r"Var $S_R$ (nats$^2$)", "Variance"),
+    ("binder", "agrawal2024_fig7_binder", r"Binder ratio $B$", "Binder ratio"),
 )
+SOURCE = "Agrawal et al. 2024"
 # The digitized exports list (value, gamma), not (gamma, value).
 SWAP_XY = True
 # The Binder ratio is drawn only where Var S_R exceeds this: elsewhere S_R
 # has collapsed on 1 (weak gamma) or 0 (strong gamma) and B is dominated by
 # rare outliers (large and negative), which would flatten the panel.
 BINDER_MIN_VAR = 1e-3
-# Categorical slots in fixed order: ours first, then the reference curves.
-COLORS = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#6250d6")
+# The paper's system size "L = 6" in a curve name: N = L + 1 with R.
+PAPER_SIZE = re.compile(r"\bL\s*=\s*(\d+)")
+FIGURE_NAME = "charge_sharpening"
+
+
+def paper_to_total(name: str) -> str:
+    """Rename the paper's system size ``L = 6`` to our total ``N = 7``."""
+    return PAPER_SIZE.sub(lambda m: f"N = {int(m.group(1)) + 1}", name)
 
 
 def load_references(
     reference_dir: Path,
 ) -> dict[str, dict[str, tuple[np.ndarray, np.ndarray]]]:
-    """Return ``{metric: {curve name: (x, y)}}`` for the reference files found."""
+    """Return ``{metric: {curve name: (x, y)}}`` for the reference files found.
+
+    The curve names are renamed with :func:`paper_to_total`.
+    """
     refs = {}
-    for metric, stem, _ in PANELS:
+    for metric, stem, _, _ in PANELS:
         path = reference_dir / f"{stem}.csv"
         if path.is_file():
             # The exports hold (value, gamma) pairs: see reference/README.md.
-            refs[metric] = load_wpd_csv(
-                path, default_name="Agrawal et al. 2024", swap_xy=SWAP_XY
-            )
+            curves = load_wpd_csv(path, default_name=SOURCE, swap_xy=SWAP_XY)
+            refs[metric] = {paper_to_total(n): xy for n, xy in curves.items()}
     return refs
 
 
@@ -103,98 +125,45 @@ def draw_sweep(
         ``{metric: {N<N>: {curve: deviation stats}}}``.
     """
     rows = load_sweep(sweep_dir, keys=KEYS)
-    metrics = [m for m, _, _ in PANELS]
+    metrics = [m for m, _, _, _ in PANELS]
     summary = summarize(
         rows, by=("N", "gamma"), metrics=[*metrics, *(f"{m}_err" for m in metrics)]
     )
     refs = load_references(reference_dir)
-    sizes = sorted({int(row["N"]) for row in summary})
+    Ns = sizes(summary)
     comparison: dict[str, Any] = {}
     # One color per curve, the same in every panel: ours first, then the
     # reference curves by name (the files do not list them in the same order).
     ref_names = sorted({name for curves in refs.values() for name in curves})
-    color_of = {
-        key: COLORS[k % len(COLORS)]
-        for k, key in enumerate([*(f"N{N}" for N in sizes), *ref_names])
-    }
+    colors = color_map([*(f"N{N}" for N in Ns), *ref_names])
 
-    fig, axes = plt.subplots(1, 3, figsize=(13, 3.8), constrained_layout=True)
-    for ax, (metric, _, label) in zip(axes, PANELS, strict=True):
-        for N in sizes:
-            sel = sorted(
-                (r for r in summary if int(r["N"]) == N), key=lambda r: r["gamma"]
-            )
-            gamma = np.array([r["gamma"] for r in sel], dtype=float)
-            mean = np.array([r[f"{metric}_mean"] for r in sel])
-            n_runs = np.array([r["n_runs"] for r in sel])
-            # One instance: bootstrap error; several: error over instances.
-            err = np.where(
-                n_runs > 1,
-                [r[f"{metric}_sem"] for r in sel],
-                [r[f"{metric}_err_mean"] for r in sel],
-            )
+    fig, axes = subplots(1, 3, figsize=(16, 5))
+    for ax, (metric, _, label, title) in zip(axes, PANELS, strict=True):
+        for N in Ns:
+            curve = sweep_curve(summary, N, "gamma", metric)
             if metric == "binder":
-                var = np.array([r["S_R_var_mean"] for r in sel])
-                keep = var > BINDER_MIN_VAR
-                gamma, mean, n_runs, err = (
-                    gamma[keep],
-                    mean[keep],
-                    n_runs[keep],
-                    err[keep],
-                )
-                sel = [r for r, kept in zip(sel, keep, strict=True) if kept]
-            color = color_of[f"N{N}"]
-            if np.all(n_runs > 1):
-                std = np.array([r[f"{metric}_std"] for r in sel])
-                ax.fill_between(
-                    gamma, mean - std, mean + std, color=color, alpha=0.15, lw=0
-                )
-            ax.errorbar(
-                gamma,
-                mean,
-                yerr=err,
-                color=color,
-                lw=2,
-                marker="o",
-                ms=5,
-                capsize=2,
-                label=f"this work, L={N - 1}",
+                var = np.array([r["S_R_var_mean"] for r in curve.rows])
+                curve = curve.where(var > BINDER_MIN_VAR)
+            draw_curve(
+                ax, curve, colors[f"N{N}"], label=f"this work, N = {N}", band=True
             )
-            for name, (x_ref, y_ref) in refs.get(metric, {}).items():
-                # Compare to the reference of the same size only, when the
-                # curve name gives one ("L = 6"); our L is Ns = N - 1.
-                size = re.search(r"L\s*=\s*(\d+)", name)
-                if size is not None and int(size.group(1)) != N - 1:
-                    continue
-                stats = compare_to_reference(gamma, mean, x_ref, y_ref)
-                comparison.setdefault(metric, {}).setdefault(f"N{N}", {})[name] = stats
-        for name, (x_ref, y_ref) in refs.get(metric, {}).items():
-            ax.plot(
-                x_ref,
-                y_ref,
-                color=color_of[name],
-                lw=2,
-                ls="--",
-                marker="s",
-                ms=5,
-                label=f"Agrawal et al. 2024: {name}",
-            )
-        ax.set_xlabel(r"measurement strength $\gamma$")
-        ax.set_ylabel(label)
+            stats = compare_same_size(curve, N, refs.get(metric, {}))
+            if stats:
+                comparison.setdefault(metric, {})[f"N{N}"] = stats
+        draw_references(ax, refs.get(metric, {}), colors, SOURCE)
+        ax.set(xlabel=r"measurement strength $\gamma$", ylabel=label, title=title)
         if metric == "binder" and metric in refs:
             # Far from the peak B drops to large negative values (rare
             # outliers); keep the scale of the reference curves.
             low = min(float(np.min(y)) for _, y in refs[metric].values())
             ax.set_ylim(1.5 * low, 1.0)
-        ax.grid(alpha=0.25, lw=0.5)
-        ax.spines[["top", "right"]].set_visible(False)
-    axes[0].legend(frameon=False, fontsize=8)
+    axes[0].legend()
     fig.suptitle("Charge sharpening, Agrawal et al. PRX 14, 041012 (2024), Fig. 7")
     return fig, comparison
 
 
 def plot_sweep(sweep_dir: Path, reference_dir: Path = REFERENCE_DIR) -> dict[str, Any]:
-    """Draw ``charge_sharpening.png`` and write ``comparison.json`` in ``sweep_dir``.
+    """Write the figure, its data and ``comparison.json`` in ``sweep_dir``.
 
     Args:
         sweep_dir: Folder of one sweep, holding the run folders.
@@ -205,7 +174,7 @@ def plot_sweep(sweep_dir: Path, reference_dir: Path = REFERENCE_DIR) -> dict[str
         The comparison, ``{metric: {N<N>: {curve: deviation stats}}}``.
     """
     fig, comparison = draw_sweep(sweep_dir, reference_dir)
-    fig.savefig(sweep_dir / "charge_sharpening.png", dpi=150)
+    save_figure(fig, sweep_dir, FIGURE_NAME)
     plt.close(fig)
     (sweep_dir / "comparison.json").write_text(json.dumps(comparison, indent=2) + "\n")
     return comparison
@@ -226,16 +195,8 @@ def main() -> None:
     parser.add_argument("--reference-dir", type=Path, default=REFERENCE_DIR)
     args = parser.parse_args()
     sweep_dir = args.sweep_dir or latest_sweep(Path("outputs") / "charge_sharpening")
-    comparison = plot_sweep(sweep_dir, args.reference_dir)
-    for metric, by_size in comparison.items():
-        for size, curves in by_size.items():
-            for name, stats in curves.items():
-                print(
-                    f"{metric} {size} vs {name}: max |diff| = "
-                    f"{stats['max_abs_diff']:.3g}, rms = {stats['rms_diff']:.3g} "
-                    f"({stats['n_points']} points)"
-                )
-    print(f"Figure: {sweep_dir / 'charge_sharpening.png'}")
+    print_comparison(plot_sweep(sweep_dir, args.reference_dir))
+    print(f"Figure: {sweep_dir / f'{FIGURE_NAME}.png'}")
 
 
 if __name__ == "__main__":
