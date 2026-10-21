@@ -12,7 +12,7 @@
 # Environment variables change the defaults (lists are space-separated):
 #     OUT_ROOT=/tmp/qelm      write under /tmp/qelm instead of outputs
 #     L=1000                  number of samples per run
-#     ALPHA=1e-3              ridge regularization (training.alpha)
+#     ALPHA=1e-2              ridge regularization (training.alpha, default 1e-3)
 #     N_VALUES="4 6"          total numbers of qubits, ancilla included
 #     SEEDS="42 43 44"        seeds (one disorder and measurement draw each)
 #     P_VALUES="0.1 0.5 1.0"  measurement probabilities
@@ -39,8 +39,8 @@ EXPERIMENT="exp_QELM_M"
 MODEL="TFIM"
 read -r -a N_VALUES <<< "${N_VALUES:-4}"   # number of qubits, ancilla included
 L="${L:-12}"                                # samples per run (samples.L)
-# The default alpha=1 also shrinks the bias weight and costs R2; 1e-3 does not.
-ALPHA="${ALPHA:-1e-3}"
+# ALPHA, when set, overrides training.alpha; otherwise the default of
+# conf/training/regression/ridge.yaml (1e-3) applies (issue #92).
 read -r -a SEEDS <<< "${SEEDS:-42}"
 read -r -a P_VALUES <<< "${P_VALUES:-0.1 0.3 0.5 0.8 1.0}"
 # -----------------------------------------------------------------------------
@@ -61,13 +61,13 @@ for N in "${N_VALUES[@]}"; do
   for SEED in "${SEEDS[@]}"; do
     for p in "${P_VALUES[@]}"; do
       RUN_DIR="$OUT_DIR/N${N}_seed${SEED}_p${p}"
-      echo "--- models=$MODEL N=$N seed=$SEED samples.L=$L training.alpha=$ALPHA p=$p"
+      echo "--- models=$MODEL N=$N seed=$SEED samples.L=$L training.alpha=${ALPHA:-config default} p=$p"
       uv run python experiments/QELM_M/exp_QELM_M.py \
         "models=$MODEL" \
         "N=$N" \
         "seed=$SEED" \
         "samples.L=$L" \
-        "training.alpha=$ALPHA" \
+        ${ALPHA:+"training.alpha=$ALPHA"} \
         "projective_measurement.p=$p" \
         "hydra.run.dir=$RUN_DIR"
     done

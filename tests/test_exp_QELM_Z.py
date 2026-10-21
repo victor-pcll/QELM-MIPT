@@ -67,8 +67,9 @@ def test_features_match_the_density_matrix() -> None:
 
 
 def test_qelm_learns_the_ancilla() -> None:
-    """With enough samples the readout predicts <Z_0> almost perfectly."""
-    cfg = load_config(["models=TFIM", "N=4", "samples.L=200", "training.alpha=1e-3"])
+    """With enough samples the readout predicts <Z_0> almost perfectly, with the
+    default alpha of the config and no override (issue #92)."""
+    cfg = load_config(["models=TFIM", "N=4", "samples.L=200"])
     out = _load_script().run(cfg)
     assert out["r2"] > 0.95
 

@@ -11,7 +11,7 @@
 # which git ignores. Environment variables change the defaults:
 #     OUT_ROOT=/tmp/qelm   write under /tmp/qelm instead of outputs
 #     L=1000               number of samples per run
-#     ALPHA=1e-3           ridge regularization (training.alpha)
+#     ALPHA=1e-2           ridge regularization (training.alpha, default 1e-3)
 
 # Stop at the first failing command, unset variable or failing pipe.
 set -euo pipefail
@@ -36,8 +36,8 @@ MODEL="TFIM"
 N_VALUES=(4 6)          # number of qubits, ancilla included
 SEEDS=(42)            # one run per seed and per N
 L="${L:-500}"         # samples per run (samples.L)
-# The default alpha=1 also shrinks the bias weight and costs R2; 1e-3 does not.
-ALPHA="${ALPHA:-1e-3}"
+# ALPHA, when set, overrides training.alpha; otherwise the default of
+# conf/training/regression/ridge.yaml (1e-3) applies (issue #92).
 # -----------------------------------------------------------------------------
 
 STAMP="$(date +%Y-%m-%d_%H-%M-%S)"
@@ -49,13 +49,13 @@ echo "Writing outputs to $OUT_DIR"
 for N in "${N_VALUES[@]}"; do
   for SEED in "${SEEDS[@]}"; do
     RUN_DIR="$OUT_DIR/N${N}_seed${SEED}"
-    echo "--- models=$MODEL N=$N seed=$SEED samples.L=$L training.alpha=$ALPHA"
+    echo "--- models=$MODEL N=$N seed=$SEED samples.L=$L training.alpha=${ALPHA:-config default}"
     uv run python experiments/QELM_Z/exp_QELM_Z.py \
       "models=$MODEL" \
       "N=$N" \
       "seed=$SEED" \
       "samples.L=$L" \
-      "training.alpha=$ALPHA" \
+      ${ALPHA:+"training.alpha=$ALPHA"} \
       "hydra.run.dir=$RUN_DIR"
   done
 done

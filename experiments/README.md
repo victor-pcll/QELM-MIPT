@@ -42,7 +42,7 @@ Each run lands in `outputs/projective_readout/<date_time>/N<N>_seed<seed>/` with
 ```
 
 It runs `experiments/QELM_Z/exp_QELM_Z.py` for `N` in `4 6` with `seed=42`, 500 samples and
-`training.alpha=1e-3` (`L=1000 ALPHA=1e-2 ./experiments/QELM_Z/exp_QELM_Z.sh`
+the default `training.alpha=1e-3` of `conf/training/regression/ridge.yaml` (`L=1000 ALPHA=1e-2 ./experiments/QELM_Z/exp_QELM_Z.sh`
 to change them). No measurement during the evolution: the readout learns the
 ancilla `<Z_0>` from the system observables `<Z_k>, <Y_k>, <X_k>` after
 `U(t)`. Each run lands in `outputs/exp_QELM_Z/<date_time>/N<N>_seed<seed>/` with
