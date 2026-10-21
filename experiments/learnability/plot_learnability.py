@@ -39,7 +39,9 @@ Each figure is written with its data (:func:`QELM.utils.plots.save_figure`):
 ``learnability.png`` with ``learnability.json``, and so on.
 
 Error bars: with one seed, the bootstrap error over records; with several,
-the standard error over seeds.
+the standard error over seeds. They are often smaller than the markers:
+``residuals=True`` (issue #152) adds under each panel our curve minus the
+paper's curve of the same size, on a scale where they show.
 
     uv run python experiments/learnability/plot_learnability.py \
         outputs/learnability/<date_time>
@@ -66,7 +68,9 @@ from QELM.utils.plots import (
     compare_same_size,
     draw_curve,
     draw_references,
+    draw_residuals,
     print_comparison,
+    same_size,
     save_figure,
     sizes,
     subplots,
@@ -236,6 +240,7 @@ def draw_sweep(
     reference_dir: Path = REFERENCE_DIR,
     panels: Sequence[Panel] = PANELS,
     transition: tuple[str, float] | None = (r"$p_{tails}$", P_TAILS),
+    residuals: bool = False,
 ) -> tuple[Figure, dict[str, Any]]:
     """Draw one figure of a sweep over the reference curves.
 
@@ -246,6 +251,9 @@ def draw_sweep(
         panels: ``(metric, reference stem, label, title)``, one panel each.
         transition: ``(label, p)`` of the paper's transition, drawn as a
             dotted line on the Binder panels; ``None`` draws none.
+        residuals: Add under every panel with a reference curve of one of
+            our sizes a panel of our curve minus that reference, with our
+            error bars (issue #152). The other residual panels are removed.
 
     Returns:
         The open figure (the notebooks show it, :func:`plot_sweep` saves and
@@ -266,14 +274,51 @@ def draw_sweep(
     ref_names = sorted({name for curves in refs.values() for name in curves})
     colors = color_map([*(f"N{N}" for N in Ns), *ref_names])
 
-    fig, axes = subplots(1, len(panels), figsize=(6.5 * len(panels), 5))
-    for ax, (metric, _, label, title) in zip(np.atleast_1d(axes), panels, strict=True):
+    if residuals:
+        fig, grid = subplots(
+            2,
+            len(panels),
+            figsize=(6.5 * len(panels), 7),
+            sharex="col",
+            height_ratios=(3, 1),
+            squeeze=False,
+        )
+        axes, residual_axes = grid
+    else:
+        fig, axes = subplots(1, len(panels), figsize=(6.5 * len(panels), 5))
+        axes, residual_axes = np.atleast_1d(axes), [None] * len(panels)
+    for ax, res_ax, (metric, _, label, title) in zip(
+        axes, residual_axes, panels, strict=True
+    ):
+        drawn = False
         for N in Ns:
             curve = sweep_curve(summary, N, "p", metric)
             draw_curve(ax, curve, colors[f"N{N}"], label=f"this work, N = {N}")
             stats = compare_same_size(curve, N, refs.get(metric, {}))
             if stats:
                 comparison.setdefault(metric, {})[f"N{N}"] = stats
+            if res_ax is None:
+                continue
+            for name, (x_ref, y_ref) in same_size(refs.get(metric, {}), N).items():
+                draw_residuals(
+                    res_ax,
+                    curve,
+                    x_ref,
+                    y_ref,
+                    colors[f"N{N}"],
+                    label=f"this work, N = {N} $-$ {SOURCE}: {name}",
+                )
+                drawn = True
+        if res_ax is not None:
+            if drawn:
+                res_ax.set(
+                    xlabel=r"measurement probability $p$", ylabel="this work $-$ paper"
+                )
+                res_ax.legend(fontsize=9)
+            else:
+                res_ax.remove()
+                # sharex hid the tick labels of the panel above.
+                ax.tick_params(labelbottom=True)
         draw_references(ax, refs.get(metric, {}), colors, SOURCE)
         if "binder" in metric:
             comparison.setdefault("binder_crossings", {})[metric] = binder_crossings(
@@ -306,7 +351,9 @@ def draw_sweep(
                 lw=1.5,
                 label="lower bound, Eq. (1)",
             )
-        ax.set(xlabel=r"measurement probability $p$", ylabel=label, title=title)
+        ax.set(ylabel=label, title=title)
+        if not drawn:
+            ax.set_xlabel(r"measurement probability $p$")
         ax.legend()
     fig.suptitle("Charge learnability, Barratt et al. PRL 129, 200602 (2022), Fig. 2")
     return fig, comparison
@@ -319,6 +366,7 @@ def plot_sweep(
     filename: str = "learnability.png",
     transition: tuple[str, float] | None = (r"$p_{tails}$", P_TAILS),
     comparison_name: str = "comparison.json",
+    residuals: bool = False,
 ) -> dict[str, Any]:
     """Write the figure, its data and the comparison file in ``sweep_dir``.
 
@@ -333,11 +381,14 @@ def plot_sweep(
         filename: Name of the PNG figure in ``sweep_dir``.
         transition: As in :func:`draw_sweep`.
         comparison_name: Name of the JSON file of the comparison.
+        residuals: As in :func:`draw_sweep`.
 
     Returns:
         The comparison of :func:`draw_sweep`.
     """
-    fig, comparison = draw_sweep(sweep_dir, reference_dir, panels, transition)
+    fig, comparison = draw_sweep(
+        sweep_dir, reference_dir, panels, transition, residuals=residuals
+    )
     save_figure(fig, sweep_dir, Path(filename).stem)
     plt.close(fig)
     (sweep_dir / comparison_name).write_text(json.dumps(comparison, indent=2) + "\n")

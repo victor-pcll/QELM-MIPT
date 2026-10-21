@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import numpy as np
@@ -176,6 +176,50 @@ def draw_references(
         )
 
 
+def draw_residuals(
+    ax: Axes,
+    curve: SweepCurve,
+    x_ref: np.ndarray,
+    y_ref: np.ndarray,
+    color: str | None = None,
+    label: str | None = None,
+) -> Any:
+    """Draw a curve minus a reference curve, with the curve's error bars.
+
+    The reference is interpolated linearly at the points of ``curve``; the
+    points outside its range are left out. The residual keeps the error
+    bars of ``curve``, which are often far smaller than a marker on the
+    scale of the curve itself (issue #152). A dotted line marks 0.
+
+    Args:
+        ax: Axis to draw on.
+        curve: Output of :func:`sweep_curve`.
+        x_ref: Abscissae of the reference curve.
+        y_ref: Values of the reference curve.
+        color: Line color; ``None`` takes the next color of the axis.
+        label: Legend label.
+
+    Returns:
+        The ``ErrorbarContainer`` of ``ax.errorbar``.
+    """
+    order = np.argsort(x_ref)
+    x_ref, y_ref = np.asarray(x_ref, float)[order], np.asarray(y_ref, float)[order]
+    inside = curve.where((curve.x >= x_ref[0]) & (curve.x <= x_ref[-1]))
+    residual = replace(inside, mean=inside.mean - np.interp(inside.x, x_ref, y_ref))
+    ax.axhline(0.0, color="gray", ls=":", lw=1.5)
+    return draw_curve(ax, residual, color, label=label)
+
+
+def same_size(curves: Curves, size: int) -> Curves:
+    """Return the curves whose name gives ``size`` (``"N = 6"``) or no size."""
+    out = {}
+    for name, xy in curves.items():
+        match = SIZE.search(name)
+        if match is None or int(match.group(1)) == size:
+            out[name] = xy
+    return out
+
+
 def compare_same_size(
     curve: SweepCurve, size: int, curves: Curves
 ) -> dict[str, dict[str, float]]:
@@ -187,13 +231,10 @@ def compare_same_size(
     Returns:
         ``{reference name: stats of QELM.utils.compare_to_reference}``.
     """
-    out = {}
-    for name, (x_ref, y_ref) in curves.items():
-        match = SIZE.search(name)
-        if match is not None and int(match.group(1)) != size:
-            continue
-        out[name] = compare_to_reference(curve.x, curve.mean, x_ref, y_ref)
-    return out
+    return {
+        name: compare_to_reference(curve.x, curve.mean, x_ref, y_ref)
+        for name, (x_ref, y_ref) in same_size(curves, size).items()
+    }
 
 
 def print_comparison(comparison: Mapping[str, Any]) -> None:
