@@ -33,6 +33,8 @@ Everything is written to the Hydra run directory, by default
   ``y_test``, ``y_pred`` and the weights ``W``;
 - ``metrics.json``: ``nmse``, ``r2`` and the shapes used;
 - ``.hydra/config.yaml``: the full composed config, to reproduce the run.
+- ``resolved_config.json``: the same config with every ``${...}`` evaluated,
+  the numbers the run used (issue #85).
 """
 
 from __future__ import annotations
@@ -50,7 +52,7 @@ from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
 from QELM.embedding import AncillaChargeSectorEmbedding
 from QELM.evaluation.metrics import NMSE, R2
 from QELM.training import RidgeReadout, SingleObservable
-from QELM.utils import save_results
+from QELM.utils import save_config, save_results
 
 DEFAULT_OBSERVABLES = ["Z", "Y", "X"]
 
@@ -125,6 +127,7 @@ def main(cfg: DictConfig) -> None:
     results = run(cfg)
     out_dir = Path(HydraConfig.get().runtime.output_dir)
     save_results(results, out_dir, Path(__file__).stem)
+    save_config(cfg, out_dir)
     print(f"X: {results['X'].shape}  Y: {results['Y'].shape}")
     print(f"NMSE: {results['nmse']:.6g}")
     print(f"R2: {results['r2']:.6g}")

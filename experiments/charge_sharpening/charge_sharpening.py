@@ -60,6 +60,8 @@ Everything is written to the Hydra run directory, by default
 - ``metrics.json``: ``gamma``, ``S_R_mean``, ``S_R_var``, ``binder``, their
   bootstrap errors ``<name>_err`` and the click rate;
 - ``.hydra/config.yaml``: the full composed config, to reproduce the run.
+- ``resolved_config.json``: the same config with every ``${...}`` evaluated,
+  the numbers the run used (issue #85).
 """
 
 from __future__ import annotations
@@ -83,6 +85,7 @@ from QELM.evaluation import (
 )
 from QELM.models.circuits import U1BrickworkCircuit
 from QELM.training import WeakMeasurement
+from QELM.utils import save_config
 
 # The ancilla R, qubit 0, is the subsystem of S_R.
 SECTOR_R = [0]
@@ -190,6 +193,7 @@ def main(cfg: DictConfig) -> None:
     results = run(cfg)
     out_dir = Path(HydraConfig.get().runtime.output_dir)
     save(results, out_dir)
+    save_config(cfg, out_dir)
     print(f"gamma: {results['gamma']:.4g}  samples: {results['S_R'].shape[0]}")
     print(f"S_R: {results['S_R_mean']:.4f} +- {results['S_R_mean_err']:.4f}")
     print(f"var S_R: {results['S_R_var']:.4f} +- {results['S_R_var_err']:.4f}")

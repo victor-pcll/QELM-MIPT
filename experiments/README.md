@@ -4,6 +4,22 @@ Bash scripts that launch QELM runs from the terminal. Each script fixes a set of
 parameters, calls the Hydra entry point once per combination, and writes every
 run to its own folder under `outputs/`, which git ignores (see `.gitignore`).
 
+Next to `metrics.json`, every Python experiment script (`projective/`,
+`QELM_Z/`, `QELM_M/`, `charge_sharpening/`, `learnability/`) writes
+`resolved_config.json`, the config of the run with every interpolation
+evaluated (`QELM.utils.save_config`, issue #85). `.hydra/config.yaml` keeps the
+formulas as written in `conf/`, such as `depth: ${int:${div:${Ns},2}}`;
+`resolved_config.json` holds the values they gave, here `"depth": 3`, and is
+written after the run, so a value the script sets in the config is included:
+
+```python
+import json
+from pathlib import Path
+
+cfg = json.loads(Path("outputs/.../resolved_config.json").read_text())
+cfg["Ns"], cfg["samples"]["train_size"]
+```
+
 ## Run the test experiment
 
 From the repository root, after `uv sync`:

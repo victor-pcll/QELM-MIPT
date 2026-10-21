@@ -170,6 +170,11 @@ def test_bash_script_and_plot(tmp_path: Path) -> None:
     assert metrics["gamma"] == 1.0 and metrics["S_R_mean"] == pytest.approx(
         0.0, abs=1e-9
     )
+    # depth: ${int:${div:${Ns},2}} in the YAML, a number in the run (#85).
+    resolved = json.loads(
+        (sweep / "N7_seed0_g1.0" / "resolved_config.json").read_text()
+    )
+    assert resolved["U1_circuit"]["depth"] == 3
     assert (sweep / "charge_sharpening.png").is_file()
 
     # Against a fake reference S_R = ln2 (1 - gamma), which our two points

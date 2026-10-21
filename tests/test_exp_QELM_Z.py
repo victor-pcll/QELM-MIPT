@@ -86,7 +86,8 @@ def test_run_is_reproducible_with_the_seed() -> None:
 
 
 def test_script_saves_outputs(tmp_path: Path) -> None:
-    """The Hydra script writes the .npz, metrics.json and the run config."""
+    """The Hydra script writes the .npz, metrics.json and the run config,
+    raw and resolved."""
     subprocess.run(
         [sys.executable, str(SCRIPT), *OVERRIDES, f"hydra.run.dir={tmp_path}"],
         cwd=tmp_path,
@@ -100,6 +101,12 @@ def test_script_saves_outputs(tmp_path: Path) -> None:
     assert {"nmse", "r2"} <= set(metrics)
     assert metrics["n_samples"] == 10
     assert (tmp_path / ".hydra" / "config.yaml").is_file()
+    # The config with its interpolations evaluated (issue #85).
+    resolved = json.loads((tmp_path / "resolved_config.json").read_text())
+    assert resolved["samples"]["L"] == 10
+    assert resolved["samples"]["train_size"] == 7  # ${int:${mul:0.7,10}}
+    assert resolved["Ns"] == resolved["N"] - resolved["Nr"]
+    assert "${" not in (tmp_path / "resolved_config.json").read_text()
 
 
 def test_bash_launcher_runs(tmp_path: Path) -> None:

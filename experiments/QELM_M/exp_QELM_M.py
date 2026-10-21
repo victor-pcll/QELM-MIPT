@@ -92,6 +92,8 @@ Everything is written to the Hydra run directory, by default
   ``balanced_accuracy``, ``accuracy_optimal``, the shapes used and the
   sample mean ``<name>_mean`` of each entropy;
 - ``.hydra/config.yaml``: the full composed config, to reproduce the run.
+- ``resolved_config.json``: the same config with every ``${...}`` evaluated,
+  the numbers the run used (issue #85).
 """
 
 from __future__ import annotations
@@ -122,7 +124,7 @@ from QELM.evaluation.metrics import (
 from QELM.physics import Z, local_expectation
 from QELM.training import ProjectiveMeasurement, RidgeReadout
 from QELM.training.measurements.projective import measure_projective_rho
-from QELM.utils import save_results
+from QELM.utils import save_config, save_results
 
 # Per-sample entropies, each saved to the .npz with its mean in metrics.json.
 ENTROPIES = (
@@ -274,6 +276,7 @@ def main(cfg: DictConfig) -> None:
     results = run(cfg)
     out_dir = Path(HydraConfig.get().runtime.output_dir)
     save_results(results, out_dir, Path(__file__).stem, extra_metrics=EXTRA_METRICS)
+    save_config(cfg, out_dir)
     print(f"X: {results['X'].shape}  Y: {results['Y'].shape}")
     print(f"NMSE: {results['nmse']:.6g}")
     print(f"R2: {results['r2']:.6g}")
