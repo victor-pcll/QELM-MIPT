@@ -45,12 +45,12 @@ The notebooks in `notebooks/` are templates tracked by git. To experiment, copy 
 
 ```bash
 mkdir -p notebooks/scratch
-cp notebooks/results/01_TFIM_reservoir.ipynb notebooks/scratch/
+cp notebooks/results/02_QELM_M_analysis.ipynb notebooks/scratch/
 ```
 
 `git pull` never touches that folder, so there is nothing to stash. Code changes in `src/` go on their own branch and become a pull request; `main` stays clean.
 
-The TFIM notebook starts with `%load_ext autoreload` and `%autoreload 2`. `uv sync` installs `QELM` in editable mode, so after `git pull && uv sync` the running kernel picks up the new code in `src/` without a restart.
+`uv sync` installs `QELM` in editable mode, so after `git pull && uv sync` a kernel restart picks up the new code in `src/`; adding `%load_ext autoreload` and `%autoreload 2` at the top of a copied notebook picks it up without a restart.
 
 ## Experiment scripts
 
