@@ -67,6 +67,7 @@ import numpy as np
 
 from QELM.evaluation.charge_sharpening import binder_ratio, central_moment
 from QELM.models.circuits import U1BrickworkCircuit
+from QELM.physics.charge import batch_charge_leakage
 
 UNMEASURED = -1
 
@@ -213,6 +214,10 @@ class Records:
         boundary: Boundary of the brickwork, ``"open"`` or ``"periodic"``.
         measure_every: ``"layer"`` or ``"period"``, see
             :func:`measurement_rounds`.
+        charge_leakage: Largest weight of each record outside the sector of
+            its charge over the evolution, shape ``(n,)``
+            (:func:`QELM.physics.batch_charge_leakage`, issue #134): exactly
+            0 when the charge is conserved. ``None`` when not computed.
     """
 
     outcomes: np.ndarray
@@ -220,6 +225,7 @@ class Records:
     charges: tuple[int, ...]
     boundary: str = "open"
     measure_every: str = "layer"
+    charge_leakage: np.ndarray | None = None
 
     @property
     def L(self) -> int:
@@ -285,6 +291,7 @@ def sample_records(
     charge = np.array([qs[k % len(qs)] for k in range(n_records)])
     psi = np.stack([charge_state(L, q) for q in charge]).astype(complex)
     outcomes = np.full((n_records, len(rounds), L), UNMEASURED, dtype=np.int8)
+    leakage = batch_charge_leakage(psi, charge)
     for t, bonds in enumerate(rounds):
         for i, j in bonds:
             psi = apply_gates(psi, random_u1_gates(n_records, gen), i, j)
@@ -302,12 +309,15 @@ def sample_records(
             kept /= np.linalg.norm(kept, axis=1, keepdims=True)
             psi[rows] = kept
             outcomes[rows, t, site] = outcome
+        # Checked once per round, after the gates and the measurements.
+        leakage = np.maximum(leakage, batch_charge_leakage(psi, charge))
     return Records(
         outcomes=outcomes,
         charge=charge,
         charges=qs,
         boundary=boundary,
         measure_every=measure_every,
+        charge_leakage=leakage,
     )
 
 
