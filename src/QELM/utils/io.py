@@ -24,7 +24,8 @@ def save_results(
 
     Args:
         results: Output of an experiment's ``run``. Every NumPy array goes to
-            the ``.npz``; ``nmse``, ``r2``, ``y_test`` and ``results[features]``
+            the ``.npz``; ``nmse``, ``nmse_err`` (its standard error over the
+            test samples), ``r2``, ``y_test`` and ``results[features]``
             must be present.
         out_dir: Destination folder, created if needed.
         exp_name: Name of the experiment, used as the ``.npz`` file name.
@@ -56,6 +57,7 @@ def save_results(
     X = np.asarray(results[features])
     metrics = {
         "nmse": results["nmse"],
+        "nmse_err": results["nmse_err"],
         "r2": results["r2"],
         "n_samples": int(X.shape[0]),
         "n_test": int(np.asarray(results["y_test"]).shape[0]),

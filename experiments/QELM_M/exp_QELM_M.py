@@ -88,8 +88,9 @@ Everything is written to the Hydra run directory, by default
   ``y_test``, ``y_pred``, the weights ``W`` and the entropies ``S_vN``,
   ``S_renyi_1``, ``S_vN_sys``, ``S_renyi_2_sys``, ``S_vN_1q`` and
   ``S_renyi_2_1q`` of shape ``(L,)``;
-- ``metrics.json``: ``nmse``, ``r2``, ``accuracy``, ``accuracy_baseline``,
-  ``balanced_accuracy``, ``accuracy_optimal``, the shapes used and the
+- ``metrics.json``: ``nmse``, ``nmse_err``, ``r2``, ``accuracy``,
+  ``accuracy_baseline``, ``balanced_accuracy``, ``accuracy_optimal``, the
+  shapes used and the
   sample mean ``<name>_mean`` of each entropy;
 - ``.hydra/config.yaml``: the full composed config, to reproduce the run.
 """
@@ -115,6 +116,7 @@ from QELM.evaluation import (
 from QELM.evaluation.metrics import (
     NMSE,
     R2,
+    NMSE_err,
     accuracy,
     balanced_accuracy,
     majority_accuracy,
@@ -133,7 +135,7 @@ ENTROPIES = (
     "S_vN_1q",
     "S_renyi_2_1q",
 )
-# Scalars written to metrics.json besides nmse and r2.
+# Scalars written to metrics.json besides nmse, nmse_err and r2.
 EXTRA_METRICS = (
     "accuracy",
     "accuracy_baseline",
@@ -161,7 +163,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         ``(L, nbr_time_evolution, Ns)``, ``NaN`` for an unmeasured qubit), ``X`` (with
         the bias column), ``Y`` (the measured label of ``R``, +-1), ``Z0``
         (``<Z_0>`` before that measurement), ``y_test``, ``y_pred``, ``W``,
-        ``nmse``, ``r2``, ``accuracy``, ``accuracy_baseline``,
+        ``nmse``, ``nmse_err``, ``r2``, ``accuracy``, ``accuracy_baseline``,
         ``balanced_accuracy``, ``accuracy_optimal``,
         the entropies of :data:`ENTROPIES` (bits, one
         per sample) and their means ``<name>_mean``.
@@ -254,6 +256,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "y_pred": y_pred,
         "W": solver.W,
         "nmse": NMSE(y_test, y_pred),
+        "nmse_err": NMSE_err(y_test, y_pred),
         "r2": R2(y_test, y_pred),
         "accuracy": accuracy(y_test, y_pred),
         "accuracy_baseline": majority_accuracy(y_train, y_test),
@@ -275,7 +278,7 @@ def main(cfg: DictConfig) -> None:
     out_dir = Path(HydraConfig.get().runtime.output_dir)
     save_results(results, out_dir, Path(__file__).stem, extra_metrics=EXTRA_METRICS)
     print(f"X: {results['X'].shape}  Y: {results['Y'].shape}")
-    print(f"NMSE: {results['nmse']:.6g}")
+    print(f"NMSE: {results['nmse']:.6g} +- {results['nmse_err']:.2g}")
     print(f"R2: {results['r2']:.6g}")
     print(f"accuracy: {results['accuracy']:.6g}")
     print(f"accuracy baseline (majority sign): {results['accuracy_baseline']:.6g}")
