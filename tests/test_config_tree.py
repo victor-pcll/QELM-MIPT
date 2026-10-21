@@ -17,6 +17,8 @@ def test_conf_tree_mirrors_the_package() -> None:
     expected = {
         "models/TFIM.yaml",
         "models/kitaev.yaml",
+        "models/haar_circuit.yaml",
+        "models/clifford_circuit.yaml",
         "training/measurements/projective.yaml",
         "training/measurements/weak.yaml",
         "training/readout/single.yaml",
@@ -60,6 +62,8 @@ def test_default_composition_keeps_the_runtime_keys() -> None:
     ("overrides", "model", "trainer"),
     [
         (["models=kitaev"], "kitaev", "ridge"),
+        (["models=haar_circuit"], "haar_circuit", "ridge"),
+        (["models=clifford_circuit"], "clifford_circuit", "ridge"),
         (["training/regression=linear"], "TFIM", "linear"),
         (["models=kitaev", "training/regression=linear"], "kitaev", "linear"),
     ],

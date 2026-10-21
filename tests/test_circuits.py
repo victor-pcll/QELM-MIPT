@@ -1,15 +1,23 @@
-"""Random U(1) circuits of QELM.models.circuits (issue #137)."""
+"""Random circuits of QELM.models.circuits: U(1) (issue #137), Haar and
+Clifford (issue #171)."""
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
+from omegaconf import OmegaConf
 
 from QELM.evaluation import von_neumann_entropy
 from QELM.models.circuits import (
+    CliffordBrickworkCircuit,
+    HaarBrickworkCircuit,
     U1BrickworkCircuit,
+    _phase_key,
     apply_two_qubit_gate,
+    clifford_group_2q,
+    haar_gate,
     haar_unitary,
+    random_clifford_gate,
     random_u1_gate,
 )
 from QELM.physics import get_site_operator
@@ -195,3 +203,129 @@ def test_from_config_reads_the_block() -> None:
     assert circuit.scrambling_layers == 5
     assert circuit.boundary == "open"
     assert circuit.fixed_instance is True
+
+
+# Single-qubit Pauli matrices, for the Clifford checks.
+PAULIS = [
+    np.eye(2, dtype=complex),
+    np.array([[0, 1], [1, 0]], dtype=complex),
+    np.array([[0, -1j], [1j, 0]]),
+    np.diag([1.0 + 0j, -1.0]),
+]
+# The 16 two-qubit Pauli strings P_a (x) P_b.
+PAULI_STRINGS = [np.kron(a, b) for a in PAULIS for b in PAULIS]
+
+
+def _is_pauli_string(M: np.ndarray) -> bool:
+    """True if M = +-P or +-iP for a two-qubit Pauli string P."""
+    for P in PAULI_STRINGS:
+        c = np.trace(P.conj().T @ M) / 4
+        if abs(abs(c) - 1) < 1e-9:
+            return bool(np.allclose(M, c * P, atol=1e-9))
+    return False
+
+
+def test_haar_gate_is_a_unitary_of_u4() -> None:
+    """Haar on U(4): unitary, E|U_00|^2 = 1/4, and no conserved charge."""
+    rng = np.random.default_rng(2)
+    gates = [haar_gate(rng) for _ in range(4000)]
+    for u in gates[:20]:
+        assert u.shape == (4, 4)
+        np.testing.assert_allclose(u @ u.conj().T, np.eye(4), atol=1e-12)
+    assert abs(np.mean([abs(u[0, 0]) ** 2 for u in gates]) - 0.25) < 0.02
+    # A U(1) gate has u[0, 1] = 0; a Haar gate mixes |00> and |01>.
+    assert np.mean([abs(u[0, 1]) ** 2 for u in gates]) == pytest.approx(0.25, abs=0.02)
+
+
+def test_clifford_group_has_11520_distinct_unitaries() -> None:
+    """|C_2| = 11 520 up to a global phase, every element unitary."""
+    group = clifford_group_2q()
+    assert len(group) == 11520
+    assert len({_phase_key(u) for u in group}) == 11520
+    for u in group[::97]:
+        np.testing.assert_allclose(u @ u.conj().T, np.eye(4), atol=1e-12)
+
+
+def test_clifford_group_is_closed_and_maps_paulis_to_paulis() -> None:
+    """The product of two elements is an element, and every element maps a
+    Pauli string to a Pauli string, up to a sign: the Clifford property."""
+    group = clifford_group_2q()
+    keys = {_phase_key(u) for u in group}
+    rng = np.random.default_rng(3)
+    for _ in range(200):
+        a, b = (group[k] for k in rng.integers(len(group), size=2))
+        assert _phase_key(a @ b) in keys
+    for u in group[::53]:
+        for P in PAULI_STRINGS:
+            assert _is_pauli_string(u @ P @ u.conj().T)
+    # A Haar gate is not a Clifford: it does not map Z (x) 1 to a Pauli string.
+    u = haar_gate(np.random.default_rng(4))
+    assert not _is_pauli_string(u @ PAULI_STRINGS[12] @ u.conj().T)
+
+
+def test_random_clifford_gate_is_uniform_and_seeded() -> None:
+    """Same seed, same gate; the draws spread over the whole group."""
+    a = random_clifford_gate(np.random.default_rng(5))
+    b = random_clifford_gate(np.random.default_rng(5))
+    np.testing.assert_array_equal(a, b)
+    keys = {_phase_key(u) for u in clifford_group_2q()}
+    rng = np.random.default_rng(6)
+    draws = [_phase_key(random_clifford_gate(rng)) for _ in range(2000)]
+    assert set(draws) <= keys
+    # 2000 uniform draws among 11 520: about 1834 distinct elements.
+    assert len(set(draws)) > 1750
+    # Modifying a draw leaves the cached group untouched.
+    a[:] = 0
+    assert len({_phase_key(u) for u in clifford_group_2q()}) == 11520
+
+
+@pytest.mark.parametrize(
+    ("cls", "name"),
+    [
+        (HaarBrickworkCircuit, "haar_circuit"),
+        (CliffordBrickworkCircuit, "clifford_circuit"),
+    ],
+)
+def test_haar_and_clifford_circuits_keep_the_brickwork(
+    cls: type[U1BrickworkCircuit], name: str
+) -> None:
+    """Same bonds as the U(1) circuit, gates of their own kind, the ancilla
+    untouched, and the same seed gives the same gates."""
+    params = {"N": 5, "Nr": 1, "depth": 3}
+    circuit = cls(params, np.random.default_rng(7))
+    u1 = U1BrickworkCircuit(params, np.random.default_rng(7))
+    assert cls.name == name
+    assert [[(i, j) for i, j, _ in layer] for layer in circuit.layers] == [
+        [(i, j) for i, j, _ in layer] for layer in u1.layers
+    ]
+    gates = [g for layer in circuit.layers for _, _, g in layer]
+    for g in gates:
+        np.testing.assert_allclose(g @ g.conj().T, np.eye(4), atol=1e-12)
+    # Not U(1) gates: some gate moves weight out of the one-particle block.
+    assert any(abs(g[0, 1]) > 1e-6 or abs(g[1, 0]) > 1e-6 for g in gates)
+    if cls is CliffordBrickworkCircuit:
+        keys = {_phase_key(u) for u in clifford_group_2q()}
+        assert all(_phase_key(g) in keys for g in gates)
+    same = cls(params, np.random.default_rng(7))
+    for la, lb in zip(circuit.layers, same.layers, strict=True):
+        for (_, _, ga), (_, _, gb) in zip(la, lb, strict=True):
+            np.testing.assert_array_equal(ga, gb)
+    # The gates act on the system: the ancilla's reduced state stays I / 2
+    # on a state maximally entangling it with the system.
+    rng = np.random.default_rng(8)
+    psi = np.concatenate([_random_state(4, rng), _random_state(4, rng)])
+    psi /= np.linalg.norm(psi)
+    rho = np.outer(psi, psi.conj())
+    before = von_neumann_entropy(rho, [0])
+    for t in range(circuit.depth):
+        rho = circuit.apply_layer(rho, t)
+    assert von_neumann_entropy(rho, [0]) == pytest.approx(before, abs=1e-9)
+
+
+def test_haar_and_clifford_from_config() -> None:
+    """from_config reads the haar_circuit and clifford_circuit blocks; the
+    QELM experiment adds the depth from the number of steps."""
+    for cls in (HaarBrickworkCircuit, CliffordBrickworkCircuit):
+        cfg = OmegaConf.create({cls.name: {"N": 4, "Nr": 1, "depth": 2}})
+        circuit = cls.from_config(cfg)
+        assert circuit.Ns == 3 and len(circuit.layers) == 2

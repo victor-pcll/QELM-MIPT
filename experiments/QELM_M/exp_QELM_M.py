@@ -59,6 +59,25 @@ For each sample ``i`` (``samples.L`` in total):
    information: they drop to 0 for the qubits measured at the last step and
    track how entangled each system qubit is with the rest. All in bits.
 
+The unitary dynamics is selected with ``models`` (issue #171):
+
+- ``models=TFIM`` (the default): the disordered TFIM above, a new disorder
+  per sample, the same ``U(t / nbr_time_evolution)`` at every step;
+- ``models=haar_circuit``: a brickwork circuit of Haar-random two-qubit
+  gates (:class:`HaarBrickworkCircuit`) on the system qubits;
+- ``models=clifford_circuit``: the same brickwork with random two-qubit
+  Clifford gates (:class:`CliffordBrickworkCircuit`).
+
+For a circuit, each time-evolution step applies ``layers_per_step`` brickwork
+layers (``<model>.layers_per_step``, default 1, each a full period, even then
+odd bonds), every layer with its own gates, so a sample runs
+``nbr_time_evolution * layers_per_step`` layers. ``fixed_instance: false``
+(the default) draws new gates for every sample, as the TFIM draws a new
+disorder; ``true`` keeps one draw for every sample, selected by the seed.
+``evolution.t`` is not read for a circuit. Everything else (the initial
+state, the measurements, the record, the target and the scores) is the same
+for the three models.
+
 A ridge readout (``training`` block) is fitted on the first
 ``samples.train_size`` samples and scored on the rest with NMSE and R2.
 ``RidgeReadout`` fits no intercept, so a constant column of ones is appended
@@ -99,6 +118,7 @@ Everything is written to the Hydra run directory, by default
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -122,6 +142,11 @@ from QELM.evaluation.metrics import (
     accuracy,
     balanced_accuracy,
     majority_accuracy,
+)
+from QELM.models.circuits import (
+    CliffordBrickworkCircuit,
+    HaarBrickworkCircuit,
+    U1BrickworkCircuit,
 )
 from QELM.physics import Z, local_expectation
 from QELM.training import ProjectiveMeasurement, RidgeReadout
@@ -149,6 +174,78 @@ EXTRA_METRICS = (
 SECTOR_A = [0]
 # Number of time-evolution steps, each followed by a measurement (issue #132).
 NBR_TIME_EVOLUTION = "projective_measurement.nbr_time_evolution"
+# Random circuits that can replace the TFIM, by models value (issue #171).
+CIRCUITS: dict[str, type[U1BrickworkCircuit]] = {
+    HaarBrickworkCircuit.name: HaarBrickworkCircuit,
+    CliffordBrickworkCircuit.name: CliffordBrickworkCircuit,
+}
+# One time-evolution step: the state after the measurement of step j - 1
+# (the initial state for j = 0) and j, mapped to the state before the
+# measurement of step j.
+Step = Callable[[np.ndarray, int], np.ndarray]
+
+
+def _tfim_sampler(cfg: DictConfig, Ns: int, Nr: int, dt: float) -> Callable[[], Step]:
+    """Return a function that draws a TFIM and its evolution step, per sample.
+
+    The TFIM acts on the ``Ns`` system qubits only, ``U = 1_R (x) U_S(dt)``
+    (issue #104), and every step of a sample applies the same ``U``.
+    """
+    # The TFIM block with the system size: R does not evolve (issue #104).
+    tfim = OmegaConf.to_container(cfg[TransverseFieldIsingModel.name], resolve=True)
+    assert isinstance(tfim, dict)
+    tfim_params = {**{str(k): v for k, v in tfim.items()}, "N": Ns}
+    identity_R = np.eye(2**Nr)
+
+    def draw() -> Step:
+        model = TransverseFieldIsingModel(tfim_params)
+        # U(dt) once per sample: model.evolve rebuilds exp(-i H dt) v from
+        # products H @ v at every call, which gets slow when ||H|| dt is
+        # large (h = 10 J, dt = t / nbr_time_evolution), while the
+        # nbr_time_evolution steps of a sample all use the same U.
+        U = np.kron(identity_R, model.propagator(dt=dt))
+        U_dag = U.conj().T
+        return lambda rho, j: U @ rho @ U_dag
+
+    return draw
+
+
+def _circuit_sampler(cfg: DictConfig, nbr_time_evolution: int) -> Callable[[], Step]:
+    """Return a function that draws a random circuit and its steps, per sample.
+
+    The circuit acts on the system qubits only (its gates skip the ``Nr``
+    ancillas). Step ``j`` applies brickwork layers ``j * k`` to
+    ``(j + 1) * k - 1``, with ``k = layers_per_step``.
+
+    Raises:
+        ValueError: If ``layers_per_step < 1``.
+    """
+    name = str(cfg.models)
+    block = OmegaConf.to_container(cfg[name], resolve=True)
+    assert isinstance(block, dict)
+    params = {str(k): v for k, v in block.items()}
+    per_step = int(params.get("layers_per_step", 1))
+    if per_step < 1:
+        raise ValueError(f"{name}.layers_per_step must be >= 1, got {per_step}.")
+    params.setdefault("fixed_instance", False)
+    circuit = CIRCUITS[name]({**params, "depth": nbr_time_evolution * per_step})
+
+    def step(rho: np.ndarray, j: int) -> np.ndarray:
+        for t in range(j * per_step, (j + 1) * per_step):
+            rho = circuit.apply_layer(rho, t)
+        return rho
+
+    first = True
+
+    def draw() -> Step:
+        nonlocal first
+        # The constructor drew the gates of the first sample.
+        if not (first or circuit.fixed_instance):
+            circuit.redraw()
+        first = False
+        return step
+
+    return draw
 
 
 def run(cfg: DictConfig) -> dict[str, Any]:
@@ -156,8 +253,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     Args:
         cfg: Composed config (``load_config`` or Hydra). Reads
-            ``evolution.t``, ``samples.L``, ``samples.train_size``, the TFIM,
-            embedding, measurement and training blocks, and the optional
+            ``models``, ``samples.L``, ``samples.train_size``, the model
+            block (TFIM with ``evolution.t``, or a circuit), the embedding,
+            measurement and training blocks, and the optional
             ``projective_measurement.nbr_time_evolution`` (default 5).
 
     Returns:
@@ -191,7 +289,16 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         raise ValueError(
             f"{NBR_TIME_EVOLUTION} must be >= 1, got {nbr_time_evolution}."
         )
-    dt = float(cfg.evolution.t) / nbr_time_evolution
+    # The unitary dynamics, TFIM or random circuit (issue #171).
+    model_name = str(cfg.models)
+    if model_name == TransverseFieldIsingModel.name:
+        dt = float(cfg.evolution.t) / nbr_time_evolution
+        draw_evolution = _tfim_sampler(cfg, Ns, Nr, dt)
+    elif model_name in CIRCUITS:
+        draw_evolution = _circuit_sampler(cfg, nbr_time_evolution)
+    else:
+        known = ", ".join([TransverseFieldIsingModel.name, *CIRCUITS])
+        raise ValueError(f"models={model_name} is not supported here. Known: {known}.")
     # Every sample starts from the embedded state, not from the collapsed
     # state of the previous sample (issue #101).
     rho0 = sector.rho()
@@ -205,23 +312,12 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     # The system sector: every qubit but the Nr ancillas.
     system = list(range(Nr, N))
 
-    # The TFIM block with the system size: R does not evolve (issue #104).
-    tfim = OmegaConf.to_container(cfg[TransverseFieldIsingModel.name], resolve=True)
-    assert isinstance(tfim, dict)
-    tfim_params = {**{str(k): v for k, v in tfim.items()}, "N": Ns}
-    identity_R = np.eye(2**Nr)
-
     for i in tqdm(range(L)):
-        model = TransverseFieldIsingModel(tfim_params)
-        # U(dt) once per sample: model.evolve rebuilds exp(-i H dt) v from
-        # products H @ v at every call, which gets slow when ||H|| dt is
-        # large (h = 10 J, dt = t / nbr_time_evolution), while the
-        # nbr_time_evolution steps of a sample all use the same U.
-        U = np.kron(identity_R, model.propagator(dt=dt))
-        U_dag = U.conj().T
+        # A new TFIM disorder, or new circuit gates, for every sample.
+        evolve = draw_evolution()
         rho = rho0
         for j in range(nbr_time_evolution):
-            rho = U @ rho @ U_dag
+            rho = evolve(rho, j)
             measure = P.measure(rho)
             rho = measure.rho
             M[i, j] = measure.outcomes
