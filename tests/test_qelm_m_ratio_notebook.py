@@ -1,4 +1,7 @@
-"""notebooks/results/03_QELM_M_alpha_ratio.ipynb runs end to end on a small sweep (#96).
+"""notebooks/results/03_QELM_M_alpha_ratio.ipynb runs end to end on a small sweep.
+
+Issue #96 for the curves against the ratio, #164 for the heatmaps over
+``(p, alpha_ratio)``.
 
 The code cells are executed in order, as Jupyter would, with the sweep
 shrunk through the environment variables the notebook reads.
@@ -12,6 +15,7 @@ from pathlib import Path
 
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -65,10 +69,36 @@ def test_notebook_runs_the_sweep_and_plots(
             for line in ax.lines
         )
     assert axes[0].get_yscale() == "log"  # NMSE
-    assert len(shows) == 1
+    assert len(shows) == 2  # the curves, then the heatmaps
     figure_path = namespace["figure_path"]
     assert figure_path.parent.parent == tmp_path / "QELM_M_ratio"  # #151
     data = json.loads(figure_path.with_suffix(".json").read_text())
     assert len(data["panels"]) == 3
     assert len(data["extra"]["table"]) == 4
+
+    # Heatmaps over (p, ratio), issue #164: one per metric.
+    heatmaps = [h[0] for h in namespace["HEATMAPS"]]
+    assert heatmaps == ["nmse", "r2", "accuracy", "balanced_accuracy"]
+    for key in heatmaps:
+        grid = namespace["grids"][(3, key)]
+        np.testing.assert_array_equal(grid.x, [0.5, 1.0])
+        np.testing.assert_allclose(grid.y, [6 / 11, 2.0])
+        assert np.all(np.isfinite(grid.mean)) and np.all(grid.n_runs == 2)
+    axes_maps = namespace["axes_maps"]
+    assert axes_maps.shape == (1, 4)
+    for ax in axes_maps.ravel():
+        assert ax.get_xscale() == "linear" and ax.get_yscale() == "log"
+        # The interpolation threshold at alpha_ratio = 1.
+        assert any(
+            line.get_linestyle() == "--" and set(line.get_ydata()) == {1.0}
+            for line in ax.lines
+        )
+    heatmap_path = namespace["heatmap_path"]
+    assert heatmap_path.parent == figure_path.parent
+    maps = json.loads(heatmap_path.with_suffix(".json").read_text())
+    drawn = [h for panel in maps["panels"] for h in panel["heatmaps"]]
+    assert len(drawn) == 4  # one per metric, none from the colorbars
+    np.testing.assert_allclose(
+        np.array(drawn[0]["values"]), namespace["grids"][(3, "nmse")].mean
+    )
     os.chdir(REPO_ROOT)

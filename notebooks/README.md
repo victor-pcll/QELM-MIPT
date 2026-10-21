@@ -6,7 +6,7 @@
 | `benchmarks/` | `02_learnability_entropy.ipynb` | Mean entropy of the charge posterior, same paper, Fig. 2c (issue #115) |
 | `benchmarks/` | `03_charge_sharpening.ipynb` | Charge sharpening, Agrawal et al. PRX 14, 041012 (2024), Fig. 7 (issues #137, #142) |
 | `results/` | `02_QELM_M_analysis.ipynb` | QELM on the measurement record `M`, sweep over `p` (issue #94) |
-| `results/` | `03_QELM_M_alpha_ratio.ipynb` | QELM on `M`, NMSE against the sample-to-parameter ratio `n_train / n_params` (issue #96) |
+| `results/` | `03_QELM_M_alpha_ratio.ipynb` | QELM on `M`, metrics against the sample-to-parameter ratio `n_train / n_params` (issue #96), then heatmaps of NMSE, R2, accuracy and balanced accuracy over `p` and the ratio (issue #164) |
 
 `benchmarks/` reproduces published figures, to validate the library; `results/` holds the new results of the project.
 
