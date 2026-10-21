@@ -13,6 +13,7 @@ the deviations were checked identical with the plot scripts of main before
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 from types import ModuleType
 
@@ -136,3 +137,56 @@ def test_charge_sharpening_overlay_matches_the_paper(tmp_path: Path) -> None:
         for name, (_, y) in CS.load_references(CS.REFERENCE_DIR)["binder"].items()
     )
     assert fig.axes[2].get_ylim() == pytest.approx((1.5 * low, 1.0))
+
+
+@pytest.mark.parametrize("figure", ["2b", "2c"])
+def test_residual_panel_shows_the_deviation_with_its_error_bars(
+    tmp_path: Path, figure: str
+) -> None:
+    """``residuals=True`` adds our curve minus the paper's, bars kept (#152)."""
+    sweep = fake_learnability_sweep(tmp_path / "sweep")
+    panels, transition, _, _ = LEARN.FIGURES[figure]
+    plain, plain_comparison = LEARN.draw_sweep(
+        sweep, LEARN.REFERENCE_DIR, panels, transition
+    )
+    fig, comparison = LEARN.draw_sweep(
+        sweep, LEARN.REFERENCE_DIR, panels, transition, residuals=True
+    )
+    assert comparison == plain_comparison
+
+    data = figure_data(fig)["panels"]
+    # The two panels draw the same data; only the main panel has a 6-site
+    # reference, so the Binder residual panel is removed.
+    main, binder, residual = data
+    for panel, before in zip((main, binder), figure_data(plain)["panels"], strict=True):
+        assert panel["curves"] == before["curves"]
+        assert panel["title"] == before["title"]
+    assert residual["xlabel"] == "measurement probability $p$"
+    (curve,) = residual["curves"]
+    assert curve["label"].startswith("this work, N = 6 $-$ Barratt et al. 2022")
+    np.testing.assert_allclose(curve["y"], DELTA, atol=1e-12)
+    np.testing.assert_allclose(curve["yerr_lower"], 0.001, atol=1e-12)
+    np.testing.assert_allclose(curve["yerr_upper"], 0.001, atol=1e-12)
+    # Every run inside the range of the reference curve has its residual.
+    x_ref = learnability_reference()[LEARN.FIGURES[figure][0][0][0]][0]
+    ours = _curve(main, "this work, N = 6")["x"]
+    assert len(curve["x"]) == sum(x_ref.min() <= x <= x_ref.max() for x in ours)
+    # The Binder panel keeps its tick labels without the panel below.
+    assert fig.axes[1].xaxis.get_tick_params()["labelbottom"]
+
+
+def test_plot_sweep_saves_the_residuals(tmp_path: Path) -> None:
+    sweep = fake_learnability_sweep(tmp_path / "sweep")
+    panels, transition, filename, comparison_name = LEARN.FIGURES["2c"]
+    LEARN.plot_sweep(
+        sweep,
+        LEARN.REFERENCE_DIR,
+        panels,
+        filename,
+        transition=transition,
+        comparison_name=comparison_name,
+        residuals=True,
+    )
+    saved = json.loads((sweep / filename).with_suffix(".json").read_text())
+    assert len(saved["panels"]) == 3
+    assert (sweep / filename).is_file() and (sweep / comparison_name).is_file()
