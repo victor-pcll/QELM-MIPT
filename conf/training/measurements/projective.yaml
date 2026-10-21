@@ -15,3 +15,8 @@ qubits: null
 Nr: ${Nr}
 p: 1.0
 nbr_time_evolution: 5
+# final_measurement: also measure after the last step, read by
+#   experiments/QELM_Q/exp_QELM_Q.py only (issue #163). false: the
+#   measurements are intermediate and the features are read after a last
+#   unitary step. Override with projective_measurement.final_measurement=true.
+final_measurement: false

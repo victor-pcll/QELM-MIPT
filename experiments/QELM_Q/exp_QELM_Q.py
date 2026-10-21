@@ -21,9 +21,15 @@ the final state alone. For each sample ``i`` (``samples.L`` in total):
    ``t / nbr_time_evolution`` (``projective_measurement.nbr_time_evolution``,
    default 5). Between two steps, each system qubit is measured in Z with
    probability ``projective_measurement.p`` and the state collapses. The
-   measurements are intermediate: there is none after the last step, so the
-   final state has evolved for ``t / nbr_time_evolution`` since the last
-   collapse, and ``nbr_time_evolution - 1`` rounds are applied in total.
+   measurements are intermediate by default: there is none after the last
+   step, so the final state has evolved for ``t / nbr_time_evolution`` since
+   the last collapse, and ``nbr_time_evolution - 1`` rounds are applied in
+   total. With ``projective_measurement.final_measurement=true`` a last
+   round follows the last step too (``nbr_time_evolution`` rounds): the
+   features are then read right after a collapse, so the disruption of the
+   entanglement is seen in the final state, which the last unitary step
+   otherwise rebuilds. A measured qubit then has ``<Z_k> = +-1``, its
+   outcome.
 3. The features ``X[i]`` are the final expectation values
    ``<Z_k> = Tr(Z_k rho)`` of the system qubits ``k = 1 .. Ns``, plus a bias
    column. The outcomes of the intermediate measurements are **not**
@@ -109,6 +115,8 @@ EXTRA_METRICS = (
 )
 # Number of time-evolution steps (issue #132).
 NBR_TIME_EVOLUTION = "projective_measurement.nbr_time_evolution"
+# Optional measurement round after the last step.
+FINAL_MEASUREMENT = "projective_measurement.final_measurement"
 # Second word of the seed of the measurement generator: the issue number.
 MEASUREMENT_STREAM = 163
 
@@ -119,6 +127,7 @@ def evolve_with_measurements(
     n_steps: int,
     P: ProjectiveMeasurement,
     rng: np.random.Generator,
+    final: bool = False,
 ) -> tuple[np.ndarray, int]:
     """Apply ``n_steps`` steps ``U``, with a measurement round between two.
 
@@ -128,16 +137,17 @@ def evolve_with_measurements(
         n_steps: Number of steps, ``>= 1``.
         P: Measurement of the system qubits, each with its probability ``p``.
         rng: Generator of the measurement choices and outcomes.
+        final: Also measure after the last step (issue #163, follow-up).
 
     Returns:
-        The final state, after the last step and without a measurement after
-        it, and the number of qubits measured on the way.
+        The final state, after the last step (and its round when ``final``),
+        and the number of qubits measured on the way.
     """
     U_dag = U.conj().T
     n_measured = 0
     for j in range(n_steps):
         rho = U @ rho @ U_dag
-        if j < n_steps - 1:
+        if final or j < n_steps - 1:
             measure = P.measure(rho, rng=rng)
             rho = measure.rho
             n_measured += int(np.sum(np.isfinite(measure.outcomes)))
@@ -151,7 +161,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         cfg: Composed config (``load_config`` or Hydra). Reads
             ``evolution.t``, ``samples.L``, ``samples.train_size``, ``seed``,
             the TFIM, embedding, measurement and training blocks, and
-            ``projective_measurement.nbr_time_evolution`` (default 5).
+            ``projective_measurement.nbr_time_evolution`` (default 5) and
+            ``projective_measurement.final_measurement`` (default ``False``).
 
     Returns:
         The arrays and metrics of the run: ``X`` (with the bias column),
@@ -172,6 +183,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             f"{NBR_TIME_EVOLUTION} must be >= 1, got {nbr_time_evolution}."
         )
     dt = float(cfg.evolution.t) / nbr_time_evolution
+    final = bool(OmegaConf.select(cfg, FINAL_MEASUREMENT, default=False))
     rho0 = sector.rho()
     P = ProjectiveMeasurement.from_config(cfg)
     Q1, Q2 = sector.Q1, sector.Q2
@@ -197,7 +209,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         rho, r = measure_projective_rho(rho0, 0, N)
         Y[i] = Q1 if r == 1 else Q2
         rho, n_measured[i] = evolve_with_measurements(
-            rho, U, nbr_time_evolution, P, rng
+            rho, U, nbr_time_evolution, P, rng, final
         )
         X[i] = [local_expectation(rho, Z, k) for k in system]
         S_half[i] = von_neumann_entropy(rho, half)

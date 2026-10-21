@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # QELM on the charge Q under intermediate Z measurements
 # (experiments/QELM_Q/exp_QELM_Q.py, issue #163), swept over N, the
-# transverse field h, the seed and the measurement probability p.
+# transverse field h, the seed, the measurement probability p and whether a
+# last round follows the last step (projective_measurement.final_measurement).
 #
 # Run from anywhere, after `uv sync`:
 #
 #     ./experiments/QELM_Q/exp_QELM_Q.sh
 #
 # Each run writes its arrays, metrics.json, log and Hydra config to
-#     outputs/exp_QELM_Q/<date_time>/N<N>_h<h>_seed<seed>_p<p>/
+#     outputs/exp_QELM_Q/<date_time>/N<N>_h<h>_final<final>_seed<seed>_p<p>/
 # which git ignores; notebooks/results/04_QELM_Q_measurements.ipynb reads
 # them back. Environment variables change the defaults (lists are
 # space-separated):
@@ -20,6 +21,7 @@
 #     H_VALUES="10 1"         transverse fields TFIM.h, in units of TFIM.J = 1
 #     SEEDS="42 43 44"        seeds (one disorder and measurement draw each)
 #     P_VALUES="0 0.5 1.0"    measurement probabilities
+#     FINAL_VALUES="false true"  without / with a round after the last step
 
 # Stop at the first failing command, unset variable or failing pipe.
 set -euo pipefail
@@ -47,6 +49,7 @@ L="${L:-200}"                               # samples per run (samples.L)
 # conf/training/regression/ridge.yaml (1e-3) applies (issue #92).
 read -r -a SEEDS <<< "${SEEDS:-42}"
 read -r -a P_VALUES <<< "${P_VALUES:-0.0 0.2 0.5 0.8 1.0}"
+read -r -a FINAL_VALUES <<< "${FINAL_VALUES:-false}"
 # -----------------------------------------------------------------------------
 
 STAMP="$(date +%Y-%m-%d_%H-%M-%S)"
@@ -61,22 +64,25 @@ echo "Writing outputs to $OUT_DIR"
 # the ${mul:...} formula and the notebook can read it back.
 for N in "${N_VALUES[@]}"; do
   for h in "${H_VALUES[@]}"; do
-    for SEED in "${SEEDS[@]}"; do
-      for p in "${P_VALUES[@]}"; do
-        RUN_DIR="$OUT_DIR/N${N}_h${h}_seed${SEED}_p${p}"
-        echo "--- models=$MODEL N=$N TFIM.h=$h seed=$SEED samples.L=$L training.alpha=${ALPHA:-config default} p=$p"
-        uv run python experiments/QELM_Q/exp_QELM_Q.py \
-          "models=$MODEL" \
-          "N=$N" \
-          "TFIM.h=$h" \
-          "seed=$SEED" \
-          "samples.L=$L" \
-          ${ALPHA:+"training.alpha=$ALPHA"} \
-          "projective_measurement.p=$p" \
-          "hydra.run.dir=$RUN_DIR"
+    for FINAL in "${FINAL_VALUES[@]}"; do
+      for SEED in "${SEEDS[@]}"; do
+        for p in "${P_VALUES[@]}"; do
+          RUN_DIR="$OUT_DIR/N${N}_h${h}_final${FINAL}_seed${SEED}_p${p}"
+          echo "--- models=$MODEL N=$N TFIM.h=$h final=$FINAL seed=$SEED samples.L=$L training.alpha=${ALPHA:-config default} p=$p"
+          uv run python experiments/QELM_Q/exp_QELM_Q.py \
+            "models=$MODEL" \
+            "N=$N" \
+            "TFIM.h=$h" \
+            "seed=$SEED" \
+            "samples.L=$L" \
+            ${ALPHA:+"training.alpha=$ALPHA"} \
+            "projective_measurement.p=$p" \
+            "projective_measurement.final_measurement=$FINAL" \
+            "hydra.run.dir=$RUN_DIR"
+        done
       done
     done
   done
 done
 
-echo "Done: ${#N_VALUES[@]} x ${#H_VALUES[@]} x ${#SEEDS[@]} x ${#P_VALUES[@]} runs in $OUT_DIR"
+echo "Done: ${#N_VALUES[@]} x ${#H_VALUES[@]} x ${#FINAL_VALUES[@]} x ${#SEEDS[@]} x ${#P_VALUES[@]} runs in $OUT_DIR"

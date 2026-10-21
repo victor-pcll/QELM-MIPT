@@ -79,6 +79,25 @@ def test_outcomes_are_not_features() -> None:
     assert not np.all(np.isin(features, [-1.0, 1.0]))
 
 
+def test_final_round_measures_after_the_last_step() -> None:
+    """final_measurement=true at p = 1: 5 rounds, the features are outcomes."""
+    out = _run(
+        "projective_measurement.p=1.0", "projective_measurement.final_measurement=true"
+    )
+    assert out["n_measured_mean"] == 5 * (N - 1)
+    np.testing.assert_allclose(np.abs(out["X"][:, :-1]), 1.0, atol=1e-12)
+    # Same disorder and labels as without the final round.
+    np.testing.assert_array_equal(out["Y"], _run("projective_measurement.p=1.0")["Y"])
+
+
+def test_final_round_changes_nothing_at_p_zero() -> None:
+    a = _run("projective_measurement.p=0.0")
+    b = _run(
+        "projective_measurement.p=0.0", "projective_measurement.final_measurement=true"
+    )
+    np.testing.assert_array_equal(a["X"], b["X"])
+
+
 def test_reproducible_with_the_seed() -> None:
     a, b = _run("projective_measurement.p=0.5"), _run("projective_measurement.p=0.5")
     np.testing.assert_array_equal(a["X"], b["X"])
@@ -102,6 +121,9 @@ def test_evolve_with_measurements_no_round_after_the_last_step() -> None:
     # Two steps: one round in between, every qubit collapsed once.
     out, n_measured = module.evolve_with_measurements(rho, U, 2, P, rng)
     assert n_measured == n
+    # With the final round: one more round, after the last step.
+    _, n_final = module.evolve_with_measurements(rho, U, 2, P, rng, final=True)
+    assert n_final == 2 * n
     np.testing.assert_allclose(np.trace(out), 1.0, atol=1e-12)
     np.testing.assert_allclose(out, out.conj().T, atol=1e-12)
     for k in range(n):
@@ -115,7 +137,7 @@ def test_rejects_zero_steps() -> None:
 
 
 def test_bash_sweep_writes_one_folder_per_run(tmp_path: Path) -> None:
-    """The launcher runs N x h x seed x p and writes h into the config."""
+    """The launcher runs N x h x final x seed x p and writes h into the config."""
     env = {
         **os.environ,
         "OUT_DIR": str(tmp_path),
@@ -123,17 +145,18 @@ def test_bash_sweep_writes_one_folder_per_run(tmp_path: Path) -> None:
         "H_VALUES": "10 1",
         "SEEDS": "42",
         "P_VALUES": "0.0 1.0",
+        "FINAL_VALUES": "false true",
         "L": "10",
         "TQDM_DISABLE": "1",
     }
     subprocess.run(["bash", str(BASH_SCRIPT)], check=True, env=env, cwd=tmp_path)
     runs = sorted(p.parent.name for p in tmp_path.glob("*/metrics.json"))
-    assert runs == [
-        "N3_h10_seed42_p0.0",
-        "N3_h10_seed42_p1.0",
-        "N3_h1_seed42_p0.0",
-        "N3_h1_seed42_p1.0",
-    ]
+    assert runs == sorted(
+        f"N3_h{h}_final{final}_seed42_p{p}"
+        for h in (10, 1)
+        for final in ("false", "true")
+        for p in ("0.0", "1.0")
+    )
     metrics = json.loads((tmp_path / runs[0] / "metrics.json").read_text())
     for key in ("accuracy", "accuracy_baseline", "balanced_accuracy", "S_half_mean"):
         assert key in metrics
