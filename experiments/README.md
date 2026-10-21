@@ -162,7 +162,10 @@ a collapse. The features are only the final
 metric is `accuracy` (the prediction on the right side of the midpoint of the
 two charges), with `accuracy_baseline` and `balanced_accuracy` as in
 `exp_QELM_M`, plus `S_half_mean`, the mean half-system entanglement entropy of
-the final state. The measurements draw from their own generator, so at
+the final state. The readout is also fitted, separately, on five other
+feature sets of the same final states, `<X_k>`, `<Y_k>` and the correlators
+`<X_i X_j>`, `<Y_i Y_j>`, `<Z_i Z_j>` (`accuracy_<name>`, `r2_<name>` in
+`metrics.json`). The measurements draw from their own generator, so at
 `p = 0` the run is exactly the standard QELM, one unitary `exp(-i H t)` per
 sample. Each run lands in
 `outputs/exp_QELM_Q/<date_time>/N<N>_h<h>_final<final>_seed<seed>_p<p>/`.
@@ -170,7 +173,8 @@ sample. Each run lands in
 `notebooks/results/04_QELM_Q_measurements.ipynb` checks the `p = 0` baseline,
 runs the sweep in `outputs/QELM_Q/<date_time>/` and plots the accuracy, R2
 and `S_half` against `p` for each `N` and `h`, one row of panels without and
-one with the final round (`accuracy_vs_p.png` and
+one with the final round, then the accuracy of each feature set
+(`accuracy_by_observable_<setting>.png`) (`accuracy_vs_p.png` and
 `.json` in the sweep folder).
 
 ## Run the charge-sharpening benchmark (issue #137)

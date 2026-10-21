@@ -98,6 +98,56 @@ def test_final_round_changes_nothing_at_p_zero() -> None:
     np.testing.assert_array_equal(a["X"], b["X"])
 
 
+def test_six_feature_sets() -> None:
+    """One readout per set; <X_k> = <Y_k> = 0, since the dynamics and the Z
+    measurements keep the parity of Q and X_k, Y_k flip it."""
+    out = _run("projective_measurement.p=0.5")
+    module = _load_script()
+    Ns = N - 1
+    pairs = Ns * (Ns - 1) // 2
+    for name in module.FEATURE_SETS:
+        phi = out[f"features_{name}"]
+        assert phi.shape == (L, (Ns if len(name) == 1 else pairs) + 1)
+        assert np.all(np.abs(phi) <= 1 + 1e-12)
+        for score in ("accuracy", "balanced_accuracy", "r2"):
+            assert np.isfinite(out[f"{score}_{name}"])
+    np.testing.assert_array_equal(out["features_Z"], out["X"])
+    assert out["accuracy_Z"] == out["accuracy"]
+    for name in ("X", "Y"):
+        np.testing.assert_allclose(out[f"features_{name}"][:, :-1], 0.0, atol=1e-12)
+    assert np.any(np.abs(out["features_XX"][:, :-1]) > 1e-3)
+
+
+def test_observable_features_match_the_full_operators() -> None:
+    module = _load_script()
+    n = 3
+    rng = np.random.default_rng(1)
+    psi = rng.normal(size=2**n) + 1j * rng.normal(size=2**n)
+    psi /= np.linalg.norm(psi)
+    rho = np.outer(psi, psi.conj())
+    system = [0, 1, 2]
+    for name in module.FEATURE_SETS:
+        P = module.PAULIS[name[0]]
+        if len(name) == 1:
+            expected = [
+                np.real(np.trace(get_site_operator(P, k, n) @ rho)) for k in system
+            ]
+        else:
+            expected = [
+                np.real(
+                    np.trace(
+                        get_site_operator(P, i, n) @ get_site_operator(P, j, n) @ rho
+                    )
+                )
+                for i, j in ((0, 1), (0, 2), (1, 2))
+            ]
+        np.testing.assert_allclose(
+            module.observable_features(rho, system, name), expected, atol=1e-12
+        )
+    with pytest.raises(ValueError, match="feature set"):
+        module.observable_features(rho, system, "XY")
+
+
 def test_reproducible_with_the_seed() -> None:
     a, b = _run("projective_measurement.p=0.5"), _run("projective_measurement.p=0.5")
     np.testing.assert_array_equal(a["X"], b["X"])
@@ -158,6 +208,13 @@ def test_bash_sweep_writes_one_folder_per_run(tmp_path: Path) -> None:
         for p in ("0.0", "1.0")
     )
     metrics = json.loads((tmp_path / runs[0] / "metrics.json").read_text())
-    for key in ("accuracy", "accuracy_baseline", "balanced_accuracy", "S_half_mean"):
+    for key in (
+        "accuracy",
+        "accuracy_baseline",
+        "balanced_accuracy",
+        "S_half_mean",
+        "accuracy_XX",
+        "r2_ZZ",
+    ):
         assert key in metrics
     assert (tmp_path / runs[0] / "exp_QELM_Q.npz").is_file()

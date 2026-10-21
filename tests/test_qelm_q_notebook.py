@@ -59,7 +59,12 @@ def test_notebook_runs_the_sweep_and_plots(
     # One curve per field on every panel.
     for ax in axes.flat:
         assert len(ax.containers) == 2
-    assert len(shows) == 1
+    # The main figure, then one figure per observable for each final setting.
+    assert len(shows) == 3
+    for setting, path in namespace["observable_figures"].items():
+        assert path.name == f"accuracy_by_observable_{setting}.png"
+        obs = json.loads(path.with_suffix(".json").read_text())
+        assert len(obs["panels"]) == 6
     figure_path = namespace["figure_path"]
     assert figure_path.parent.parent == tmp_path / "QELM_Q"  # #151
     data = json.loads(figure_path.with_suffix(".json").read_text())

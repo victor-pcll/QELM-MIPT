@@ -48,6 +48,19 @@ So the measurements do not erase ``Q`` itself; what they change is the
 state the charge is carried by, and how far the final ``<Z_k>`` spread
 around their mean.
 
+The same readout is also fitted, separately, on six feature sets read from
+the same final states (issue #163, follow-up): the one-site ``<X_k>``,
+``<Y_k>``, ``<Z_k>`` and the two-site correlators ``<X_i X_j>``,
+``<Y_i Y_j>``, ``<Z_i Z_j>`` over the pairs ``i < j`` of system qubits. The
+TFIM and the Z measurements conserve the parity of ``Q``, while ``X_k`` and
+``Y_k`` flip it, so ``<X_k> = <Y_k> = 0`` exactly: these two sets are the
+chance level. ``<X_i X_j>`` and ``<Y_i Y_j>`` keep the parity and are
+nonzero only through coherences between basis states, which the Z
+measurements erase: unlike ``<Z_k>``, they lose the charge as ``p`` grows.
+Each set ``<name>`` gets ``accuracy_<name>``, ``balanced_accuracy_<name>``
+and ``r2_<name>``; ``accuracy`` and the other unsuffixed scores are those of
+``<Z_k>``.
+
 The half-system entanglement entropy of the final state, ``S_half[i]``
 (von Neumann, in bits, of the first ``Ns // 2`` system qubits; the state of
 ``S`` is pure once ``R`` is measured), tracks how much the measurements
@@ -69,12 +82,13 @@ Run from the repository root:
 Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
 
-- ``exp_QELM_Q.npz``: ``X`` (features, bias column included), ``Y`` (the
+- ``exp_QELM_Q.npz``: ``X`` (the ``<Z_k>`` features, bias column included),
+  ``features_<name>`` for each set of :data:`FEATURE_SETS`, ``Y`` (the
   charge), ``y_test``, ``y_pred``, the weights ``W``, ``S_half`` and
   ``n_measured`` (number of collapses per sample), of shape ``(L,)``;
 - ``metrics.json``: ``nmse``, ``nmse_err``, ``r2``, ``accuracy``,
   ``accuracy_baseline``, ``balanced_accuracy``, ``S_half_mean``,
-  ``n_measured_mean`` and the shapes used;
+  ``n_measured_mean``, the scores of each feature set and the shapes used;
 - ``.hydra/config.yaml`` and ``resolved_config.json``: the config of the run.
 """
 
@@ -100,11 +114,17 @@ from QELM.evaluation.metrics import (
     balanced_accuracy,
     majority_accuracy,
 )
-from QELM.physics import Z, local_expectation
+from QELM.physics import X as PAULI_X
+from QELM.physics import Y as PAULI_Y
+from QELM.physics import Z, local_expectation, partial_trace
 from QELM.training import ProjectiveMeasurement, RidgeReadout
 from QELM.training.measurements.projective import measure_projective_rho
 from QELM.utils import save_config, save_results
 
+# Feature sets, each fitted with its own readout: one-site expectation values
+# and two-site correlators over the pairs i < j of system qubits.
+PAULIS = {"X": PAULI_X, "Y": PAULI_Y, "Z": Z}
+FEATURE_SETS = ("X", "Y", "Z", "XX", "YY", "ZZ")
 # Scalars written to metrics.json besides nmse, nmse_err and r2.
 EXTRA_METRICS = (
     "accuracy",
@@ -112,6 +132,11 @@ EXTRA_METRICS = (
     "balanced_accuracy",
     "S_half_mean",
     "n_measured_mean",
+    *(
+        f"{score}_{name}"
+        for name in FEATURE_SETS
+        for score in ("accuracy", "balanced_accuracy", "r2")
+    ),
 )
 # Number of time-evolution steps (issue #132).
 NBR_TIME_EVOLUTION = "projective_measurement.nbr_time_evolution"
@@ -154,6 +179,37 @@ def evolve_with_measurements(
     return rho, n_measured
 
 
+def observable_features(rho: np.ndarray, system: list[int], name: str) -> np.ndarray:
+    """Return the features of one set of :data:`FEATURE_SETS` for ``rho``.
+
+    Args:
+        rho: Density matrix of shape ``(2**N, 2**N)``.
+        system: The system qubits.
+        name: ``"X"``, ``"Y"`` or ``"Z"`` for ``<P_k>`` on each qubit of
+            ``system``; ``"XX"``, ``"YY"`` or ``"ZZ"`` for ``<P_i P_j>`` on
+            each pair ``i < j``, from the two-qubit reduced state.
+
+    Returns:
+        Real array of length ``len(system)`` or ``len(system) choose 2``.
+
+    Raises:
+        ValueError: If ``name`` is not a set of :data:`FEATURE_SETS`.
+    """
+    if name not in FEATURE_SETS:
+        raise ValueError(f"Unknown feature set {name!r}, expected {FEATURE_SETS}.")
+    P = PAULIS[name[0]]
+    if len(name) == 1:
+        return np.array([local_expectation(rho, P, k) for k in system])
+    PP = np.kron(P, P)
+    return np.array(
+        [
+            np.real(np.trace(PP @ partial_trace(rho, [i, j])))
+            for n, i in enumerate(system)
+            for j in system[n + 1 :]
+        ]
+    )
+
+
 def run(cfg: DictConfig) -> dict[str, Any]:
     """Simulate the samples, fit the readout on ``Q`` and score it.
 
@@ -168,8 +224,10 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         The arrays and metrics of the run: ``X`` (with the bias column),
         ``Y`` (the charge ``Q``), ``y_test``, ``y_pred``, ``W``, ``S_half``,
         ``n_measured``, ``nmse``, ``nmse_err``, ``r2``, ``accuracy``,
-        ``accuracy_baseline``, ``balanced_accuracy``, ``S_half_mean`` and
-        ``n_measured_mean``.
+        ``accuracy_baseline``, ``balanced_accuracy``, ``S_half_mean``,
+        ``n_measured_mean`` and, for each set ``<name>`` of
+        :data:`FEATURE_SETS`, ``features_<name>`` (with the bias column),
+        ``accuracy_<name>``, ``balanced_accuracy_<name>`` and ``r2_<name>``.
     """
     set_seed(cfg)
     rng = np.random.default_rng([int(cfg.seed), MEASUREMENT_STREAM])
@@ -189,7 +247,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Q1, Q2 = sector.Q1, sector.Q2
 
     L = int(cfg.samples.L)
-    X = np.zeros((L, Ns))
+    features: dict[str, list[np.ndarray]] = {name: [] for name in FEATURE_SETS}
     Y = np.zeros(L)
     S_half = np.zeros(L)
     n_measured = np.zeros(L)
@@ -211,19 +269,31 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         rho, n_measured[i] = evolve_with_measurements(
             rho, U, nbr_time_evolution, P, rng, final
         )
-        X[i] = [local_expectation(rho, Z, k) for k in system]
+        for name in FEATURE_SETS:
+            features[name].append(observable_features(rho, system, name))
         S_half[i] = von_neumann_entropy(rho, half)
 
-    X = np.hstack([X, np.ones((L, 1))])  # bias column: RidgeReadout has no intercept
-
     train = int(cfg.samples.train_size)
-    X_train, y_train = X[:train], Y[:train]
-    X_test, y_test = X[train:], Y[train:]
-
-    solver.fit(X_train, y_train)
-    y_pred = solver.predict(X_test)
+    y_train, y_test = Y[:train], Y[train:]
     # The two charges are told apart by the side of their midpoint.
     threshold = (Q1 + Q2) / 2
+
+    # One readout per feature set, each with a bias column (RidgeReadout has
+    # no intercept). <Z_k> is the main one, saved as X.
+    sets: dict[str, Any] = {}
+    for name in FEATURE_SETS:
+        phi = np.hstack([np.array(features[name]), np.ones((L, 1))])
+        readout = RidgeReadout.from_config(cfg)
+        readout.fit(phi[:train], y_train)
+        pred = readout.predict(phi[train:])
+        sets[f"features_{name}"] = phi
+        sets[f"accuracy_{name}"] = accuracy(y_test, pred, threshold)
+        sets[f"balanced_accuracy_{name}"] = balanced_accuracy(y_test, pred, threshold)
+        sets[f"r2_{name}"] = R2(y_test, pred)
+
+    X = sets["features_Z"]
+    solver.fit(X[:train], y_train)
+    y_pred = solver.predict(X[train:])
 
     return {
         "X": X,
@@ -241,6 +311,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "balanced_accuracy": balanced_accuracy(y_test, y_pred, threshold),
         "S_half_mean": float(np.mean(S_half)),
         "n_measured_mean": float(np.mean(n_measured)),
+        **sets,
     }
 
 
@@ -262,6 +333,8 @@ def main(cfg: DictConfig) -> None:
     print(f"accuracy baseline (majority charge): {results['accuracy_baseline']:.6g}")
     print(f"balanced accuracy: {results['balanced_accuracy']:.6g}")
     print(f"S_half (mean, bits): {results['S_half_mean']:.6g}")
+    for name in FEATURE_SETS:
+        print(f"accuracy on <{name}>: {results[f'accuracy_{name}']:.6g}")
     print(f"Saved to {out_dir}")
 
 
