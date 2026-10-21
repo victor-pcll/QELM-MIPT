@@ -1,5 +1,6 @@
 # @package training
 name: ridge
 # Regularization strength of the closed-form ridge regression (RidgeReadout).
-# fit(..., alpha=...) overrides it.
-alpha: 1.0
+# fit(..., alpha=...) overrides it. 1e-3 rather than 1.0: alpha also shrinks
+# the weight of the constant (bias) column, and alpha=1.0 costs R2 (issue #92).
+alpha: 0.001

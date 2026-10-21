@@ -11,6 +11,7 @@ from types import ModuleType
 
 import numpy as np
 import pytest
+from omegaconf import OmegaConf
 
 from QELM import TransverseFieldIsingModel, load_config
 from QELM.embedding import AncillaChargeSectorEmbedding
@@ -20,7 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "experiments" / "QELM_M" / "exp_QELM_M.py"
 BASH_SCRIPT = SCRIPT.with_suffix(".sh")
 L, N = 50, 4
-OVERRIDES = ["models=TFIM", f"N={N}", f"samples.L={L}", "training.alpha=1e-3"]
+OVERRIDES = ["models=TFIM", f"N={N}", f"samples.L={L}"]
 
 
 def _load_script() -> ModuleType:
@@ -195,6 +196,9 @@ def test_bash_launcher_dry_run(tmp_path: Path) -> None:
         metrics = json.loads((run / "metrics.json").read_text())
         expected_keys = {"nmse", "r2", *_load_script().EXTRA_METRICS}
         assert expected_keys <= set(metrics)
+        # Without ALPHA the run keeps the config default (issue #92).
+        hydra_cfg = OmegaConf.load(run / ".hydra" / "config.yaml")
+        assert hydra_cfg.training.alpha == 1e-3
         assert (run / "exp_QELM_M.npz").is_file()
         with np.load(run / "exp_QELM_M.npz") as data:
             assert data["X"].shape == (10, 5 * 2 + 1)

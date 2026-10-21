@@ -9,6 +9,10 @@ import numpy as np
 
 from QELM.training.regression.base import Trainer
 
+# Same value as conf/training/regression/ridge.yaml. alpha=1.0 also shrinks the
+# bias weight and costs R2 (issue #92).
+DEFAULT_ALPHA = 1e-3
+
 
 class RidgeReadout(Trainer):
     """Ridge regression on the reservoir features, solved in closed form.
@@ -19,11 +23,11 @@ class RidgeReadout(Trainer):
     column to ``Phi`` if a bias is needed. Selected with ``training/regression=ridge``.
 
     ``alpha`` is resolved in this order: the argument of :meth:`fit`, then
-    ``alpha`` in the ``training`` config block, then 1.0 (as in
-    scikit-learn).
+    ``alpha`` in the ``training`` config block, then 1e-3 (the value of
+    ``conf/training/regression/ridge.yaml``, issue #92).
 
     Attributes:
-        config_alpha: ``alpha`` from the config, or 1.0.
+        config_alpha: ``alpha`` from the config, or 1e-3.
         W: Fitted weights of shape ``(n_features,)`` or
             ``(n_features, n_outputs)``, or ``None`` before :meth:`fit`.
     """
@@ -35,13 +39,13 @@ class RidgeReadout(Trainer):
 
         Args:
             params: Optional ``alpha``, a non-negative regularization
-                strength (default 1.0).
+                strength (default 1e-3).
 
         Raises:
             ValueError: If ``alpha`` is negative or not a number.
         """
         super().__init__(params)
-        self.config_alpha: float = _check_alpha(self.params.get("alpha", 1.0))
+        self.config_alpha: float = _check_alpha(self.params.get("alpha", DEFAULT_ALPHA))
         self.W: np.ndarray | None = None
 
     def fit(

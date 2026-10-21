@@ -19,17 +19,19 @@ def _data(n: int = 40, d: int = 5, k: int | None = None, seed: int = 0):
     return phi, y
 
 
-# --- alpha : argument, puis config, puis 1.0 ---
+# --- alpha : argument, puis config, puis 1e-3 ---
 
 
-def test_alpha_defaults_to_one() -> None:
-    assert RidgeReadout().config_alpha == 1.0
-    assert RidgeReadout({}).config_alpha == 1.0
+def test_alpha_defaults_to_1e_3() -> None:
+    """Issue #92: the default is 1e-3, in the code and in ridge.yaml."""
+    assert RidgeReadout().config_alpha == 1e-3
+    assert RidgeReadout({}).config_alpha == 1e-3
+    assert load_config().training.alpha == 1e-3
 
 
 def test_alpha_from_params_and_config() -> None:
     assert RidgeReadout({"alpha": 0.3}).config_alpha == 0.3
-    assert RidgeReadout.from_config(load_config()).config_alpha == 1.0
+    assert RidgeReadout.from_config(load_config()).config_alpha == 1e-3
     cfg = load_config(["training.alpha=0.25"])
     assert RidgeReadout.from_config(cfg).config_alpha == 0.25
 
@@ -111,4 +113,4 @@ def test_state_dict_holds_the_weights() -> None:
 
 def test_from_config_without_training_block() -> None:
     cfg = OmegaConf.create({"seed": 0})
-    assert RidgeReadout.from_config(cfg).config_alpha == 1.0
+    assert RidgeReadout.from_config(cfg).config_alpha == 1e-3
