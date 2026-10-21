@@ -133,7 +133,11 @@ before the script sets them). `notebooks/results/03_QELM_M_alpha_ratio.ipynb`
 runs the sweep in `outputs/QELM_M_ratio/<date_time>/` and plots the test
 NMSE, R2 and balanced accuracy against the ratio, with the interpolation
 threshold `alpha_ratio = 1` dashed (`metrics_vs_alpha_ratio.png` and
-`.json` in the sweep folder).
+`.json` in the sweep folder). Its default grid is `p` from 0 to 1 and
+`alpha_ratio` from 0.25 to 10 on a log scale, and its last section draws one
+heatmap per metric (NMSE, R2, accuracy, balanced accuracy) over
+`(p, alpha_ratio)`, with `alpha_ratio = 1` dashed
+(`heatmaps_p_alpha_ratio.png` and `.json`, issue #164).
 
 ## Run the QELM experiment on the charge Q under intermediate measurements (issue #163)
 

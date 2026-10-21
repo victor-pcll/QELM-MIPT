@@ -2,8 +2,8 @@
 
 :func:`save_figure` writes ``<name>.png`` and ``<name>.json`` side by side,
 typically in the sweep folder ``outputs/<experiment>/<date_time>/`` that the
-launcher created (issue #147). The JSON holds every curve, error bar and
-histogram drawn, read back from the figure by :func:`figure_data`, so a
+launcher created (issue #147). The JSON holds every curve, error bar,
+histogram and color map drawn, read back from the figure by :func:`figure_data`, so a
 figure can be redrawn or checked without rerunning the sweep.
 """
 
@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from matplotlib.collections import LineCollection
+from matplotlib.collections import LineCollection, QuadMesh
 from matplotlib.container import BarContainer, ErrorbarContainer
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
@@ -64,7 +64,11 @@ def figure_data(fig: Figure) -> dict[str, Any]:
 
         - ``curves``: every labelled line, ``{label, x, y}``, with
           ``yerr_lower`` and ``yerr_upper`` for error-bar curves;
-        - ``histograms``: every bar plot, ``{label, edges, heights}``.
+        - ``histograms``: every bar plot, ``{label, edges, heights}``;
+        - ``heatmaps``: every labelled color map (``pcolormesh``),
+          ``{label, x_edges, y_edges, values}``, ``values`` of shape
+          ``(len(y_edges) - 1, len(x_edges) - 1)``, ``nan`` for a blank
+          cell (issue #164).
     """
     suptitle = fig.get_suptitle()
     panels = []
@@ -102,6 +106,22 @@ def figure_data(fig: Figure) -> dict[str, Any]:
                         "heights": _listed([p.get_height() for p in container.patches]),
                     }
                 )
+        heatmaps = []
+        for mesh in ax.collections:
+            if isinstance(mesh, QuadMesh) and not str(mesh.get_label()).startswith("_"):
+                coords = np.asarray(mesh.get_coordinates(), dtype=float)
+                shape = (coords.shape[0] - 1, coords.shape[1] - 1)
+                values = np.ma.filled(
+                    np.ma.asarray(mesh.get_array(), dtype=float), np.nan
+                ).reshape(shape)
+                heatmaps.append(
+                    {
+                        "label": str(mesh.get_label()),
+                        "x_edges": _listed(coords[0, :, 0]),
+                        "y_edges": _listed(coords[:, 0, 1]),
+                        "values": [_listed(row) for row in values],
+                    }
+                )
         panels.append(
             {
                 "title": ax.get_title(),
@@ -111,6 +131,7 @@ def figure_data(fig: Figure) -> dict[str, Any]:
                 "yscale": ax.get_yscale(),
                 "curves": curves,
                 "histograms": histograms,
+                "heatmaps": heatmaps,
             }
         )
     return {"title": suptitle, "panels": panels}

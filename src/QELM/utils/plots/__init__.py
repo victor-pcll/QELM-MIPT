@@ -9,12 +9,20 @@ Kept out of ``QELM.utils`` on purpose: Matplotlib is a dev dependency, so
   large titles) and its colors;
 - :mod:`~QELM.utils.plots.sweep`: curves of a sweep, reference overlays and
   their comparison;
+- :mod:`~QELM.utils.plots.heatmap`: color maps of a metric over a sweep of
+  two parameters;
 - :mod:`~QELM.utils.plots.io`: :func:`save_figure`, the figure and its data
   in the output folder of the run.
 """
 
 from __future__ import annotations
 
+from QELM.utils.plots.heatmap import (
+    SweepGrid,
+    cell_edges,
+    draw_heatmap,
+    sweep_grid,
+)
 from QELM.utils.plots.io import figure_data, save_figure
 from QELM.utils.plots.style import (
     COLORS,
@@ -41,11 +49,14 @@ __all__ = [
     "COLORS",
     "STYLE",
     "SweepCurve",
+    "SweepGrid",
     "apply_style",
+    "cell_edges",
     "color_map",
     "compare_same_size",
     "draw_companion",
     "draw_curve",
+    "draw_heatmap",
     "draw_references",
     "draw_residuals",
     "figure_data",
@@ -56,4 +67,5 @@ __all__ = [
     "style_axes",
     "subplots",
     "sweep_curve",
+    "sweep_grid",
 ]
