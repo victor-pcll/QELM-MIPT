@@ -3,9 +3,13 @@
 
 For each sample ``i`` (``samples.L`` in total):
 
-1. Draw a new TFIM (new disorder ``J_ij``) and start from the state of
-   :class:`AncillaChargeSectorEmbedding`: the ancilla ``R`` (qubit 0)
-   entangled with the charge of the ``N - 1`` system qubits.
+1. Draw a new TFIM (new disorder ``J_ij``) on the ``Ns = N - 1`` system
+   qubits and start from the state of :class:`AncillaChargeSectorEmbedding`:
+   the ancilla ``R`` (qubit 0) entangled with the charge of the system.
+   ``R`` is a reference qubit, as in Barratt et al. (2022) and Agrawal et
+   al. (2024): the TFIM acts on the system only, ``U = 1_R (x) U_S``
+   (issue #104). It keeps, in its Z basis, which charge sector the system
+   started in.
 2. Split the total time ``evolution.t`` into ``nbr_time_evolution`` steps
    of ``t / nbr_time_evolution``
    (``projective_measurement.nbr_time_evolution``, default 5, independent
@@ -15,8 +19,22 @@ For each sample ``i`` (``samples.L`` in total):
    ``projective_measurement.p``) and keep the collapsed state: row ``j`` of
    ``M[i]`` is the record of the ``j``-th measurement (issue #102).
 3. The features ``X[i]`` are the flattened record ``M[i]`` of shape
-   ``(nbr_time_evolution, Ns)``, an unmeasured qubit counting as 0 (issue #91); the
-   target ``Y[i]`` is ``<Z_0>`` on the ancilla in the final state.
+   ``(nbr_time_evolution, Ns)``, an unmeasured qubit counting as 0 (issue #91).
+   The target ``Y[i]`` is the outcome, +1 or -1, of a projective measurement
+   of ``R`` in Z after the last step, drawn with the Born rule (issue #104).
+   ``R`` never evolves, so measuring it at the end or at the start gives the
+   same statistics: ``Y[i]`` is the initial charge sector of the system
+   (+1 for ``Ns // 2``, -1 for ``Ns // 2 - 1``), a label fixed before any
+   measurement of the system, +1 or -1 with probability 1/2 whatever ``p``.
+   The readout learns that hidden charge from the record, the learnability
+   task of Barratt et al. ``Z0[i] = <Z_0>`` on the final state, before ``R``
+   is measured, is kept too: ``(1 + Z0[i]) / 2`` is the probability that
+   ``Y[i] = +1`` given the record and the Hamiltonian.
+
+   Before issue #104 the target was ``<Z_0>`` itself and ``R`` evolved with
+   the TFIM. The TFIM conserves the parity of the total charge, so at
+   ``p = 1`` the last round fixed ``<Z_0> = +-1`` as the parity of the
+   outcomes, whatever the dynamics, and the target changed with ``p``.
 
 4. The entanglement entropy of the ancilla with the system in the final
    state, ``S(rho_R)`` with ``rho_R = Tr_S(rho)``, is recorded twice: the
@@ -45,16 +63,18 @@ A ridge readout (``training`` block) is fitted on the first
 ``samples.train_size`` samples and scored on the rest with NMSE and R2.
 ``RidgeReadout`` fits no intercept, so a constant column of ones is appended
 to the features. Besides NMSE and R2, the readout is scored as a classifier
-of the sign of ``<Z_0>`` (``accuracy``, issue #124). The two classes are not
-balanced: the TFIM at ``h = 10 J`` nearly conserves the charge, the ancilla
-shares ``Ns // 2`` excitations with ``N - 1`` other qubits, so it relaxes
-closer to ``|0>`` and ``<Z_0> > 0`` in most samples (about 85% at ``N = 4``).
-A readout that learns nothing, as at ``p = 0`` where every feature is 0,
-predicts that majority sign and scores its share, not 0.5 (issue #130). So
-two more scores go with it: ``accuracy_baseline``, the accuracy of always
-predicting the majority sign of the training targets (the chance level of
+of the sign of ``Y`` (``accuracy``, issue #124). The two labels are drawn
+with probability 1/2 each, but a finite test set is never exactly balanced,
+and a readout that learns nothing, as at ``p = 0`` where every feature is
+0, predicts the majority sign of its training set (issue #130). So two more
+scores go with it: ``accuracy_baseline``, the accuracy of always predicting
+the majority sign of the training targets (the chance level of
 ``accuracy``), and ``balanced_accuracy``, the mean over the two signs of the
-share recovered, which is 0.5 for a readout that ignores the features.
+share recovered, which is 0.5 for a readout that ignores the features. The
+ceiling is ``accuracy_optimal``, the accuracy on the test samples of the
+Bayes classifier ``sign(Z0)``, which also knows the Hamiltonian of each
+sample: the mean of ``(1 + |Z0|) / 2``. It is 0.5 at ``p = 0`` (the record
+holds nothing, ``Z0 = 0``) and 1 when the record fixes the charge.
 
 Run from the repository root:
 
@@ -64,12 +84,12 @@ Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
 
 - ``exp_QELM_M.npz``: ``M`` (measurement record), ``X`` (features, bias
-  column included), ``Y``,
+  column included), ``Y``, ``Z0``,
   ``y_test``, ``y_pred``, the weights ``W`` and the entropies ``S_vN``,
   ``S_renyi_1``, ``S_vN_sys``, ``S_renyi_2_sys``, ``S_vN_1q`` and
   ``S_renyi_2_1q`` of shape ``(L,)``;
 - ``metrics.json``: ``nmse``, ``r2``, ``accuracy``, ``accuracy_baseline``,
-  ``balanced_accuracy``, the shapes used and the
+  ``balanced_accuracy``, ``accuracy_optimal``, the shapes used and the
   sample mean ``<name>_mean`` of each entropy;
 - ``.hydra/config.yaml``: the full composed config, to reproduce the run.
 """
@@ -101,6 +121,7 @@ from QELM.evaluation.metrics import (
 )
 from QELM.physics import Z, local_expectation
 from QELM.training import ProjectiveMeasurement, RidgeReadout
+from QELM.training.measurements.projective import measure_projective_rho
 from QELM.utils import save_results
 
 # Per-sample entropies, each saved to the .npz with its mean in metrics.json.
@@ -117,6 +138,7 @@ EXTRA_METRICS = (
     "accuracy",
     "accuracy_baseline",
     "balanced_accuracy",
+    "accuracy_optimal",
     *(f"{name}_mean" for name in ENTROPIES),
 )
 # The ancilla R, qubit 0, is the subsystem A of the entropies.
@@ -137,8 +159,10 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Returns:
         The arrays and metrics of the run: ``M`` (record of shape
         ``(L, nbr_time_evolution, Ns)``, ``NaN`` for an unmeasured qubit), ``X`` (with
-        the bias column), ``Y``, ``y_test``, ``y_pred``, ``W``, ``nmse``,
-        ``r2``, ``accuracy``, ``accuracy_baseline``, ``balanced_accuracy``,
+        the bias column), ``Y`` (the measured label of ``R``, +-1), ``Z0``
+        (``<Z_0>`` before that measurement), ``y_test``, ``y_pred``, ``W``,
+        ``nmse``, ``r2``, ``accuracy``, ``accuracy_baseline``,
+        ``balanced_accuracy``, ``accuracy_optimal``,
         the entropies of :data:`ENTROPIES` (bits, one
         per sample) and their means ``<name>_mean``.
     """
@@ -172,17 +196,24 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     L = int(cfg.samples.L)
     M = np.zeros((L, nbr_time_evolution, Ns))
     Y = np.zeros(L)
+    Z0 = np.zeros(L)
     S = {name: np.zeros(L) for name in ENTROPIES}
     # The system sector: every qubit but the Nr ancillas.
     system = list(range(Nr, N))
 
+    # The TFIM block with the system size: R does not evolve (issue #104).
+    tfim = OmegaConf.to_container(cfg[TransverseFieldIsingModel.name], resolve=True)
+    assert isinstance(tfim, dict)
+    tfim_params = {**{str(k): v for k, v in tfim.items()}, "N": Ns}
+    identity_R = np.eye(2**Nr)
+
     for i in tqdm(range(L)):
-        model = TransverseFieldIsingModel.from_config(cfg)
+        model = TransverseFieldIsingModel(tfim_params)
         # U(dt) once per sample: model.evolve rebuilds exp(-i H dt) v from
         # products H @ v at every call, which gets slow when ||H|| dt is
         # large (h = 10 J, dt = t / nbr_time_evolution), while the
         # nbr_time_evolution steps of a sample all use the same U.
-        U = model.propagator(dt=dt)
+        U = np.kron(identity_R, model.propagator(dt=dt))
         U_dag = U.conj().T
         rho = rho0
         for j in range(nbr_time_evolution):
@@ -191,13 +222,16 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             rho = measure.rho
             M[i, j] = measure.outcomes
         # <Z_0> on the ancilla from its 2 x 2 reduced state (issue #95).
-        Y[i] = local_expectation(rho, Z, 0)
+        Z0[i] = local_expectation(rho, Z, 0)
         S["S_vN"][i] = von_neumann_entropy(rho, SECTOR_A)
         S["S_renyi_1"][i] = renyi_entropy(rho, 1, SECTOR_A)
         S["S_vN_sys"][i] = von_neumann_entropy(rho, system)
         S["S_renyi_2_sys"][i] = renyi_entropy(rho, 2, system)
         S["S_vN_1q"][i] = mean_single_qubit_entropy(rho, system)
         S["S_renyi_2_1q"][i] = mean_single_qubit_entropy(rho, system, n=2)
+        # The label: R measured in Z, after the entropies of the final state
+        # (issue #104). R never evolves, so this is its initial outcome.
+        _, Y[i] = measure_projective_rho(rho, 0, N)
 
     # Unmeasured qubits (p < 1) have NaN outcomes; the regression needs
     # numbers, so they count as 0, <Z> of a fully mixed qubit (issue #91).
@@ -215,6 +249,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "M": M,
         "X": X,
         "Y": Y,
+        "Z0": Z0,
         "y_test": y_test,
         "y_pred": y_pred,
         "W": solver.W,
@@ -223,6 +258,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "accuracy": accuracy(y_test, y_pred),
         "accuracy_baseline": majority_accuracy(y_train, y_test),
         "balanced_accuracy": balanced_accuracy(y_test, y_pred),
+        "accuracy_optimal": float(np.mean((1 + np.abs(Z0[train:])) / 2)),
         **S,
         **{f"{name}_mean": float(np.mean(values)) for name, values in S.items()},
     }
@@ -244,6 +280,7 @@ def main(cfg: DictConfig) -> None:
     print(f"accuracy: {results['accuracy']:.6g}")
     print(f"accuracy baseline (majority sign): {results['accuracy_baseline']:.6g}")
     print(f"balanced accuracy: {results['balanced_accuracy']:.6g}")
+    print(f"optimal accuracy (Bayes, sign Z0): {results['accuracy_optimal']:.6g}")
     for name in ENTROPIES:
         print(f"{name} (mean, bits): {results[f'{name}_mean']:.6g}")
     print(f"Saved to {out_dir}")

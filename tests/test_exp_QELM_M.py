@@ -90,9 +90,22 @@ def test_every_sample_starts_from_the_embedded_state(monkeypatch) -> None:
     _, propagators, measured = _spy_run(monkeypatch, cfg)
     steps = 5  # default projective_measurement.nbr_time_evolution
     assert len(propagators) == L and len(measured) == L * steps
-    # The first measurement of sample i sees U_i rho0 U_i^dagger.
-    for (_, U), rho in zip(propagators, measured[::steps], strict=True):
+    # The first measurement of sample i sees U_i rho0 U_i^dagger, with U_i
+    # acting on the system only (issue #104).
+    for (_, U_S), rho in zip(propagators, measured[::steps], strict=True):
+        U = np.kron(np.eye(2), U_S)
         np.testing.assert_allclose(rho, U @ rho0 @ U.conj().T, atol=1e-12)
+
+
+def test_the_tfim_acts_on_the_system_only(monkeypatch) -> None:
+    """Issue #104: R is a reference qubit. Each sample draws a TFIM on the
+    Ns = N - 1 system qubits, so the propagator has dimension 2**Ns and R
+    only sees the identity."""
+    _, propagators, _ = _spy_run(monkeypatch, load_config(OVERRIDES))
+    assert len(propagators) == L
+    for _, U_S in propagators:
+        assert U_S.shape == (2 ** (N - 1), 2 ** (N - 1))
+        np.testing.assert_allclose(U_S @ U_S.conj().T, np.eye(2 ** (N - 1)), atol=1e-10)
 
 
 def test_record_has_one_row_per_measurement_step(monkeypatch) -> None:
@@ -129,13 +142,52 @@ def test_cached_propagator_matches_evolve() -> None:
     )
 
 
-def test_target_is_the_ancilla_expectation(monkeypatch) -> None:
-    """Y[i] = Tr(Z_0 rho) on the final state of sample i (issue #95 only
-    changes how it is computed)."""
-    out, _, _ = _spy_run(monkeypatch, load_config(OVERRIDES))
-    assert np.all(np.abs(out["Y"]) <= 1 + 1e-12)
-    # At p = 1 the measured charge fixes the ancilla: <Z_0> = +-1 (issue #104).
-    np.testing.assert_allclose(np.abs(out["Y"]), 1.0, atol=1e-10)
+@pytest.mark.parametrize("p", [0.0, 0.5, 1.0])
+def test_target_is_the_measured_reference_label(p: float) -> None:
+    """Issue #104: Y[i] is the outcome +-1 of R measured in Z, and Z0[i] is
+    <Z_0> just before, in [-1, 1]."""
+    out = _load_script().run(load_config([*OVERRIDES, f"projective_measurement.p={p}"]))
+    assert out["Y"].shape == out["Z0"].shape == (L,)
+    assert set(np.unique(out["Y"])) <= {-1.0, 1.0}
+    assert np.all(np.abs(out["Z0"]) <= 1 + 1e-12)
+
+
+@pytest.mark.parametrize("p", [0.0, 0.5, 1.0])
+def test_label_is_balanced_whatever_p(p: float) -> None:
+    """Issue #104: the label is the initial charge sector, +1 or -1 with
+    probability 1/2, so its distribution does not depend on p. The old
+    target, <Z_0> on the final state, was +-1 at p = 1 and continuous and
+    mostly positive below."""
+    out = _load_script().run(
+        load_config([*OVERRIDES, "samples.L=400", f"projective_measurement.p={p}"])
+    )
+    # 400 fair coins: standard deviation of the mean 0.05.
+    assert np.mean(out["Y"]) == pytest.approx(0.0, abs=0.2)
+
+
+def test_no_measurement_leaves_the_reference_maximally_mixed() -> None:
+    """p = 0: R does not evolve and the system is never measured, so
+    rho_R = I / 2 at the end: Z0 = 0 and S(rho_R) = 1 bit in every sample.
+    The record holds no information on the label."""
+    out = _load_script().run(load_config([*OVERRIDES, "projective_measurement.p=0"]))
+    np.testing.assert_allclose(out["Z0"], 0.0, atol=1e-10)
+    np.testing.assert_allclose(out["S_vN"], 1.0, atol=1e-9)
+    assert out["accuracy_optimal"] == pytest.approx(0.5)
+
+
+def test_full_measurement_reveals_the_label_through_the_parity() -> None:
+    """p = 1: the system TFIM conserves the parity of the system charge,
+    Ns // 2 for Y = +1 and Ns // 2 - 1 for Y = -1, and the last round
+    measures it: Y = (-1)**(Ns // 2) times the product of the last outcomes.
+    Unlike the old target (issue #104), this is learnability, not an
+    artefact: the label is fixed before the measurements, and this is the
+    record revealing it."""
+    out = _load_script().run(load_config(OVERRIDES))
+    Ns = N - 1
+    parity = (-1) ** (Ns // 2) * np.prod(out["M"][:, -1, :], axis=1)
+    np.testing.assert_array_equal(out["Y"], parity)
+    np.testing.assert_allclose(out["Z0"], out["Y"], atol=1e-10)
+    assert out["accuracy_optimal"] == pytest.approx(1.0)
 
 
 def test_p_override_sets_the_share_of_measured_qubits() -> None:
@@ -267,12 +319,12 @@ def test_ancilla_entropies_are_recorded(p: float) -> None:
     assert out["S_renyi_1_mean"] == pytest.approx(np.mean(S_renyi_1))
     # Dephasing rho_R in the Z basis can only raise its entropy, so S(rho_R)
     # is at most the binary entropy of its diagonal (1 +- <Z_0>) / 2.
-    assert np.all(S_vN <= _binary_entropy((1 + out["Y"]) / 2) + 1e-9)
+    assert np.all(S_vN <= _binary_entropy((1 + out["Z0"]) / 2) + 1e-9)
 
 
 def test_measuring_every_qubit_purifies_the_ancilla() -> None:
-    """p = 1: the record fixes the charge, hence the ancilla (|<Z_0>| = 1,
-    issue #104), so the ancilla is no longer entangled: S = 0."""
+    """p = 1: the record fixes the charge parity, hence the reference
+    (|<Z_0>| = 1, issue #104), so it is no longer entangled: S = 0."""
     out = _load_script().run(load_config(OVERRIDES))
     np.testing.assert_allclose(out["S_vN"], 0.0, atol=1e-9)
 
@@ -317,7 +369,7 @@ def test_rare_measurements_leave_the_system_qubits_entangled() -> None:
 
 def test_accuracy_is_recorded() -> None:
     """The sign accuracy of the test predictions (issue #124): 1 at p = 1,
-    where <Z_0> = +-1 is read off the last row of M (R2 close to 1)."""
+    where the label is fixed by the last row of M."""
     out = _load_script().run(load_config(OVERRIDES))
     assert out["accuracy"] == accuracy(out["y_test"], out["y_pred"])
     assert out["accuracy"] == 1.0
@@ -328,8 +380,8 @@ def test_accuracy_is_recorded() -> None:
 def test_no_measurement_scores_the_chance_level() -> None:
     """Issue #130: at p = 0 every feature is 0, the readout predicts one
     constant and learns nothing. Its sign accuracy is the share of the
-    majority sign of <Z_0> (well above 0.5: the ancilla relaxes towards
-    |0>), equal to the baseline, and its balanced accuracy is 0.5."""
+    majority sign of the training labels, equal to the baseline, and its
+    balanced accuracy is 0.5."""
     out = _load_script().run(load_config([*OVERRIDES, "projective_measurement.p=0"]))
     np.testing.assert_array_equal(out["X"][:, :-1], 0.0)
     assert np.ptp(out["y_pred"]) == 0.0
@@ -338,15 +390,5 @@ def test_no_measurement_scores_the_chance_level() -> None:
         out["Y"][:train], out["y_test"]
     )
     assert out["accuracy"] == out["accuracy_baseline"]
-    assert out["accuracy"] > 0.5
     assert out["balanced_accuracy"] == balanced_accuracy(out["y_test"], out["y_pred"])
     assert out["balanced_accuracy"] == 0.5
-
-
-def test_most_samples_have_a_positive_z0() -> None:
-    """The cause of issue #130: the TFIM at h = 10 J nearly conserves the
-    charge, Ns // 2 = 1 excitation shared by N = 4 qubits, so <Z_0> averages
-    about 1 - 2 / 4 = 0.5 and is positive in most samples, at any p < 1."""
-    out = _load_script().run(load_config([*OVERRIDES, "projective_measurement.p=0"]))
-    assert np.mean(out["Y"] >= 0) > 0.7
-    assert np.mean(out["Y"]) == pytest.approx(0.5, abs=0.15)
