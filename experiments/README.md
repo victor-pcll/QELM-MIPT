@@ -70,7 +70,11 @@ independent of `N`), and the system
 qubits are measured after each step. The features are this measurement record
 `M`, of shape `(nbr_time_evolution, Ns)` per
 sample, instead of the observables; an unmeasured qubit (`p < 1`) counts as 0.
-The target is `<Z_0>` of the ancilla, never measured, at the final time.
+The target is the outcome ±1 of the ancilla `R` measured in Z at the end.
+`R` is a reference qubit that the TFIM does not act on, so this label is the
+charge sector the system started in, ±1 with probability 1/2 whatever `p`
+(issue #104); `accuracy_optimal` is the accuracy of the Bayes classifier
+`sign(<Z_0>)`, the ceiling of the readout.
 Each run lands in `outputs/exp_QELM_M/<date_time>/N<N>_seed<seed>_p<p>/`.
 
 `notebooks/results/02_QELM_M_analysis.ipynb` runs this sweep in its own
