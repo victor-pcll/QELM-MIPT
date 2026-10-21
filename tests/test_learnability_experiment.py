@@ -199,6 +199,38 @@ def test_bash_script_and_plot(tmp_path: Path) -> None:
     assert "accuracy" in json.loads((sweep / "comparison.json").read_text())
 
 
+def test_bash_script_writes_to_out_dir_and_draws_only_figures(
+    tmp_path: Path,
+) -> None:
+    """OUT_DIR picks the sweep folder and FIGURES the figures drawn (#151)."""
+    out_dir = tmp_path / "mine" / "sweep"
+    result = subprocess.run(
+        [str(BASH_SCRIPT)],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "OUT_ROOT": str(tmp_path / "unused"),
+            "OUT_DIR": str(out_dir),
+            "FIGURES": "2c",
+            "L": "20",
+            "N_VALUES": "4",
+            "P_VALUES": "0.0 1.0",
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert f"in {out_dir}" in result.stdout
+    assert not (tmp_path / "unused").exists()
+    assert sorted(p.name for p in out_dir.iterdir() if p.is_dir()) == [
+        "N4_seed0_p0.0",
+        "N4_seed0_p1.0",
+    ]
+    assert (out_dir / "learnability_fig2c.png").is_file()
+    assert (out_dir / "learnability_fig2c.json").is_file()
+    assert not (out_dir / "learnability.png").exists()
+
+
 def test_import_keeps_the_notebook_backend() -> None:
     """Importing the plot script leaves the backend alone (issue #144).
 

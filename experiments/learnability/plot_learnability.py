@@ -357,9 +357,17 @@ def main() -> None:
         help="sweep folder; default: latest under outputs/learnability",
     )
     parser.add_argument("--reference-dir", type=Path, default=REFERENCE_DIR)
+    parser.add_argument(
+        "--figures",
+        nargs="+",
+        choices=sorted(FIGURES),
+        default=sorted(FIGURES),
+        help="figures to draw (issue #151); default: all",
+    )
     args = parser.parse_args()
     sweep_dir = args.sweep_dir or latest_sweep(Path("outputs") / "learnability")
-    for panels, transition, filename, comparison_name in FIGURES.values():
+    for figure in args.figures:
+        panels, transition, filename, comparison_name = FIGURES[figure]
         comparison = plot_sweep(
             sweep_dir,
             args.reference_dir,

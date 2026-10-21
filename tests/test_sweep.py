@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from omegaconf import OmegaConf
 
-from QELM.utils import latest_sweep, load_sweep, summarize
+from QELM.utils import latest_sweep, load_sweep, new_sweep_dir, summarize
 
 
 def _write_run(sweep: Path, name: str, N: int, seed: int, p: float, r2: float) -> None:
@@ -71,3 +71,22 @@ def test_latest_sweep(tmp_path: Path) -> None:
     assert latest_sweep(tmp_path).name == "2026-10-20_01-00-00"
     with pytest.raises(FileNotFoundError):
         latest_sweep(tmp_path / "2026-10-19_09-00-00")
+
+
+def test_new_sweep_dir_is_new_and_found_by_latest_sweep(tmp_path: Path) -> None:
+    """Two sweeps started in the same second never share a folder (#151)."""
+    first = new_sweep_dir(tmp_path, "learnability_fig2b")
+    second = new_sweep_dir(tmp_path, "learnability_fig2b")
+    other = new_sweep_dir(tmp_path, "learnability_fig2c")
+    assert first != second and first.is_dir() and second.is_dir()
+    assert first.parent == second.parent == tmp_path / "learnability_fig2b"
+    assert other.parent == tmp_path / "learnability_fig2c"
+    assert not any(other.iterdir())
+    assert latest_sweep(tmp_path / "learnability_fig2b") in (first, second)
+    assert latest_sweep(tmp_path / "learnability_fig2c") == other
+
+
+@pytest.mark.parametrize("name", ["", "a/b"])
+def test_new_sweep_dir_rejects_paths(tmp_path: Path, name: str) -> None:
+    with pytest.raises(ValueError, match="plain name"):
+        new_sweep_dir(tmp_path, name)

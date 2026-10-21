@@ -73,8 +73,8 @@ sample, instead of the observables; an unmeasured qubit (`p < 1`) counts as 0.
 The target is `<Z_0>` of the ancilla, never measured, at the final time.
 Each run lands in `outputs/exp_QELM_M/<date_time>/N<N>_seed<seed>_p<p>/`.
 
-`notebooks/results/02_QELM_M_analysis.ipynb` runs this sweep with one
-progress bar for the whole sweep (`QELM.utils.run_with_progress`), reads the
+`notebooks/results/02_QELM_M_analysis.ipynb` runs this sweep in its own
+folder, `outputs/QELM_M/<date_time>/` (issue #151), with one progress bar for the whole sweep (`QELM.utils.run_with_progress`), reads the
 run folders back with `QELM.utils.load_sweep` and plots the metrics against
 `p`, averaged over the seeds with the standard error as error bars. The
 figure and its data go to the sweep folder, `metrics_vs_p.png` and
@@ -131,7 +131,7 @@ paper counts the system sites only: its curves `L = 6` and `L = 20` are
 renamed `N = 7` and `N = 21`, our `N` counting the ancilla.
 
 `notebooks/benchmarks/03_charge_sharpening.ipynb` runs this sweep from
-Jupyter with one progress bar for the whole sweep, then shows the three
+Jupyter, in `outputs/charge_sharpening_fig7/<date_time>/` (issue #151), with one progress bar for the whole sweep, then shows the three
 panels over the paper's curves, prints the deviation from its `N = 7` curve,
 and plots the distribution of `S_R` over the trajectories at a few values of
 `gamma` (`S_R_distribution.png` and `.json` in the sweep folder).
@@ -189,7 +189,8 @@ digitized from the paper in
 `experiments/learnability/reference/`, and writes to `comparison.json` the
 deviation at the reference points and the `p` where the Binder curves of
 two sizes cross. `notebooks/benchmarks/01_learnability_accuracy.ipynb` runs
-the same sweep and plots it.
+the same sweep, in `outputs/learnability_fig2b/<date_time>/` with
+`FIGURES=2b` (issue #151), and plots it.
 
 Two exact limits are checked by the tests: at `p = 0` every `P_corr` is 1/2
 and the accuracy is 1/2; at `p = 1` the first record gives the charge and
@@ -206,7 +207,8 @@ several sizes `N` cross at `p_success ~ 0.2` in the paper. The figure is
 `reference/barratt2022_fig2c_entropy.csv` (`N = 6` and `N = 20`) and
 `reference/barratt2022_fig2c_binder.csv` when present. The mean entropy is
 `ln 2` at `p = 0` (Eve knows nothing) and 0 at `p = 1`.
-`notebooks/benchmarks/02_learnability_entropy.ipynb` runs the sweep and plots
+`notebooks/benchmarks/02_learnability_entropy.ipynb` runs the sweep, in
+`outputs/learnability_fig2c/<date_time>/` with `FIGURES=2c`, and plots
 Fig. 2c.
 
 ## Write your own

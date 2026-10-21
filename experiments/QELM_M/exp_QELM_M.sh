@@ -47,7 +47,9 @@ read -r -a P_VALUES <<< "${P_VALUES:-0.1 0.3 0.5 0.8 1.0}"
 
 STAMP="$(date +%Y-%m-%d_%H-%M-%S)"
 OUT_ROOT="${OUT_ROOT:-outputs}"
-OUT_DIR="$OUT_ROOT/$EXPERIMENT/$STAMP"
+# OUT_DIR set by the caller (the notebooks, issue #151) wins over the
+# default folder, so that the caller knows where the sweep lands.
+OUT_DIR="${OUT_DIR:-$OUT_ROOT/$EXPERIMENT/$STAMP}"
 mkdir -p "$OUT_DIR"
 echo "Writing outputs to $OUT_DIR"
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -108,3 +109,38 @@ def latest_sweep(root: str | Path) -> Path:
     if not folders:
         raise FileNotFoundError(f"No sweep folder in {root}.")
     return folders[-1]
+
+
+def new_sweep_dir(root: str | Path, experiment: str) -> Path:
+    """Create and return a new ``<root>/<experiment>/<date_time>`` folder.
+
+    The name follows the launchers (``%Y-%m-%d_%H-%M-%S``), so that
+    :func:`latest_sweep` finds it. A notebook creates its sweep folder with
+    this, passes it to the launcher as ``OUT_DIR`` and reads back that exact
+    folder, never another notebook's (issue #151). When the folder already
+    exists (two sweeps started in the same second), ``_2``, ``_3``, ... is
+    appended.
+
+    Args:
+        root: Output root, typically ``outputs``.
+        experiment: Folder of the experiment or notebook, a plain name.
+
+    Returns:
+        The new, empty folder.
+
+    Raises:
+        ValueError: If ``experiment`` is empty or contains a path separator.
+    """
+    if not experiment or Path(experiment).name != experiment:
+        raise ValueError(f"experiment must be a plain name, got {experiment!r}.")
+    parent = Path(root) / experiment
+    parent.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    folder, k = parent / stamp, 1
+    while True:
+        try:
+            folder.mkdir()
+            return folder
+        except FileExistsError:
+            k += 1
+            folder = parent / f"{stamp}_{k}"
