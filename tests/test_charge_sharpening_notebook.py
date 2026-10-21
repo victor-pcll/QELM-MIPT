@@ -67,7 +67,7 @@ def test_notebook_runs_the_sweep_and_plots(
     assert comparison["S_R_mean"]["N7"]["N = 7"]["n_points"] > 0
     assert len(namespace["fig"].axes) == 3
     assert namespace["figure_path"].is_file()
-    assert namespace["figure_path"].parent.parent == tmp_path / "charge_sharpening"
+    assert namespace["figure_path"].parent.parent == tmp_path / "charge_sharpening_fig7"
     assert (namespace["sweep_dir"] / "comparison.json").is_file()
     # Each figure is saved with the data it shows (#147).
     assert namespace["figure_path"].with_suffix(".json").is_file()

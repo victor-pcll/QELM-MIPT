@@ -59,6 +59,10 @@ def test_notebook_runs_the_sweep_and_plots(
     assert namespace["figure_path"].name == "learnability_fig2c.png"
     assert namespace["figure_path"].is_file()
     assert namespace["figure_path"].with_suffix(".json").is_file()  # #147
+    # Its own folder, holding its own figure only (#151).
+    sweep_dir = namespace["sweep_dir"]
+    assert sweep_dir.parent == tmp_path / "learnability_fig2c"
+    assert not (sweep_dir / "learnability.png").exists()
     assert "N4-N6" in namespace["comparison"]["binder_crossings"]["entropy_binder"]
     assert len(shows) == 1
     os.chdir(REPO_ROOT)

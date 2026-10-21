@@ -14,10 +14,12 @@
 # and the figure and comparison.json land in outputs/learnability/<date_time>/.
 # Environment variables change the defaults:
 #     OUT_ROOT=/tmp/qelm          write under /tmp/qelm instead of outputs
+#     OUT_DIR=path/to/sweep       write the sweep exactly there (issue #151)
 #     L=40000                     records per run (samples.L)
 #     N_VALUES="6 8 10"           chain lengths (the paper's L; no ancilla)
 #     SEEDS="0 1 2"               independent sets of records
 #     P_VALUES="0.0 0.1 0.2"      measurement probabilities
+#     FIGURES="2b"                figures to draw: 2b, 2c or both (default)
 
 # Stop at the first failing command, unset variable or failing pipe.
 set -euo pipefail
@@ -42,11 +44,14 @@ read -r -a N_VALUES <<< "${N_VALUES:-6}"   # chain length, the paper's L
 L="${L:-40000}"                            # records per run, as in the paper
 read -r -a SEEDS <<< "${SEEDS:-0}"
 read -r -a P_VALUES <<< "${P_VALUES:-0.0 0.025 0.05 0.075 0.1 0.15 0.2 0.25 0.3 0.4 0.5 0.6}"
+read -r -a FIGURES <<< "${FIGURES:-2b 2c}"
 # -----------------------------------------------------------------------------
 
 STAMP="$(date +%Y-%m-%d_%H-%M-%S)"
 OUT_ROOT="${OUT_ROOT:-outputs}"
-OUT_DIR="$OUT_ROOT/$EXPERIMENT/$STAMP"
+# OUT_DIR set by the caller (the notebooks, issue #151) wins over the
+# default folder, so that the caller knows where the sweep lands.
+OUT_DIR="${OUT_DIR:-$OUT_ROOT/$EXPERIMENT/$STAMP}"
 mkdir -p "$OUT_DIR"
 echo "Writing outputs to $OUT_DIR"
 
@@ -65,6 +70,7 @@ for N in "${N_VALUES[@]}"; do
   done
 done
 
-uv run python experiments/learnability/plot_learnability.py "$OUT_DIR"
+uv run python experiments/learnability/plot_learnability.py "$OUT_DIR" \
+  --figures "${FIGURES[@]}"
 
 echo "Done: ${#N_VALUES[@]} x ${#SEEDS[@]} x ${#P_VALUES[@]} runs in $OUT_DIR"

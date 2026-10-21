@@ -56,6 +56,10 @@ def test_notebook_runs_the_sweep_and_plots(
         assert r["accuracy_mean"] == pytest.approx(0.5 if r["p"] == 0 else 1.0)
     assert namespace["figure_path"].is_file()
     assert namespace["figure_path"].with_suffix(".json").is_file()  # #147
+    # Its own folder, holding its own figure only (#151).
+    sweep_dir = namespace["sweep_dir"]
+    assert sweep_dir.parent == tmp_path / "learnability_fig2b"
+    assert not (sweep_dir / "learnability_fig2c.png").exists()
     assert "N4-N6" in namespace["comparison"]["binder_crossings"]["P_corr_binder"]
     assert len(shows) == 1
     os.chdir(REPO_ROOT)

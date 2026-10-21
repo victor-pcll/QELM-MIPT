@@ -14,6 +14,7 @@
 # and the figure and comparison.json land in outputs/charge_sharpening/<date_time>/.
 # Environment variables change the defaults:
 #     OUT_ROOT=/tmp/qelm          write under /tmp/qelm instead of outputs
+#     OUT_DIR=path/to/sweep       write the sweep exactly there (issue #151)
 #     L=10000                     trajectories per run (samples.L)
 #     N_VALUES="7"                total qubits, ancilla included (L_paper = N - 1)
 #     SEEDS="0 1 2 3 4"           one circuit instance per seed
@@ -48,7 +49,9 @@ FIXED_INSTANCE="${FIXED_INSTANCE:-true}"
 
 STAMP="$(date +%Y-%m-%d_%H-%M-%S)"
 OUT_ROOT="${OUT_ROOT:-outputs}"
-OUT_DIR="$OUT_ROOT/$EXPERIMENT/$STAMP"
+# OUT_DIR set by the caller (the notebooks, issue #151) wins over the
+# default folder, so that the caller knows where the sweep lands.
+OUT_DIR="${OUT_DIR:-$OUT_ROOT/$EXPERIMENT/$STAMP}"
 mkdir -p "$OUT_DIR"
 echo "Writing outputs to $OUT_DIR"
 

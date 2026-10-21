@@ -91,7 +91,7 @@ def test_notebook_runs_the_sweep_and_plots(
     assert at_p1["S_vN_mean_sem"] == pytest.approx(0.0, abs=1e-9)
     assert namespace["figure_path"].is_file()
     assert len(shows) == 1  # the notebook still asks to show its figure
-    assert namespace["figure_path"].parent.parent == tmp_path / "exp_QELM_M"
+    assert namespace["figure_path"].parent.parent == tmp_path / "QELM_M"  # #151
     # The plotted data is saved next to the figure (#147).
     data = json.loads(namespace["figure_path"].with_suffix(".json").read_text())
     assert len(data["panels"]) == 2 * len(keys)
