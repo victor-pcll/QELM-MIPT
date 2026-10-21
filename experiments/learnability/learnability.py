@@ -25,6 +25,14 @@ Fig. 2c (mean entropy, issue #115) come from the same records.
    entropy ``H(P_corr)`` of Fig. 2c and its Binder ratio (inset), with
    bootstrap errors.
 
+Charge conservation is checked along every record (issue #134): after each
+round, the weight of the state outside the sector of its starting charge
+(:func:`QELM.physics.batch_charge_leakage`). Its largest value is the
+record's ``charge_leakage``, exactly 0 for a correct simulation. With
+``charge_conservation.filter_non_conserved_charge=true`` the records whose
+leakage exceeds ``charge_conservation.atol`` are dropped before the
+statistics; by default every record is kept and the check is only reported.
+
 The records are simulated ``learnability.batch`` at a time, so the memory
 stays ``batch * 2**L`` amplitudes whatever ``samples.L``.
 
@@ -36,12 +44,16 @@ Run from the repository root:
 Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
 
-- ``learnability.npz``: ``P_corr`` and ``charge`` (one per record, shape
-  ``(n,)``) and the records ``outcomes`` (shape ``(n, rounds, L)``, with
-  ``rounds = 2 t_f`` for ``learnability.measure_every=layer`` and ``t_f``
-  for ``period``; 0 or 1 for a measured site, -1 for an unmeasured one);
+- ``learnability.npz``: ``P_corr``, ``charge``, ``charge_leakage`` and
+  ``kept`` (one per record, shape ``(n,)``, kept or not; ``kept`` marks
+  the records used by the statistics) and the records ``outcomes`` (shape
+  ``(n, rounds, L)``, with ``rounds = 2 t_f`` for
+  ``learnability.measure_every=layer`` and ``t_f`` for ``period``; 0 or 1
+  for a measured site, -1 for an unmeasured one);
 - ``metrics.json``: ``p``, the statistics, their bootstrap errors
-  ``<name>_err`` and the measured fraction of the sites;
+  ``<name>_err``, the measured fraction of the sites, ``n_records`` (kept
+  records) and the charge check: ``max_charge_leakage``,
+  ``n_non_conserved``, ``n_discarded`` and ``discarded_fraction``;
 - ``.hydra/config.yaml``: the full composed config, to reproduce the run.
 - ``resolved_config.json``: the same config with every ``${...}`` evaluated,
   the numbers the run used (issue #85).
@@ -59,6 +71,7 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig
 
 from QELM import check_qubit_counts, set_seed
+from QELM.evaluation.charge_conservation import charge_filter
 from QELM.evaluation.learnability import (
     UNMEASURED,
     correct_probability,
@@ -78,6 +91,9 @@ STATISTICS = (
     "entropy_var",
     "entropy_binder",
 )
+# Charge check written to metrics.json: floats, then integer counts.
+CHARGE_METRICS = ("max_charge_leakage", "discarded_fraction")
+CHARGE_COUNTS = ("n_non_conserved", "n_discarded")
 
 
 def run(cfg: DictConfig) -> dict[str, Any]:
@@ -85,12 +101,16 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     Args:
         cfg: Composed config (``load_config(config_name="learnability")`` or
-            Hydra). Reads ``seed``, ``samples.L`` and ``learnability``.
+            Hydra). Reads ``seed``, ``samples.L``, ``learnability`` and
+            ``charge_conservation``.
 
     Returns:
-        ``P_corr`` and ``charge`` (shape ``(n,)``), ``outcomes`` (shape
-        ``(n, rounds, L)``), ``p``, ``L``, ``measured_fraction`` and the
-        :data:`STATISTICS` with their ``_err``.
+        ``P_corr``, ``charge``, ``charge_leakage`` and ``kept`` (shape
+        ``(n,)``) and ``outcomes`` (shape ``(n, rounds, L)``) for every
+        record, ``p``, ``L``, and, on the kept records,
+        ``measured_fraction``, the :data:`STATISTICS` with their ``_err``
+        and the charge check of :data:`CHARGE_METRICS` and
+        :data:`CHARGE_COUNTS`.
     """
     seed = set_seed(cfg)
     check_qubit_counts(cfg)
@@ -107,7 +127,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         # charges are not drawn equally often.
         raise ValueError(f"learnability.batch must be even and >= 2, got {batch}.")
 
-    P_corr, charge, outcomes = [], [], []
+    P_corr, charge, outcomes, leakage = [], [], [], []
     for start in range(0, n_records, batch):
         records = sample_records(
             L,
@@ -122,21 +142,31 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         P_corr.append(correct_probability(records))
         charge.append(records.charge)
         outcomes.append(records.outcomes)
+        assert records.charge_leakage is not None
+        leakage.append(records.charge_leakage)
     P = np.concatenate(P_corr)
     out = np.concatenate(outcomes)
-    stats = learnability_statistics(P, base=base)
+    leak = np.concatenate(leakage)
+    kept, check = charge_filter(leak, cfg.charge_conservation)
+    stats = learnability_statistics(P[kept], base=base)
     errors = learnability_bootstrap_errors(
-        P, n_boot=int(params.n_boot), base=base, rng=rng
+        P[kept], n_boot=int(params.n_boot), base=base, rng=rng
     )
+    out_kept = out[kept]
     return {
         "P_corr": P,
         "charge": np.concatenate(charge),
+        "charge_leakage": leak,
+        "kept": kept,
         "outcomes": out,
         "p": p,
         "L": L,
-        "measured_fraction": float(np.mean(out != UNMEASURED)) if out.size else 0.0,
+        "measured_fraction": (
+            float(np.mean(out_kept != UNMEASURED)) if out_kept.size else 0.0
+        ),
         **stats,
         **errors,
+        **check,
     }
 
 
@@ -157,11 +187,20 @@ def save(results: dict[str, Any], out_dir: Path) -> Path:
         P_corr=results["P_corr"],
         charge=results["charge"],
         outcomes=results["outcomes"],
+        charge_leakage=results["charge_leakage"],
+        kept=results["kept"],
     )
-    keys = ("p", "measured_fraction", *STATISTICS, *(f"{k}_err" for k in STATISTICS))
+    keys = (
+        "p",
+        "measured_fraction",
+        *STATISTICS,
+        *(f"{k}_err" for k in STATISTICS),
+        *CHARGE_METRICS,
+    )
     metrics: dict[str, Any] = {key: float(results[key]) for key in keys}
+    metrics.update({key: int(results[key]) for key in CHARGE_COUNTS})
     metrics["L"] = int(results["L"])
-    metrics["n_records"] = int(results["P_corr"].shape[0])
+    metrics["n_records"] = int(np.count_nonzero(results["kept"]))
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
     return npz_path
 
@@ -178,11 +217,15 @@ def main(cfg: DictConfig) -> None:
     out_dir = Path(HydraConfig.get().runtime.output_dir)
     save(results, out_dir)
     save_config(cfg, out_dir)
-    print(
-        f"L: {results['L']}  p: {results['p']:.4g}  records: {len(results['P_corr'])}"
-    )
+    n_kept = int(np.count_nonzero(results["kept"]))
+    print(f"L: {results['L']}  p: {results['p']:.4g}  records: {n_kept}")
     for key in STATISTICS:
         print(f"{key}: {results[key]:.4f} +- {results[f'{key}_err']:.4f}")
+    print(
+        f"charge: max leakage {results['max_charge_leakage']:.3g}, "
+        f"{results['n_non_conserved']} non-conserving, "
+        f"{results['n_discarded']} discarded"
+    )
     print(f"Saved to {out_dir}")
 
 

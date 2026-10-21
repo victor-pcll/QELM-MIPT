@@ -1,5 +1,5 @@
-"""Regression metrics for the readout, the sign accuracy (raw, balanced and
-its chance level), the ancilla
+"""Regression metrics for the readout with the standard error of MSE and
+NMSE, the sign accuracy (raw, balanced and its chance level), the ancilla
 entanglement entropy, and the scaffold status line."""
 
 from __future__ import annotations
@@ -83,6 +83,74 @@ def NMSE(y_true: ArrayLike, y_pred: ArrayLike) -> float:
     if norm == 0.0:
         raise ValueError("NMSE is undefined when y_true is all zeros.")
     return MSE(y_true_arr, y_pred_arr) / norm
+
+
+def _sem(values: np.ndarray) -> float:
+    """Standard error of the mean, ``std(values, ddof=1) / sqrt(n)``.
+
+    ``nan`` for a single value, whose spread is undefined.
+    """
+    if values.size < 2:
+        return float("nan")
+    return float(np.std(values, ddof=1) / np.sqrt(values.size))
+
+
+def MSE_err(y_true: ArrayLike, y_pred: ArrayLike) -> float:
+    """Standard error of :func:`MSE` over the samples (issue #89).
+
+    The MSE is the mean of the per-sample squared errors
+    ``e_i = (y_true_i - y_pred_i)**2``, so its standard error is
+    ``SEM = std(e, ddof=1) / sqrt(n)``. It measures how much the MSE would
+    change on another test set of the same size, and gives the error bar
+    of a single run.
+
+    Args:
+        y_true: Ground truth values.
+        y_pred: Predicted values, same shape as ``y_true``.
+
+    Returns:
+        Standard error of the MSE, ``nan`` for a single sample.
+
+    Raises:
+        ValueError: If the inputs are invalid (see :func:`_as_pair`).
+    """
+    y_true_arr, y_pred_arr = _as_pair(y_true, y_pred)
+    return _sem((y_true_arr - y_pred_arr) ** 2)
+
+
+def NMSE_err(y_true: ArrayLike, y_pred: ArrayLike) -> float:
+    """Standard error of :func:`NMSE` over the samples (issue #89).
+
+    ``NMSE = mean(e) / mean(b)`` with ``e_i = (y_true_i - y_pred_i)**2`` and
+    ``b_i = y_true_i**2``. Both means come from the same test samples, so
+    the normalization also fluctuates. The delta method (first-order
+    expansion of the ratio) gives the standard error
+
+    ``SEM = std(e - NMSE * b, ddof=1) / (sqrt(n) * mean(b))``.
+
+    When ``y_true**2`` is the same for every sample, such as a target
+    ``+-1``, ``b`` does not fluctuate and this is exactly
+    ``MSE_err / mean(y_true**2)``.
+
+    Args:
+        y_true: Ground truth values.
+        y_pred: Predicted values, same shape as ``y_true``.
+
+    Returns:
+        Standard error of the NMSE, ``nan`` for a single sample.
+
+    Raises:
+        ValueError: If the inputs are invalid (see :func:`_as_pair`) or
+            ``y_true`` is all zeros.
+    """
+    y_true_arr, y_pred_arr = _as_pair(y_true, y_pred)
+    b = y_true_arr**2
+    norm = float(np.mean(b))
+    if norm == 0.0:
+        raise ValueError("NMSE is undefined when y_true is all zeros.")
+    e = (y_true_arr - y_pred_arr) ** 2
+    ratio = float(np.mean(e)) / norm
+    return _sem(e - ratio * b) / norm
 
 
 def R2(y_true: ArrayLike, y_pred: ArrayLike, eps: float = 1e-12) -> float:

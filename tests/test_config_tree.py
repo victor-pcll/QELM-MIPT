@@ -29,9 +29,15 @@ def test_conf_tree_mirrors_the_package() -> None:
         str(path.relative_to(CONF))
         for path in CONF.rglob("*.yaml")
         # Primary configs: config.yaml, and one per experiment with its own
-        # model (charge_sharpening.yaml, issue #137; learnability.yaml, #113).
+        # model (charge_sharpening.yaml, issue #137; learnability.yaml, #113;
+        # QELM_M_ratio.yaml, #96).
         if path.name
-        not in ("config.yaml", "charge_sharpening.yaml", "learnability.yaml")
+        not in (
+            "config.yaml",
+            "charge_sharpening.yaml",
+            "learnability.yaml",
+            "QELM_M_ratio.yaml",
+        )
     }
     assert found == expected
     assert not (CONF / "sim_type").exists()

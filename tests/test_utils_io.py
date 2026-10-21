@@ -20,6 +20,7 @@ def _results(features: str = "X", shape: tuple[int, ...] = (10, 4)) -> dict:
         "y_test": np.zeros(3),
         "W": np.arange(4.0),
         "nmse": 0.25,
+        "nmse_err": 0.05,
         "r2": 0.5,
         "label": "not an array",
     }
@@ -42,6 +43,7 @@ def test_arrays_and_metrics_are_written(tmp_path: Path) -> None:
     metrics = json.loads((out / "metrics.json").read_text())
     assert metrics == {
         "nmse": 0.25,
+        "nmse_err": 0.05,
         "r2": 0.5,
         "n_samples": 10,
         "n_test": 3,
@@ -64,7 +66,9 @@ def test_extra_metrics_are_written(tmp_path: Path) -> None:
     )
     metrics = json.loads((tmp_path / "metrics.json").read_text())
     assert metrics["S_vN_mean"] == 0.5 and metrics["S_renyi_1_mean"] == 0.5
-    assert {"nmse", "r2", "n_samples", "n_test", "n_features"} <= set(metrics)
+    assert {"nmse", "nmse_err", "r2", "n_samples", "n_test", "n_features"} <= set(
+        metrics
+    )
 
 
 def test_missing_extra_metric_is_an_error(tmp_path: Path) -> None:
