@@ -59,6 +59,13 @@ For each sample ``i`` (``samples.L`` in total):
    information: they drop to 0 for the qubits measured at the last step and
    track how entangled each system qubit is with the rest. All in bits.
 
+6. The half-system entropy ``S_half[i]``, the von Neumann entropy of the
+   first ``Ns // 2`` system qubits in the final state (issue #174), as in
+   ``experiments/QELM_Q/exp_QELM_Q.py``. Its complement holds the other
+   system qubits and the ancilla. It measures the entanglement across the
+   middle of the chain, which the measurements destroy as ``p`` grows: the
+   entanglement side of the measurement-induced transition. In bits.
+
 The unitary dynamics is selected with ``models`` (issue #171):
 
 - ``models=TFIM`` (the default): the disordered TFIM above, a new disorder
@@ -105,8 +112,8 @@ Everything is written to the Hydra run directory, by default
 - ``exp_QELM_M.npz``: ``M`` (measurement record), ``X`` (features, bias
   column included), ``Y``, ``Z0``,
   ``y_test``, ``y_pred``, the weights ``W`` and the entropies ``S_vN``,
-  ``S_renyi_1``, ``S_vN_sys``, ``S_renyi_2_sys``, ``S_vN_1q`` and
-  ``S_renyi_2_1q`` of shape ``(L,)``;
+  ``S_renyi_1``, ``S_vN_sys``, ``S_renyi_2_sys``, ``S_vN_1q``,
+  ``S_renyi_2_1q`` and ``S_half`` of shape ``(L,)``;
 - ``metrics.json``: ``nmse``, ``nmse_err``, ``r2``, ``accuracy``,
   ``accuracy_baseline``, ``balanced_accuracy``, ``accuracy_optimal``, the
   shapes used and the
@@ -161,6 +168,7 @@ ENTROPIES = (
     "S_renyi_2_sys",
     "S_vN_1q",
     "S_renyi_2_1q",
+    "S_half",
 )
 # Scalars written to metrics.json besides nmse, nmse_err and r2.
 EXTRA_METRICS = (
@@ -311,6 +319,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     S = {name: np.zeros(L) for name in ENTROPIES}
     # The system sector: every qubit but the Nr ancillas.
     system = list(range(Nr, N))
+    # The first half of the system qubits, for S_half (issue #174).
+    half = system[: Ns // 2]
 
     for i in tqdm(range(L)):
         # A new TFIM disorder, or new circuit gates, for every sample.
@@ -329,6 +339,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         S["S_renyi_2_sys"][i] = renyi_entropy(rho, 2, system)
         S["S_vN_1q"][i] = mean_single_qubit_entropy(rho, system)
         S["S_renyi_2_1q"][i] = mean_single_qubit_entropy(rho, system, n=2)
+        S["S_half"][i] = von_neumann_entropy(rho, half)
         # The label: R measured in Z, after the entropies of the final state
         # (issue #104). R never evolves, so this is its initial outcome.
         _, Y[i] = measure_projective_rho(rho, 0, N)

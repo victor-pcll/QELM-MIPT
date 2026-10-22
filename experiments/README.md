@@ -93,12 +93,28 @@ charge sector the system started in, ±1 with probability 1/2 whatever `p`
 `sign(<Z_0>)`, the ceiling of the readout.
 Each run lands in `outputs/exp_QELM_M/<date_time>/N<N>_seed<seed>_p<p>/`.
 
+`H_VALUES` sweeps the transverse field `TFIM.h`, in units of `TFIM.J = 1`
+(issue #174); each run then lands in `N<N>_h<h>_seed<seed>_p<p>/`. Unset, the
+field of the config applies (`h = 10 J`). It needs `MODEL=TFIM`: a circuit has
+no field, and the launcher stops before any run.
+
+```bash
+H_VALUES="1 10" N_VALUES="4 6" L=500 ./experiments/QELM_M/exp_QELM_M.sh
+```
+
+Besides the ancilla and system entropies, every run records `S_half`, the von
+Neumann entropy of the first `Ns // 2` system qubits in the final state, and
+its mean `S_half_mean` in `metrics.json` (issue #174).
+
 `notebooks/results/02_QELM_M_analysis.ipynb` runs this sweep in its own
 folder, `outputs/QELM_M/<date_time>/` (issue #151), with one progress bar for the whole sweep (`QELM.utils.run_with_progress`), reads the
 run folders back with `QELM.utils.load_sweep` and plots the metrics against
-`p`, averaged over the seeds with the standard error as error bars. The
-figure and its data go to the sweep folder, `metrics_vs_p.png` and
-`metrics_vs_p.json`.
+`p`, averaged over the seeds with the standard error as error bars, in two
+figures (issue #174): the performance of the readout (`performance_vs_p.png`
+and `.json`) and the entanglement of the final state (`entanglement_vs_p.png`
+and `.json`), both in the sweep folder. Its last section sweeps `p` again for
+`h = J` and `h = 10 J` and `N = 4, 6`, in `outputs/QELM_M_h/<date_time>/`, and
+plots the accuracy, the R2 and `S_half` against `p` (`scaling_vs_p.png`).
 
 ### Sample-to-parameter ratio sweep (issue #96)
 

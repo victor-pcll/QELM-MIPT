@@ -5,7 +5,7 @@
 | `benchmarks/` | `01_learnability_accuracy.ipynb` | Accuracy of Eve's classifier, Barratt et al. PRL 129, 200602 (2022), Fig. 2b (issue #113) |
 | `benchmarks/` | `02_learnability_entropy.ipynb` | Mean entropy of the charge posterior, same paper, Fig. 2c (issue #115) |
 | `benchmarks/` | `03_charge_sharpening.ipynb` | Charge sharpening, Agrawal et al. PRX 14, 041012 (2024), Fig. 7 (issues #137, #142) |
-| `results/` | `02_QELM_M_analysis.ipynb` | QELM on the measurement record `M`, sweep over `p` (issue #94) |
+| `results/` | `02_QELM_M_analysis.ipynb` | QELM on the measurement record `M`, sweep over `p` (issue #94): one figure for the performance (accuracy, R2), one for the entanglement (ancilla, half-system and single-qubit entropies), then the sweep over `p` for `h = J, 10 J` and `N = 4, 6` (issue #174) |
 | `results/` | `03_QELM_M_alpha_ratio.ipynb` | QELM on `M`, metrics against the sample-to-parameter ratio `n_train / n_params` (issue #96), then heatmaps of NMSE, R2, accuracy and balanced accuracy over `p` and the ratio (issue #164) |
 | `results/` | `04_QELM_Q_measurements.ipynb` | QELM on the charge `Q` from the final `<Z_k>`, with intermediate Z measurements of probability `p` (issue #163) |
 | `results/` | `05_QELM_M_circuits.ipynb` | The sweep of notebook 03 once per unitary dynamics, TFIM, Haar circuit and Clifford circuit: curves against the ratio, heatmaps over `p` and the ratio, and the three dynamics compared, then the same sweep with a fixed draw of the circuit gates (issue #171) |
@@ -21,7 +21,7 @@ Each notebook moves to the repository root first, then launches its sweep in its
 | `benchmarks/01_learnability_accuracy.ipynb` | `outputs/learnability_fig2b/<date_time>/` |
 | `benchmarks/02_learnability_entropy.ipynb` | `outputs/learnability_fig2c/<date_time>/` |
 | `benchmarks/03_charge_sharpening.ipynb` | `outputs/charge_sharpening_fig7/<date_time>/` |
-| `results/02_QELM_M_analysis.ipynb` | `outputs/QELM_M/<date_time>/` |
+| `results/02_QELM_M_analysis.ipynb` | `outputs/QELM_M/<date_time>/`, and `outputs/QELM_M_h/<date_time>/` for its sweep over `h` and `N` |
 | `results/03_QELM_M_alpha_ratio.ipynb` | `outputs/QELM_M_ratio/<date_time>/` |
 | `results/04_QELM_Q_measurements.ipynb` | `outputs/QELM_Q/<date_time>/`, and `outputs/QELM_Q_time/<date_time>/` for its evolution-time sweep |
 | `results/05_QELM_M_circuits.ipynb` | `outputs/QELM_M_circuits/<date_time>/<model>/` |

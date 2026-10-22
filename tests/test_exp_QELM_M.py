@@ -235,7 +235,7 @@ def test_bash_launcher_dry_run(tmp_path: Path) -> None:
         text=True,
         check=True,
     )
-    assert "Done: 1 x 1 x 3 runs" in result.stdout
+    assert "Done: 1 x 1 x 1 x 3 runs" in result.stdout
     assert "does not match the project environment" not in result.stderr
     runs = sorted(tmp_path.glob("exp_QELM_M/*/*"))
     assert [run.name for run in runs] == [
@@ -257,6 +257,55 @@ def test_bash_launcher_dry_run(tmp_path: Path) -> None:
             for name in _load_script().ENTROPIES:
                 assert data[name].shape == (10,)
                 assert metrics[f"{name}_mean"] == pytest.approx(np.mean(data[name]))
+
+
+def test_bash_launcher_sweeps_the_field(tmp_path: Path) -> None:
+    """Issue #174: H_VALUES sweeps TFIM.h, one run folder per field, named
+    with it, and the config of each run holds its field."""
+    result = subprocess.run(
+        [str(BASH_SCRIPT)],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "OUT_ROOT": str(tmp_path),
+            "L": "10",
+            "N_VALUES": "3",
+            "H_VALUES": "1 10",
+            "P_VALUES": "0.5",
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "Done: 1 x 2 x 1 x 1 runs" in result.stdout
+    runs = sorted(tmp_path.glob("exp_QELM_M/*/*"))
+    assert [run.name for run in runs] == [
+        "N3_h10_seed42_p0.5",
+        "N3_h1_seed42_p0.5",
+    ]
+    for run, h in zip(runs, (10.0, 1.0), strict=True):
+        hydra_cfg = OmegaConf.load(run / ".hydra" / "config.yaml")
+        assert float(hydra_cfg.TFIM.h) == h
+
+
+def test_bash_launcher_refuses_a_field_for_a_circuit(tmp_path: Path) -> None:
+    """A circuit has no TFIM block: H_VALUES with MODEL=haar_circuit stops
+    before any run instead of failing in Hydra."""
+    result = subprocess.run(
+        [str(BASH_SCRIPT)],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "OUT_ROOT": str(tmp_path),
+            "MODEL": "haar_circuit",
+            "H_VALUES": "1",
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert "needs MODEL=TFIM" in result.stderr
+    assert not list(tmp_path.glob("exp_QELM_M/*/*"))
 
 
 def test_nbr_time_evolution_must_be_positive() -> None:
@@ -359,6 +408,31 @@ def test_measuring_every_qubit_leaves_every_system_qubit_pure() -> None:
     out = _load_script().run(load_config(OVERRIDES))
     for name in ("S_vN_sys", "S_renyi_2_sys", "S_vN_1q", "S_renyi_2_1q"):
         np.testing.assert_allclose(out[name], 0.0, atol=1e-9)
+
+
+def test_half_system_entropy_is_that_of_the_first_half() -> None:
+    """Issue #174: S_half is the von Neumann entropy of the first Ns // 2
+    system qubits. With N = 6 (Ns = 5, two qubits in the half) it can pass
+    1 bit, stays below 2, and the measurements lower it: at p = 1 every
+    system qubit is pure, so S_half = 0; at p = 0.1 it stays well above."""
+    overrides = ["models=TFIM", "N=6", "samples.L=20"]
+    module = _load_script()
+    out = module.run(load_config([*overrides, "projective_measurement.p=1.0"]))
+    np.testing.assert_allclose(out["S_half"], 0.0, atol=1e-9)
+    out = module.run(load_config([*overrides, "projective_measurement.p=0.1"]))
+    assert out["S_half"].shape == (20,)
+    assert np.all(out["S_half"] >= -1e-12) and np.all(out["S_half"] <= 2 + 1e-12)
+    assert out["S_half_mean"] == pytest.approx(np.mean(out["S_half"]))
+    assert out["S_half_mean"] > 0.3
+
+
+def test_half_system_entropy_with_one_qubit_in_the_half() -> None:
+    """N = 4 (Ns = 3): the half is the single system qubit 1, so S_half is
+    the entropy of that qubit, between 0 and the mean single-qubit entropy
+    times Ns (each single-qubit entropy is >= 0)."""
+    out = _load_script().run(load_config([*OVERRIDES, "projective_measurement.p=0.3"]))
+    assert np.all(out["S_half"] <= 1 + 1e-12)
+    assert np.all(out["S_half"] <= 3 * out["S_vN_1q"] + 1e-9)
 
 
 def test_rare_measurements_leave_the_system_qubits_entangled() -> None:
