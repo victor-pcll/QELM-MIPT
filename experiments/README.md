@@ -232,6 +232,15 @@ time at `N = 6` in its own folder `outputs/QELM_Q_time/<date_time>/`
 (`accuracy_vs_p_time.png`) (`accuracy_vs_p.png` and
 `.json` in the sweep folder).
 
+`notebooks/results/06_QELM_Q_observables_p_h.ipynb` (issue #179) runs the
+same launcher over a 2D grid of `P_VALUES` (0 to 1) and `H_VALUES` (0 to
+10 J), for `N = 4, 6`, in `outputs/QELM_Q_p_h/<date_time>/`, and plots the
+accuracy and R2 of the readouts on `<Z_k>` and on `<X_i X_j>` against `p`
+(`metrics_vs_p.png`), against `h` (`metrics_vs_h.png`) and as heatmaps over
+the `(p, h)` plane (`heatmaps_p_h.png`). Each run is small enough to be
+fastest on a single thread: the notebook sets `OMP_NUM_THREADS=1`, which
+made a run at `N = 6` about 6 times faster.
+
 ## Run the charge-sharpening benchmark (issue #137)
 
 ```bash
