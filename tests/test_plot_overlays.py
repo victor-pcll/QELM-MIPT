@@ -68,7 +68,7 @@ def _assert_deviation_is_delta(stats: dict, n_points: int) -> None:
 
 @pytest.mark.parametrize(
     ("figure", "metric", "n_points", "binder_xlim"),
-    [("2b", "accuracy", 25, (0.0, 0.2)), ("2c", "entropy_mean", 24, (0.0, 0.4))],
+    [("2b", "accuracy", 25, (0.0, 0.2)), ("2c", "entropy_mean", 25, (0.0, 0.4))],
 )
 def test_learnability_overlay_matches_the_paper(
     tmp_path: Path, figure: str, metric: str, n_points: int, binder_xlim: tuple
