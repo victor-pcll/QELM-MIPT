@@ -62,6 +62,17 @@ Each set ``<name>`` gets ``accuracy_<name>``, ``balanced_accuracy_<name>``
 and ``r2_<name>``; ``accuracy`` and the other unsuffixed scores are those of
 ``<Z_k>``.
 
+Three more readouts take the outcomes of the intermediate measurements as
+features too (issue #179): the record ``M`` of shape
+``(n_rounds, Ns)``, +-1 for a measured qubit and 0 for an unmeasured one, as
+in ``experiments/QELM_M/exp_QELM_M.py``, with ``n_rounds`` the number of
+measurement rounds. The sets of :data:`RECORD_SETS` are ``M`` alone, and
+``phi = [M, X]`` with ``X`` the ``<Z_k>`` (``M_Z``) or the ``<X_i X_j>``
+(``M_XX``) of the final state; they get the same three scores. The record
+is only read by these readouts: it never changes the state, the other
+feature sets or the unsuffixed scores. At ``p = 0`` it is all zeros, so
+``M`` alone is at chance and ``M_Z``, ``M_XX`` are ``Z``, ``XX``.
+
 The half-system entanglement entropy of the final state, ``S_half[i]``
 (von Neumann, in bits, of the first ``Ns // 2`` system qubits; the state of
 ``S`` is pure once ``R`` is measured), tracks how much the measurements
@@ -84,7 +95,8 @@ Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
 
 - ``exp_QELM_Q.npz``: ``X`` (the ``<Z_k>`` features, bias column included),
-  ``features_<name>`` for each set of :data:`FEATURE_SETS`, ``Y`` (the
+  ``features_<name>`` for each set of :data:`FEATURE_SETS` and
+  :data:`RECORD_SETS`, ``M`` (the record, ``(L, n_rounds, Ns)``), ``Y`` (the
   charge), ``y_test``, ``y_pred``, the weights ``W``, ``S_half`` and
   ``n_measured`` (number of collapses per sample), of shape ``(L,)``;
 - ``metrics.json``: ``nmse``, ``nmse_err``, ``r2``, ``accuracy``,
@@ -127,6 +139,9 @@ from QELM.utils import save_config, save_results
 # both cross correlators <X_i Y_j> and <Y_i X_j> of each pair.
 PAULIS = {"X": PAULI_X, "Y": PAULI_Y, "Z": Z}
 FEATURE_SETS = ("X", "Y", "Z", "XX", "YY", "ZZ", "XY")
+# Readouts on the measurement record M, alone or next to the observables of
+# a feature set, phi = [M, X] (issue #179): name -> sets of FEATURE_SETS.
+RECORD_SETS: dict[str, tuple[str, ...]] = {"M": (), "M_Z": ("Z",), "M_XX": ("XX",)}
 # Scalars written to metrics.json besides nmse, nmse_err and r2.
 EXTRA_METRICS = (
     "accuracy",
@@ -136,7 +151,7 @@ EXTRA_METRICS = (
     "n_measured_mean",
     *(
         f"{score}_{name}"
-        for name in FEATURE_SETS
+        for name in (*FEATURE_SETS, *RECORD_SETS)
         for score in ("accuracy", "balanced_accuracy", "r2")
     ),
 )
@@ -155,6 +170,7 @@ def evolve_with_measurements(
     P: ProjectiveMeasurement,
     rng: np.random.Generator,
     final: bool = False,
+    record: list[np.ndarray] | None = None,
 ) -> tuple[np.ndarray, int]:
     """Apply ``n_steps`` steps ``U``, with a measurement round between two.
 
@@ -165,6 +181,9 @@ def evolve_with_measurements(
         P: Measurement of the system qubits, each with its probability ``p``.
         rng: Generator of the measurement choices and outcomes.
         final: Also measure after the last step (issue #163, follow-up).
+        record: If given, the outcomes of each round are appended to it, an
+            array of length the number of measured sites, ``nan`` for a site
+            not measured (issue #179).
 
     Returns:
         The final state, after the last step (and its round when ``final``),
@@ -177,6 +196,8 @@ def evolve_with_measurements(
         if final or j < n_steps - 1:
             measure = P.measure(rho, rng=rng)
             rho = measure.rho
+            if record is not None:
+                record.append(measure.outcomes)
             n_measured += int(np.sum(np.isfinite(measure.outcomes)))
     return rho, n_measured
 
@@ -228,11 +249,14 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     Returns:
         The arrays and metrics of the run: ``X`` (with the bias column),
-        ``Y`` (the charge ``Q``), ``y_test``, ``y_pred``, ``W``, ``S_half``,
+        ``Y`` (the charge ``Q``), ``M`` (the record of the intermediate
+        measurements, ``(L, n_rounds, Ns)``, 0 for an unmeasured qubit),
+        ``y_test``, ``y_pred``, ``W``, ``S_half``,
         ``n_measured``, ``nmse``, ``nmse_err``, ``r2``, ``accuracy``,
         ``accuracy_baseline``, ``balanced_accuracy``, ``S_half_mean``,
         ``n_measured_mean`` and, for each set ``<name>`` of
-        :data:`FEATURE_SETS`, ``features_<name>`` (with the bias column),
+        :data:`FEATURE_SETS` and :data:`RECORD_SETS`, ``features_<name>``
+        (with the bias column),
         ``accuracy_<name>``, ``balanced_accuracy_<name>`` and ``r2_<name>``.
     """
     set_seed(cfg)
@@ -248,6 +272,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         )
     dt = float(cfg.evolution.t) / nbr_time_evolution
     final = bool(OmegaConf.select(cfg, FINAL_MEASUREMENT, default=False))
+    n_rounds = nbr_time_evolution if final else nbr_time_evolution - 1
     rho0 = sector.rho()
     P = ProjectiveMeasurement.from_config(cfg)
     Q1, Q2 = sector.Q1, sector.Q2
@@ -257,6 +282,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Y = np.zeros(L)
     S_half = np.zeros(L)
     n_measured = np.zeros(L)
+    M = np.zeros((L, n_rounds, Ns))
     system = list(range(Nr, N))
     half = system[: Ns // 2]
 
@@ -272,9 +298,13 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         # The label first: R measured in Z fixes the charge sector of S.
         rho, r = measure_projective_rho(rho0, 0, N)
         Y[i] = Q1 if r == 1 else Q2
+        rounds: list[np.ndarray] = []
         rho, n_measured[i] = evolve_with_measurements(
-            rho, U, nbr_time_evolution, P, rng, final
+            rho, U, nbr_time_evolution, P, rng, final, record=rounds
         )
+        # An unmeasured qubit counts as 0, as in exp_QELM_M (issue #91).
+        if rounds:
+            M[i] = np.nan_to_num(np.array(rounds), nan=0.0)
         for name in FEATURE_SETS:
             features[name].append(observable_features(rho, system, name))
         S_half[i] = von_neumann_entropy(rho, half)
@@ -286,9 +316,18 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     # One readout per feature set, each with a bias column (RidgeReadout has
     # no intercept). <Z_k> is the main one, saved as X.
+    observed = {name: np.array(features[name]).reshape(L, -1) for name in FEATURE_SETS}
+    # The record next to the observables, phi = [M, X] (issue #179).
+    inputs = {
+        **observed,
+        **{
+            name: np.hstack([M.reshape(L, -1), *(observed[s] for s in obs)])
+            for name, obs in RECORD_SETS.items()
+        },
+    }
     sets: dict[str, Any] = {}
-    for name in FEATURE_SETS:
-        phi = np.hstack([np.array(features[name]), np.ones((L, 1))])
+    for name, values in inputs.items():
+        phi = np.hstack([values, np.ones((L, 1))])
         readout = RidgeReadout.from_config(cfg)
         readout.fit(phi[:train], y_train)
         pred = readout.predict(phi[train:])
@@ -304,6 +343,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     return {
         "X": X,
         "Y": Y,
+        "M": M,
         "y_test": y_test,
         "y_pred": y_pred,
         "W": solver.W,
@@ -339,7 +379,7 @@ def main(cfg: DictConfig) -> None:
     print(f"accuracy baseline (majority charge): {results['accuracy_baseline']:.6g}")
     print(f"balanced accuracy: {results['balanced_accuracy']:.6g}")
     print(f"S_half (mean, bits): {results['S_half_mean']:.6g}")
-    for name in FEATURE_SETS:
+    for name in (*FEATURE_SETS, *RECORD_SETS):
         print(f"accuracy on <{name}>: {results[f'accuracy_{name}']:.6g}")
     print(f"Saved to {out_dir}")
 
