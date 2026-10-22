@@ -119,6 +119,46 @@ def test_six_feature_sets() -> None:
     assert np.any(np.abs(out["features_XX"][:, :-1]) > 1e-3)
 
 
+def test_record_of_the_intermediate_measurements() -> None:
+    """M holds one row per round, +-1 for a measured qubit, 0 otherwise (#179)."""
+    Ns = N - 1
+    for p, values in ((0.0, {0.0}), (0.5, {-1.0, 0.0, 1.0}), (1.0, {-1.0, 1.0})):
+        out = _run(f"projective_measurement.p={p}")
+        # 5 steps, a round between two: 4 rounds.
+        assert out["M"].shape == (L, 4, Ns)
+        assert set(np.unique(out["M"])) <= values
+        np.testing.assert_array_equal(
+            np.count_nonzero(out["M"], axis=(1, 2)), out["n_measured"]
+        )
+    # With the final round, its outcomes are the final <Z_k> at p = 1.
+    final = _run(
+        "projective_measurement.p=1.0", "projective_measurement.final_measurement=true"
+    )
+    assert final["M"].shape == (L, 5, Ns)
+    np.testing.assert_allclose(final["M"][:, -1], final["X"][:, :-1], atol=1e-12)
+
+
+def test_readouts_on_the_record_and_the_observables() -> None:
+    """phi = [M, X]: the record first, then the observables, then the bias."""
+    module = _load_script()
+    out = _run("projective_measurement.p=0.5")
+    record = out["M"].reshape(L, -1)
+    for name, sets in module.RECORD_SETS.items():
+        expected = np.hstack(
+            [record, *(out[f"features_{s}"][:, :-1] for s in sets), np.ones((L, 1))]
+        )
+        np.testing.assert_array_equal(out[f"features_{name}"], expected)
+        for score in ("accuracy", "balanced_accuracy", "r2"):
+            assert np.isfinite(out[f"{score}_{name}"])
+    # At p = 0 the record is all zeros: it adds nothing to <Z_k> or <X_i X_j>,
+    # and alone it predicts a constant.
+    at_p0 = _run("projective_measurement.p=0.0")
+    for name, obs in (("M_Z", "Z"), ("M_XX", "XX")):
+        assert at_p0[f"accuracy_{name}"] == at_p0[f"accuracy_{obs}"]
+        np.testing.assert_allclose(at_p0[f"r2_{name}"], at_p0[f"r2_{obs}"], atol=1e-10)
+    assert at_p0["balanced_accuracy_M"] == 0.5
+
+
 def test_observable_features_match_the_full_operators() -> None:
     module = _load_script()
     n = 3
@@ -220,6 +260,8 @@ def test_bash_sweep_writes_one_folder_per_run(tmp_path: Path) -> None:
         "S_half_mean",
         "accuracy_XX",
         "r2_ZZ",
+        "accuracy_M_Z",
+        "r2_M_XX",
     ):
         assert key in metrics
     assert (tmp_path / runs[0] / "exp_QELM_Q.npz").is_file()

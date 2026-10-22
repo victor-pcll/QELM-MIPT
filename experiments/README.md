@@ -218,7 +218,10 @@ the final state. The readout is also fitted, separately, on five other
 feature sets of the same final states, `<X_k>`, `<Y_k>` and the correlators
 `<X_i X_j>`, `<Y_i Y_j>`, `<Z_i Z_j>` and the cross correlators
 `<X_i Y_j>`, `<Y_i X_j>` (set `XY`) (`accuracy_<name>`, `r2_<name>` in
-`metrics.json`). The measurements draw from their own generator, so at
+`metrics.json`). Three more readouts add the record `M` of the intermediate
+measurements (±1 for a measured qubit, 0 otherwise, as in `exp_QELM_M`) to
+the input: `M` alone, and `phi = [M, X]` with `X` the `<Z_k>` (`M_Z`) or the
+`<X_i X_j>` (`M_XX`) (issue #179); the record is saved as `M` in the `.npz`. The measurements draw from their own generator, so at
 `p = 0` the run is exactly the standard QELM, one unitary `exp(-i H t)` per
 sample. Each run lands in
 `outputs/exp_QELM_Q/<date_time>/N<N>_h<h>_t<t>_final<final>_seed<seed>_p<p>/`.
@@ -234,10 +237,11 @@ time at `N = 6` in its own folder `outputs/QELM_Q_time/<date_time>/`
 
 `notebooks/results/06_QELM_Q_observables_p_h.ipynb` (issue #179) runs the
 same launcher over a 2D grid of `P_VALUES` (0 to 1) and `H_VALUES` (0 to
-10 J), for `N = 4, 6`, in `outputs/QELM_Q_p_h/<date_time>/`, and plots the
+3 J), for `N = 4, 6`, in `outputs/QELM_Q_p_h/<date_time>/`, and plots the
 accuracy and R2 of the readouts on `<Z_k>` and on `<X_i X_j>` against `p`
 (`metrics_vs_p.png`), against `h` (`metrics_vs_h.png`) and as heatmaps over
-the `(p, h)` plane (`heatmaps_p_h.png`). Each run is small enough to be
+the `(p, h)` plane (`heatmaps_p_h.png`), then the same three figures for the
+readouts on `M`, `[M, <Z_k>]` and `[M, <X_i X_j>]` (`*_record.png`). Each run is small enough to be
 fastest on a single thread: the notebook sets `OMP_NUM_THREADS=1`, which
 made a run at `N = 6` about 6 times faster.
 

@@ -24,6 +24,7 @@ def test_notebook_runs_the_sweep_and_plots(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     matplotlib.use("Agg")
+    plt.close("all")  # figures left open by earlier tests
     shows: list[tuple] = []
     monkeypatch.setattr(plt, "show", lambda *args, **kwargs: shows.append(args))
     for key, value in {
@@ -71,11 +72,30 @@ def test_notebook_runs_the_sweep_and_plots(
     np.testing.assert_array_equal(grid.x, [0.0, 1.0])
     np.testing.assert_array_equal(grid.y, [0.0, 10.0])
     assert np.all(grid.n_runs == 2)
-    assert len(shows) == 3
+    # The same figures for the readouts on the record: three readouts (M,
+    # [M, <Z_k>], [M, <X_i X_j>]) of two scores each.
+    assert namespace["record_axes_p"].shape == (1, 6)
+    assert namespace["record_axes_h"].shape == (1, 6)
+    assert namespace["record_axes_maps"].shape == (6, 1)
+    # At p = 0 the record is all zeros: [M, X] scores as X.
+    for r in table:
+        if r["p"] == 0.0:
+            for obs in ("Z", "XX"):
+                assert r[f"accuracy_M_{obs}_mean"] == r[f"accuracy_{obs}_mean"]
+    assert len(shows) == 6
     # Every figure in this notebook's own folder (#151), with its data.
-    for name in ("figure_p", "figure_h", "heatmap_path"):
+    for name in (
+        "figure_p",
+        "figure_h",
+        "heatmap_path",
+        "record_p",
+        "record_h",
+        "record_maps",
+    ):
         path = namespace[name]
         assert path.parent.parent == tmp_path / "QELM_Q_p_h"
         data = json.loads(path.with_suffix(".json").read_text())
         assert len(data["extra"]["table"]) == 4
+    # plt.show is patched out, so the figures stay open: close them.
+    plt.close("all")
     os.chdir(REPO_ROOT)

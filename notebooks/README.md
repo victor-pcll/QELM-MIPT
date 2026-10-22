@@ -9,7 +9,7 @@
 | `results/` | `03_QELM_M_alpha_ratio.ipynb` | QELM on `M`, metrics against the sample-to-parameter ratio `n_train / n_params` (issue #96), then heatmaps of NMSE, R2, accuracy and balanced accuracy over `p` and the ratio (issue #164) |
 | `results/` | `04_QELM_Q_measurements.ipynb` | QELM on the charge `Q` from the final `<Z_k>`, with intermediate Z measurements of probability `p` (issue #163) |
 | `results/` | `05_QELM_M_circuits.ipynb` | The sweep of notebook 03 once per unitary dynamics, TFIM, Haar circuit and Clifford circuit: curves against the ratio, heatmaps over `p` and the ratio, and the three dynamics compared, then the same sweep with a fixed draw of the circuit gates (issue #171) |
-| `results/` | `06_QELM_Q_observables_p_h.ipynb` | Learnability of the charge `Q` from `<Z_k>` and from `<X_i X_j>` over a 2D grid of `p` and the field `h`, for `N = 4, 6`: accuracy and R2 against `p` and against `h`, and heatmaps over the `(p, h)` plane (issue #179) |
+| `results/` | `06_QELM_Q_observables_p_h.ipynb` | Learnability of the charge `Q` from `<Z_k>` and from `<X_i X_j>` over a 2D grid of `p` and the field `h` (0 to 3 J), for `N = 4, 6`: accuracy and R2 against `p` and against `h`, and heatmaps over the `(p, h)` plane, then the same with the record of the intermediate measurements added to the input, `phi = [M, X]` (issue #179) |
 
 `benchmarks/` reproduces published figures, to validate the library; `results/` holds the new results of the project.
 
