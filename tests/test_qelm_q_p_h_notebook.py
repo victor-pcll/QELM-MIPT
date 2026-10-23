@@ -1,4 +1,4 @@
-"""notebooks/results/06_QELM_Q_observables_p_h.ipynb runs on a small sweep (#179).
+"""notebooks/results/06_QELM_Q_observables_p_h.ipynb runs on a small sweep (#179, #183).
 
 The code cells are executed in order, as Jupyter would, with the sweep
 shrunk through the environment variables the notebook reads.
@@ -36,6 +36,12 @@ def test_notebook_runs_the_sweep_and_plots(
         "L": "10",
         "OUT_ROOT": str(tmp_path),
         "RUN": "1",
+        # The finite-size scaling section (#183): two sizes, p = 0 and 1.
+        "FSS_N_VALUES": "3 4",
+        "FSS_H": "1",
+        "FSS_P_POINTS": "2",
+        "FSS_SEEDS": "42",
+        "FSS_L": "10",
     }.items():
         monkeypatch.setenv(key, value)
     monkeypatch.chdir(NOTEBOOK.parent)  # where Jupyter starts
@@ -82,7 +88,30 @@ def test_notebook_runs_the_sweep_and_plots(
         if r["p"] == 0.0:
             for obs in ("Z", "XX"):
                 assert r[f"accuracy_M_{obs}_mean"] == r[f"accuracy_{obs}_mean"]
-    assert len(shows) == 6
+    # The finite-size scaling at fixed h (#183): its own sweep of
+    # 2 N x 2 p x 1 seed = 4 runs, in its own folder, one figure with a row
+    # per readout (<Z_k>, <X_i X_j>, [M, <Z_k>]), a column per score and a
+    # curve per N.
+    assert "4/4" in out
+    assert namespace["FSS_P_VALUES"] == "0 1"
+    assert namespace["fss_dir"].parent == tmp_path / "QELM_Q_N_scaling"
+    assert len(namespace["fss_rows"]) == 4
+    assert {r["h"] for r in namespace["fss_rows"]} == {1.0}
+    assert sorted((r["N"], r["p"], r["n_runs"]) for r in namespace["fss_table"]) == [
+        (N, p, 1) for N in (3, 4) for p in (0.0, 1.0)
+    ]
+    assert namespace["axes_fss"].shape == (3, 2)
+    for ax in namespace["axes_fss"].flat:
+        assert len(ax.containers) == 2
+    labels = namespace["axes_fss"][0, 0].get_legend_handles_labels()[1]
+    assert sorted(labels) == ["N = 3", "N = 4", "chance"]
+    fss_path = namespace["figure_fss"]
+    assert fss_path.parent == namespace["fss_dir"]
+    assert (
+        len(json.loads(fss_path.with_suffix(".json").read_text())["extra"]["table"])
+        == 4
+    )
+    assert len(shows) == 7
     # Every figure in this notebook's own folder (#151), with its data.
     for name in (
         "figure_p",
