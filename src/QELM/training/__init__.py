@@ -13,7 +13,8 @@ and one module per child class:
   trajectories (:func:`create_qelm_dataset`, :func:`split_dataset`).
 - :mod:`QELM.training.regression`: trainers fitted on those features
   (``base.py``: :class:`Trainer`; ``linear.py``: :class:`LinearReadout`;
-  ``ridge.py``: :class:`RidgeReadout`).
+  ``ridge.py``: :class:`RidgeReadout`; ``pinv.py``:
+  :class:`PseudoInverseReadout`).
 
 Every class is importable from :mod:`QELM.training` directly.
 """
@@ -29,10 +30,16 @@ from QELM.training.measurements import (
     measure_projective_rho,
 )
 from QELM.training.readout import DoubleObservable, Observables, SingleObservable
-from QELM.training.regression import LinearReadout, RidgeReadout, Trainer
+from QELM.training.regression import (
+    LinearReadout,
+    PseudoInverseReadout,
+    RidgeReadout,
+    Trainer,
+)
 
 _TRAINERS: dict[str, type[Trainer]] = {
     LinearReadout.name: LinearReadout,
+    PseudoInverseReadout.name: PseudoInverseReadout,
     RidgeReadout.name: RidgeReadout,
 }
 
@@ -86,6 +93,7 @@ __all__ = [
     "Observables",
     "QELMDataset",
     "ProjectiveMeasurement",
+    "PseudoInverseReadout",
     "Readout",
     "ReadoutResult",
     "RidgeReadout",
