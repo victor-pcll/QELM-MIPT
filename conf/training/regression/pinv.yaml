@@ -1,0 +1,9 @@
+# @package training
+name: pinv
+# Unregularized least squares, W = pinv(Phi) @ y (PseudoInverseReadout, issue
+# #181): the ridge solution in the limit alpha -> 0. Below n_samples =
+# rank(Phi) it is the interpolating solution of smallest norm, so the test
+# error peaks at n_samples = rank(Phi), the interpolation threshold of the
+# double descent. rcond: cutoff on the singular values relative to the
+# largest one; null for NumPy's default, max(n_samples, n_features) * eps.
+rcond: null

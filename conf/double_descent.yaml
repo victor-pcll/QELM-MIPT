@@ -1,0 +1,69 @@
+# Double descent of the QELM on a static image task, MNIST 3 vs 5 (issue
+# #181). Primary config of experiments/double_descent/double_descent.py: the
+# main config, with the pseudo-inverse readout and the blocks below.
+#
+#   uv run python experiments/double_descent/double_descent.py seed=0
+defaults:
+  - config
+  - override training/regression: pinv
+  - _self_
+
+# One qubit per principal component, no ancilla: the input is the image, not
+# an ancilla entangled with the system.
+N: 8
+Nr: 0
+
+# The reservoir: one TFIM, H = h sum_i Z_i + sum_{i<j} J_ij X_i X_j, drawn
+# once per seed and the same for every image (a fixed quench). h = J rather
+# than the 10 J of conf/models/TFIM.yaml: at h >> J the field dominates and
+# the XX couplings barely entangle the qubits. The quench lasts
+# evolution.t = 10 / J.
+TFIM:
+  h: ${TFIM.J}
+
+# Angle encoding (QELM.embedding.RotationEmbedding): qubit i starts in
+# R_axis(theta_i)|0>, theta_i in [0, pi] the i-th principal component of the
+# image, rescaled over the training images (QELM.datasets.AngleEncoder).
+rotation_embedding:
+  N: ${N}
+  axis: y
+
+double_descent:
+  # mnist (downloaded once to data_dir, gitignored) or digits (the 8x8 digits
+  # bundled with scikit-learn, no download).
+  dataset: mnist
+  data_dir: data/mnist
+  download: true
+  # The binary task: first digit labelled +1, second -1.
+  digits: [3, 5]
+  # Training pool: n_pool images drawn once per seed from the training
+  # images; every training set of the sweep is a subset of it. The test set:
+  # n_test images of the test split, null for all of them (1902 for 3 vs 5).
+  n_pool: 2000
+  n_test: null
+  # Observables measured after the quench: <P_i> for each label of single,
+  # <A_i B_j> (i < j) for each pair. With N = 8: 3 * 8 + 3 * 28 = 108
+  # observables, plus the bias column.
+  single: [X, Y, Z]
+  pairs: [[X, X], [Y, Y], [Z, Z]]
+  # alpha = n_train / n_features, with n_features the rank of the feature
+  # matrix of the pool (bias included). Each model gets n_train =
+  # round(alpha * its own rank), so alpha = 1 is exactly its interpolation
+  # threshold. alpha < 1: fewer samples than weights, the readout
+  # interpolates the training set; alpha > 1: least squares.
+  alpha_ratios: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.0,
+    1.05, 1.1, 1.15, 1.2, 1.3, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0, 7.0, 10.0]
+  # Training sets drawn per ratio.
+  n_repeats: 20
+  # Models fitted on the same images, each with the pseudo-inverse readout:
+  #   qelm     the QELM, features after the quench U = exp(-i H t);
+  #   qelm_t0  the same observables at t = 0, on the encoded product state:
+  #            no dynamics, so fixed functions of the encoding (check 2);
+  #   elm      classical ELM, a fixed random ReLU layer with as many neurons
+  #            as qelm has observables (check 1, random kitchen sinks);
+  #   linear   linear regression on the N angles.
+  models: [qelm, qelm_t0, elm, linear]
+  elm_activation: relu
+  # Also fit a linear readout on every pixel, on all the training images of
+  # the two digits: the classical reference accuracy of this task.
+  pixel_baseline: true
