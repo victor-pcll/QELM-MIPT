@@ -65,6 +65,20 @@ ancilla `<Z_0>` from the system observables `<Z_k>, <Y_k>, <X_k>` after
 `exp_QELM_Z.npz` (`X`, `Y`, `y_test`, `y_pred`, `W`), `metrics.json` (NMSE, R2)
 and `.hydra/config.yaml`.
 
+`notebooks/results/07_QELM_Z_linear_observables.ipynb` (issue #191) calls
+`exp_QELM_Z.run` in its own process for datasets of increasing size
+(`samples.L` = 100, 500, 2000, 5000, one seed per size) at `h = 10 J` and
+`h = J`, in `outputs/QELM_Z_linear/<date_time>/h<h>_n<L>/`. It splits the
+features into `<Z_k>`, `<Y_k>`, `<X_k>`
+(`QELM.evaluation.feature_distribution.linear_observables`), refits the
+ridge readout on each Pauli alone, superimposes the histograms of one
+observable for the different sizes (`QELM.utils.plots.draw_histograms`) and
+measures the convergence of the empirical law (Kolmogorov-Smirnov distance
+to the largest dataset) and its shape (moments, distance to a Gaussian, Haar
+laws in the parity and charge sectors). `H` conserves the parity
+`prod_i Z_i` and the initial state has a definite parity, so `<X_k>` and
+`<Y_k>` are exactly 0: only `<Z_k>` carries information.
+
 ## Run the QELM experiment on the measurement record (work in progress)
 
 ```bash
