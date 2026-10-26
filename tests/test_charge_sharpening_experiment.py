@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from QELM import load_config
-from QELM.embedding import AncillaChargeSectorEmbedding, product_charge_index
+from QELM.encoding import AncillaChargeSectorEmbedding, product_charge_index
 from QELM.evaluation import von_neumann_entropy
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

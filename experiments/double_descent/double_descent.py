@@ -15,7 +15,7 @@ linear readout of local observables.
    images of those digits, and map each to an angle in ``[0, pi]``
    (:class:`QELM.datasets.AngleEncoder`).
 3. Encode the angles in a product state, qubit ``i`` in
-   ``R_y(theta_i)|0>`` (:class:`QELM.embedding.RotationEmbedding`), and
+   ``R_y(theta_i)|0>`` (:class:`QELM.encoding.RotationEmbedding`), and
    apply one fixed quench ``U = exp(-i H t)``: a single TFIM, drawn once
    for the seed and shared by every image. Measure the one-site observables
    ``<P_i>`` and the correlators ``<A_i B_j>`` of the final state: the
@@ -78,7 +78,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
 from QELM.datasets import AngleEncoder, load_digit_classes
-from QELM.embedding import RotationEmbedding
+from QELM.encoding import RotationEmbedding
 from QELM.evaluation.double_descent import (
     SWEEP_STATISTICS,
     add_bias,

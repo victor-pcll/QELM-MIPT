@@ -31,7 +31,7 @@ from typing import Any, Literal, overload
 import numpy as np
 import scipy.sparse as sp
 
-from QELM.embedding.base import Embedding
+from QELM.encoding.base import Embedding
 
 
 def charge_sector_indices(N: int, Q: int) -> np.ndarray:

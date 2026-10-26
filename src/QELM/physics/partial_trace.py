@@ -2,7 +2,7 @@
 
 Site 0 is the leftmost Kronecker factor, the most significant bit of a basis
 index, as in :func:`QELM.physics.operators.get_site_operator` and
-:mod:`QELM.embedding`.
+:mod:`QELM.encoding`.
 """
 
 from __future__ import annotations

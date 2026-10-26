@@ -10,7 +10,7 @@ import scipy.sparse as sp
 from omegaconf import OmegaConf
 from scipy.sparse.linalg import norm as sparse_norm
 
-from QELM.embedding import (
+from QELM.encoding import (
     AncillaChargeSectorEmbedding,
     Embedding,
     charge_sector_indices,
@@ -238,3 +238,17 @@ def test_dense_is_the_default_state() -> None:
     assert isinstance(emb.state(), np.ndarray)
     assert isinstance(emb.density_matrix(), np.ndarray)
     assert isinstance(charge_sector_state(3, 1), np.ndarray)
+
+
+def test_encoding_package_replaces_embedding() -> None:
+    """Issue #197: the initial states live in ``QELM.encoding``; the old
+    ``QELM.embedding`` package is gone."""
+    import importlib
+
+    encoding = importlib.import_module("QELM.encoding")
+    assert encoding.AncillaChargeSectorEmbedding.__module__ == (
+        "QELM.encoding.charge_sector"
+    )
+    assert encoding.RotationEmbedding.__module__ == "QELM.encoding.rotation"
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("QELM.embedding")

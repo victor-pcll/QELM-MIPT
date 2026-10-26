@@ -13,7 +13,7 @@ import pytest
 import scipy.sparse as sp
 
 from QELM import load_config
-from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEmbedding
 from QELM.evaluation import (
     entanglement_spectrum,
     mean_single_qubit_entropy,

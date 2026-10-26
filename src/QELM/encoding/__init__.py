@@ -1,15 +1,15 @@
-"""State embeddings: how the input is encoded into the reservoir state."""
+"""State encodings: how the input is encoded into the reservoir state (issue #197)."""
 
 from __future__ import annotations
 
-from QELM.embedding.base import Embedding
-from QELM.embedding.charge_sector import (
+from QELM.encoding.base import Embedding
+from QELM.encoding.charge_sector import (
     AncillaChargeSectorEmbedding,
     charge_sector_indices,
     charge_sector_state,
     product_charge_index,
 )
-from QELM.embedding.rotation import RotationEmbedding
+from QELM.encoding.rotation import RotationEmbedding
 
 _EMBEDDINGS: dict[str, type[Embedding]] = {
     AncillaChargeSectorEmbedding.name: AncillaChargeSectorEmbedding,

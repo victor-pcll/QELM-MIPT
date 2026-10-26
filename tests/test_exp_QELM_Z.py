@@ -50,7 +50,7 @@ def test_run_shapes_and_bias_column() -> None:
 def test_features_match_the_density_matrix() -> None:
     """Evolving psi gives the same <Z_k> as evolving rho = |psi><psi|."""
     from QELM import TransverseFieldIsingModel, set_seed
-    from QELM.embedding import AncillaChargeSectorEmbedding
+    from QELM.encoding import AncillaChargeSectorEmbedding
     from QELM.training import SingleObservable
 
     cfg = load_config([*OVERRIDES, "samples.L=1", "+experiment.observables=[Z]"])

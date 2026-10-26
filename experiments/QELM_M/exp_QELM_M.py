@@ -136,7 +136,7 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
-from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEmbedding
 from QELM.evaluation import (
     mean_single_qubit_entropy,
     renyi_entropy,

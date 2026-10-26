@@ -52,7 +52,7 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
-from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEmbedding
 from QELM.evaluation.metrics import NMSE, R2, NMSE_err
 from QELM.training import ProjectiveMeasurement, RidgeReadout, SingleObservable
 from QELM.utils import save_config, save_results

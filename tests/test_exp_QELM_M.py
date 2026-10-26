@@ -14,7 +14,7 @@ import pytest
 from omegaconf import OmegaConf
 
 from QELM import TransverseFieldIsingModel, load_config
-from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEmbedding
 from QELM.evaluation.metrics import accuracy, balanced_accuracy, majority_accuracy
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

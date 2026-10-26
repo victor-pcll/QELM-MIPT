@@ -10,7 +10,7 @@ import pytest
 from omegaconf import OmegaConf
 
 from QELM import check_qubit_counts, load_config
-from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEmbedding
 from QELM.training import ProjectiveMeasurement
 
 

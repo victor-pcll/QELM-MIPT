@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from QELM.embedding import RotationEmbedding
+from QELM.encoding import RotationEmbedding
 from QELM.evaluation.double_descent import (
     add_bias,
     classification_error,

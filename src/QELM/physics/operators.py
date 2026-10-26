@@ -91,7 +91,7 @@ def pauli(label: str) -> np.ndarray:
 def qubit_counts(rho: np.ndarray, Nr: int = 0) -> tuple[int, int, int]:
     """Return the qubit counts of a density matrix of shape ``(2**N, 2**N)``.
 
-    Ancillas are the first sites, as in :mod:`QELM.embedding`, so the
+    Ancillas are the first sites, as in :mod:`QELM.encoding`, so the
     system is the last ``N - Nr`` qubits.
 
     Args:

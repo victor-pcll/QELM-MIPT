@@ -30,7 +30,7 @@ Nr: 0
 TFIM:
   h: ${TFIM.J}
 
-# Angle encoding (QELM.embedding.RotationEmbedding): qubit i starts in
+# Angle encoding (QELM.encoding.RotationEmbedding): qubit i starts in
 # R_axis(theta_i)|0>, theta_i in [0, pi] the i-th principal component of the
 # image, rescaled over the training images (QELM.datasets.AngleEncoder).
 rotation_embedding:

@@ -7,7 +7,7 @@ import pytest
 import scipy.linalg
 
 from QELM import load_config
-from QELM.embedding import RotationEmbedding, get_embedding
+from QELM.encoding import RotationEmbedding, get_embedding
 from QELM.evaluation.double_descent import expectations, observable_operators
 from QELM.physics import X, Y
 

@@ -94,7 +94,7 @@ from omegaconf import DictConfig
 from tqdm import tqdm
 
 from QELM import check_qubit_counts, set_seed
-from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEmbedding
 from QELM.evaluation import (
     bootstrap_errors,
     charge_filter,
