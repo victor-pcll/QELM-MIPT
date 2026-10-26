@@ -1,4 +1,4 @@
-"""notebooks/results/07_QELM_Z_linear_observables.ipynb on a small run (#191).
+"""notebooks/results/07_QELM_Q_linear_observables.ipynb on a small run (#191).
 
 The code cells are executed in order, as Jupyter would, with the datasets
 shrunk through the environment variables the notebook reads.
@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = REPO_ROOT / "notebooks" / "results" / "07_QELM_Z_linear_observables.ipynb"
+NOTEBOOK = REPO_ROOT / "notebooks" / "results" / "07_QELM_Q_linear_observables.ipynb"
 
 
 def _run_cells(namespace: dict) -> None:
@@ -35,7 +35,7 @@ def test_notebook_runs_and_plots(
     shows: list[tuple] = []
     monkeypatch.setattr(plt, "show", lambda *args, **kwargs: shows.append(args))
     for key, value in {
-        "N": "4",
+        "N": "5",
         "H_VALUES": "10 1",
         "N_SAMPLES": "10 20",
         "BINS": "5",
@@ -60,22 +60,39 @@ def test_notebook_runs_and_plots(
     assert {r["n_samples"]: r["seed"] for r in runs} == {10: 42, 20: 43}
     for r in runs:
         assert set(r["obs"]) == {"Z", "Y", "X"}
-        assert r["obs"]["Z"].shape == (r["n_samples"], 3)
+        assert r["obs"]["Z"].shape == (r["n_samples"], 4)
+        assert set(np.unique(r["Y"])) <= {2, 1}  # Q1 = Ns // 2, Q2 = Q1 - 1
         # Parity: no linear X or Y feature.
         np.testing.assert_allclose(r["obs"]["X"], 0.0, atol=1e-10)
         np.testing.assert_allclose(r["obs"]["Y"], 0.0, atol=1e-10)
     assert len(namespace["ridge_table"]) == 4
-    # One histogram per size in each of the 2 x 3 panels.
+    # One row per field; columns Q1, Q2 and both, one histogram per size,
+    # one Gaussian fit and one Haar curve each, and no KDE (PR #192).
     axes_h = namespace["axes_h"]
     assert axes_h.shape == (2, 3)
     for ax in axes_h.flat:
         assert len(ax.containers) == 2
-    assert len(namespace["convergence"][10.0]) == 2
-    assert len(namespace["shape_table"]) == 2 * 3
+        labels = [line.get_label() for line in ax.get_lines()]
+        assert len(labels) == 2
+        assert sum(label.startswith("Haar") for label in labels) == 1
+        assert sum(label.startswith("Gaussian") for label in labels) == 1
+    titles = [ax.get_legend().get_texts()[-1].get_text() for ax in axes_h[0]]
+    assert titles == [
+        "Haar, sector Q = 2 (D = 6)",
+        "Haar, sector Q = 1 (D = 4)",
+        "Haar, global parity sector (D = 16)",
+    ]
+    # The two sectors split each dataset.
+    r = runs[0]
+    n_q1 = len(namespace["sector_values"](r, "Q = 2"))
+    n_q2 = len(namespace["sector_values"](r, "Q = 1"))
+    assert n_q1 + n_q2 == r["n_samples"]
+    assert len(namespace["convergence"]) == 2 * 2
+    assert len(namespace["shape_table"]) == 2 * 3 * 4
     assert len(shows) == 2
 
     sweep_dir = namespace["sweep_dir"]
-    assert sweep_dir.parent == tmp_path / "QELM_Z_linear"
+    assert sweep_dir.parent == tmp_path / "QELM_Q_linear"
     assert sorted(p.name for p in sweep_dir.iterdir() if p.is_dir()) == [
         "h10_n10",
         "h10_n20",
@@ -92,7 +109,7 @@ def test_notebook_runs_and_plots(
     histograms = json.loads(
         (sweep_dir / "histograms_linear_observables.json").read_text()
     )
-    assert len(histograms["extra"]["shape"]) == 6
+    assert len(histograms["extra"]["shape"]) == 24
     plt.close("all")
 
     # RUN = False reads the same sweep back without simulating.
@@ -100,6 +117,6 @@ def test_notebook_runs_and_plots(
     again: dict = {}
     _run_cells(again)
     assert again["sweep_dir"] == sweep_dir
-    np.testing.assert_array_equal(again["runs"][0]["X"], runs[0]["X"])
+    np.testing.assert_array_equal(again["runs"][0]["obs"]["Z"], runs[0]["obs"]["Z"])
     plt.close("all")
     os.chdir(REPO_ROOT)
