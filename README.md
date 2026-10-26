@@ -23,16 +23,17 @@ uv sync
 | Path | Role |
 | --- | --- |
 | `conf/` | Hydra YAML: `config.yaml` plus groups `models`, `training/{measurements,readout,regression}`, `evaluation`, mirroring `src/QELM/` |
-| `data/` | Local time series and training datasets (gitignored) |
+| `data/` | Local time series and training datasets (gitignored); MNIST is downloaded to `data/mnist/` on first use |
 | `src/QELM/models/` | Hamiltonians and time evolution (transverse-field Ising model, Kitaev scaffold), random brickwork circuits of U(1), Haar and Clifford gates (`circuits.py`) |
 | `src/QELM/physics/` | Quantum primitives: Pauli matrices and site operators |
-| `src/QELM/embedding/` | Initial-state embeddings (`Embedding` base, ancilla + charge-sector state) |
-| `src/QELM/training/` | Measurements, feature extraction and readout fitting (`LinearReadout` scaffold, `RidgeReadout` closed-form ridge regression) |
-| `src/QELM/evaluation/` | Metrics and plot scaffolds |
+| `src/QELM/embedding/` | Initial-state embeddings (`Embedding` base, ancilla + charge-sector state, angle encoding `RotationEmbedding` of a static input) |
+| `src/QELM/datasets/` | Static classification datasets: MNIST and scikit-learn's 8x8 digits as a task between a few chosen digits, and their PCA to rotation angles (`AngleEncoder`) |
+| `src/QELM/training/` | Measurements, feature extraction and readout fitting (`LinearReadout` scaffold, `RidgeReadout` closed-form ridge regression, `alpha = 0` for the unregularized minimum-norm fit) |
+| `src/QELM/evaluation/` | Metrics, entropies, the learnability and charge-sharpening statistics, the double-descent sweep (`double_descent.py`), plot scaffolds |
 | `src/QELM/utils/plots/` | Plotting helpers shared by the scripts and the notebooks: one style (no grid, closed box, large titles), sweep curves, reference overlays, `save_figure` (figure and its data in the run's output folder) |
 | `notebooks/benchmarks/` | Benchmark notebooks: reproductions of published figures (learnability, Barratt et al. 2022, Fig. 2b and 2c; charge sharpening, Agrawal et al. 2024, Fig. 7) |
-| `notebooks/results/` | Notebooks producing new results (TFIM reservoir, QELM on the measurement record M) |
-| `experiments/` | One folder per experiment, each with its Python script and its bash launcher: `example/` (the `run_experiment.py` template and `test_experiment.sh`), `projective/`, `QELM_Z/`, `QELM_M/`, `QELM_Q/`, `charge_sharpening/` (benchmark against Agrawal et al. 2024, Fig. 7); `scratch/` for local outputs (gitignored) |
+| `notebooks/results/` | Notebooks producing new results (TFIM reservoir, QELM on the measurement record M, double descent on MNIST) |
+| `experiments/` | One folder per experiment, each with its Python script and its bash launcher: `example/` (the `run_experiment.py` template and `test_experiment.sh`), `projective/`, `QELM_Z/`, `QELM_M/`, `QELM_Q/`, `charge_sharpening/` (benchmark against Agrawal et al. 2024, Fig. 7), `double_descent/` (double descent of the QELM on MNIST digits, with confusion matrices); `scratch/` for local outputs (gitignored) |
 | `main.py` | Entrypoint. Routes `models` → model → training → evaluation |
 
 ## Run the pipeline

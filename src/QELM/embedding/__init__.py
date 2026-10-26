@@ -9,9 +9,11 @@ from QELM.embedding.charge_sector import (
     charge_sector_state,
     product_charge_index,
 )
+from QELM.embedding.rotation import RotationEmbedding
 
 _EMBEDDINGS: dict[str, type[Embedding]] = {
     AncillaChargeSectorEmbedding.name: AncillaChargeSectorEmbedding,
+    RotationEmbedding.name: RotationEmbedding,
 }
 
 
@@ -37,6 +39,7 @@ def get_embedding(name: str) -> type[Embedding]:
 __all__ = [
     "AncillaChargeSectorEmbedding",
     "Embedding",
+    "RotationEmbedding",
     "charge_sector_indices",
     "charge_sector_state",
     "get_embedding",
