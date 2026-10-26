@@ -5,8 +5,8 @@ parameters, calls the Hydra entry point once per combination, and writes every
 run to its own folder under `outputs/`, which git ignores (see `.gitignore`).
 
 Next to `metrics.json`, every Python experiment script (`projective/`,
-`QELM_Z/`, `QELM_M/`, `QELM_Q/`, `charge_sharpening/`, `learnability/`,
-`double_descent/`) writes
+`QELM_Z/`, `QELM_M/`, `QELM_Q/`, `QELM_bayes_h/`, `charge_sharpening/`,
+`learnability/`, `double_descent/`) writes
 `resolved_config.json`, the config of the run with every interpolation
 evaluated (`QELM.utils.save_config`, issue #85). `.hydra/config.yaml` keeps the
 formulas as written in `conf/`, such as `depth: ${int:${div:${Ns},2}}`;
@@ -245,6 +245,55 @@ the `(p, h)` plane (`heatmaps_p_h.png`), then the same three figures for the
 readouts on `M`, `[M, <Z_k>]` and `[M, <X_i X_j>]` (`*_record.png`). Each run is small enough to be
 fastest on a single thread: the notebook sets `OMP_NUM_THREADS=1`, which
 made a run at `N = 6` about 6 times faster.
+
+## Run the learnability zone of the unitary QELM along h (issue #194)
+
+```bash
+./experiments/QELM_bayes_h/exp_QELM_bayes_h.sh
+```
+
+The canonical QELM, a pure unitary evolution with no measurement, and the
+question of how much of the charge its local magnetizations carry. The
+config is `conf/QELM_bayes_h.yaml`; the Bayes estimator is
+`QELM.evaluation.bayes`.
+
+- Each sample draws a new TFIM on the `Ns = N - 1` system qubits,
+  `H = h sum_i Z_i + sum_{i<j} J_ij X_i X_j`, and starts from the ancilla +
+  charge-sector state (`ancilla_charge_sector.initial`: `uniform` or
+  `product`). The ancilla is measured first, which fixes the label
+  `Y = Q` (`Ns // 2` or `Ns // 2 - 1`, probability 1/2 each), and the system
+  evolves for `t = 10 / J` (`evolution.t`). This is, sample by sample, the
+  `p = 0` run of `exp_QELM_Q` (same disorder, labels and features; checked
+  in the tests).
+- The features are only the `<Z_k>` of the system qubits.
+- Three classifiers are scored on the last 30 % of the samples: **chance**
+  (the majority charge of the training set; its mean entropy is the entropy
+  of the class shares, 1 bit), **Ridge** (the ridge readout on
+  `[<Z_k>, 1]`, right when it falls on the side of `(Q1 + Q2) / 2` of the
+  true charge; its posterior is `P(Q | y_ridge)`, a one-dimensional QDA on
+  its training outputs), and **Bayes** (a QDA on the `<Z_k>`, one Gaussian
+  per charge, scikit-learn's `QuadraticDiscriminantAnalysis`). The mean
+  entropy is `E[H(P_corr)]`, `P_corr` the posterior of the true charge, in
+  bits (`bayes.entropy_base`).
+
+The QDA is the Bayes classifier when the class densities of the `<Z_k>` are
+Gaussian, and an estimate of it otherwise. `bayes.reg_param` (1e-6) is
+added to the eigenvalues of each covariance, and `bayes.tol` (1e-12) is the
+smallest one that counts as nonzero: at large `h` the evolution barely
+moves the `<Z_k>`, whose variances fall below scikit-learn's default 1e-4.
+
+The launcher sweeps `N_VALUES` (default `4 6 8`), `H_VALUES` (0 to 10 J,
+denser below 1 J) and `SEEDS` (`0 1 2`), with `L = 2000` samples per run
+(`T` changes the time, `INITIAL` the sector states). Each run lands in
+`outputs/QELM_bayes_h/<date_time>/N<N>_h<h>_seed<seed>/` with
+`exp_QELM_bayes_h.npz` (`X`, `Y`, `y_test`, `y_pred`, `W`, `P_corr_ridge`,
+`P_corr_bayes`), `metrics.json` (`accuracy_<c>`, `balanced_accuracy_<c>`
+and `entropy_<c>` for `c` in `chance`, `ridge`, `bayes`, plus the NMSE and
+R2 of the Ridge) and `.hydra/config.yaml`. At the end, `plot_bayes_h.py`
+draws, for each `N`, the accuracy and the mean entropy against `h / J`,
+averaged over the seeds, with the band between the Bayes and the chance
+curves filled: the learnability zone (`learnability_zone_N<N>.png` and its
+data `.json`, in the sweep folder).
 
 ## Run the double-descent experiment on MNIST (issue #181)
 

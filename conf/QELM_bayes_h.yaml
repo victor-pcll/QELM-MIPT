@@ -1,0 +1,37 @@
+# Learnability zone of the unitary QELM along the transverse field h (issue
+# #194). Primary config of experiments/QELM_bayes_h/exp_QELM_bayes_h.py: the
+# main config (TFIM, ancilla + charge sectors, ridge readout) and the block
+# below.
+#
+#   uv run python experiments/QELM_bayes_h/exp_QELM_bayes_h.py N=6 TFIM.h=2
+defaults:
+  - config
+  - _self_
+
+# Total number of qubits, ancilla included: Ns = N - 1 system qubits.
+N: 4
+
+# Samples per run, the first train_size (70 %) for the fits, the rest scored.
+samples:
+  L: 2000
+
+# Initial state (QELM.embedding.AncillaChargeSectorEmbedding): uniform for the
+# uniform superposition of each charge sector, product for the alternating
+# product states of Agrawal et al. (2024).
+ancilla_charge_sector:
+  N: ${N}
+  initial: uniform
+
+# The Bayes estimator (QELM.evaluation.bayes).
+# reg_param: added to the eigenvalues of each class covariance of the QDA, so
+#   that its inverse stays finite when the <Z_k> of a class lie on a
+#   hyperplane (a nearly conserved charge fixes sum_k <Z_k>).
+# tol: smallest regularized covariance eigenvalue that counts as nonzero.
+#   scikit-learn's 1e-4 is above the variances of the <Z_k> at large h, where
+#   the evolution barely moves them.
+# entropy_base: logarithm base of the binary entropy H(P_corr), 2 for bits
+#   (1 bit = nothing learned for balanced classes).
+bayes:
+  reg_param: 1.0e-6
+  tol: 1.0e-12
+  entropy_base: 2
