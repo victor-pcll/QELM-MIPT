@@ -36,12 +36,14 @@ def test_notebook_runs_the_sweep_and_plots(
         "L": "10",
         "OUT_ROOT": str(tmp_path),
         "RUN": "1",
-        # The finite-size scaling section (#183): two sizes, p = 0 and 1.
+        # The finite-size scaling section (#183): two sizes, two fields,
+        # p = 0, 0.5 and 1, two runs at once.
         "FSS_N_VALUES": "3 4",
-        "FSS_H": "1",
-        "FSS_P_POINTS": "2",
+        "FSS_H_VALUES": "1 2",
+        "FSS_P_POINTS": "3",
         "FSS_SEEDS": "42",
         "FSS_L": "10",
+        "FSS_JOBS": "2",
     }.items():
         monkeypatch.setenv(key, value)
     monkeypatch.chdir(NOTEBOOK.parent)  # where Jupyter starts
@@ -88,29 +90,32 @@ def test_notebook_runs_the_sweep_and_plots(
         if r["p"] == 0.0:
             for obs in ("Z", "XX"):
                 assert r[f"accuracy_M_{obs}_mean"] == r[f"accuracy_{obs}_mean"]
-    # The finite-size scaling at fixed h (#183): its own sweep of
-    # 2 N x 2 p x 1 seed = 4 runs, in its own folder, one figure with a row
-    # per readout (<Z_k>, <X_i X_j>, [M, <Z_k>]), a column per score and a
-    # curve per N.
-    assert "4/4" in out
-    assert namespace["FSS_P_VALUES"] == "0 1"
+    # The finite-size scaling (#183): its own sweep of
+    # 2 N x 2 h x 3 p x 1 seed = 12 runs with the state vector, in its own
+    # folder, one figure with a row per field, a column per score and a
+    # curve per N, for the readout [M, <Z_k>] only.
+    assert "12/12" in out
+    assert namespace["FSS_P_VALUES"] == "0 0.5 1"
     assert namespace["fss_dir"].parent == tmp_path / "QELM_Q_N_scaling"
-    assert len(namespace["fss_rows"]) == 4
-    assert {r["h"] for r in namespace["fss_rows"]} == {1.0}
-    assert sorted((r["N"], r["p"], r["n_runs"]) for r in namespace["fss_table"]) == [
-        (N, p, 1) for N in (3, 4) for p in (0.0, 1.0)
-    ]
-    assert namespace["axes_fss"].shape == (3, 2)
-    for ax in namespace["axes_fss"].flat:
+    fss_rows = namespace["fss_rows"]
+    assert len(fss_rows) == 12
+    for run in namespace["fss_dir"].glob("*/resolved_config.json"):
+        assert json.loads(run.read_text())["state_representation"] == "vector"
+    assert sorted(
+        (r["N"], r["h"], r["p"], r["n_runs"]) for r in namespace["fss_table"]
+    ) == [(N, h, p, 1) for N in (3, 4) for h in (1, 2) for p in (0.0, 0.5, 1.0)]
+    axes_fss = namespace["axes_fss"]
+    assert axes_fss.shape == (2, 2)
+    for ax in axes_fss.flat:
         assert len(ax.containers) == 2
-    labels = namespace["axes_fss"][0, 0].get_legend_handles_labels()[1]
+        assert "[M, <Z_k>]" in ax.get_title()
+    assert "h = 2 J" in axes_fss[1, 0].get_title()
+    labels = axes_fss[0, 0].get_legend_handles_labels()[1]
     assert sorted(labels) == ["N = 3", "N = 4", "chance"]
     fss_path = namespace["figure_fss"]
     assert fss_path.parent == namespace["fss_dir"]
-    assert (
-        len(json.loads(fss_path.with_suffix(".json").read_text())["extra"]["table"])
-        == 4
-    )
+    data = json.loads(fss_path.with_suffix(".json").read_text())
+    assert len(data["extra"]["table"]) == 12
     assert len(shows) == 7
     # Every figure in this notebook's own folder (#151), with its data.
     for name in (

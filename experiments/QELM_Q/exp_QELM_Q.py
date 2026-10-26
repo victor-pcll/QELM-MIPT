@@ -73,6 +73,20 @@ is only read by these readouts: it never changes the state, the other
 feature sets or the unsuffixed scores. At ``p = 0`` it is all zeros, so
 ``M`` alone is at chance and ``M_Z``, ``M_XX`` are ``Z``, ``XX``.
 
+The state is simulated as a density matrix by default
+(``state_representation=density``). It stays pure all along: ``R`` is
+measured first, the evolution is unitary and a projective measurement maps
+a pure state to a pure state. ``state_representation=vector`` follows the
+state vector instead (issue #183): ``O(2**N)`` memory instead of
+``O(4**N)``, the evolution through ``exp(-i H dt) psi`` from the sparse
+``H`` (:meth:`HamiltonianModel.evolve`) without forming the dense
+propagator, and the measurements through
+:func:`QELM.training.measurements.projective.measure_projective_psi`. Both
+draw the same disorder, the same labels and the same measurement choices
+and outcomes from the same generators, so for a given seed they give the
+same features up to rounding (``tests/test_exp_QELM_Q.py``). The vector
+path is what makes ``N = 12`` affordable.
+
 The half-system entanglement entropy of the final state, ``S_half[i]``
 (von Neumann, in bits, of the first ``Ns // 2`` system qubits; the state of
 ``S`` is pure once ``R`` is measured), tracks how much the measurements
@@ -107,6 +121,7 @@ Everything is written to the Hydra run directory, by default
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -131,7 +146,10 @@ from QELM.physics import X as PAULI_X
 from QELM.physics import Y as PAULI_Y
 from QELM.physics import Z, local_expectation, partial_trace
 from QELM.training import ProjectiveMeasurement, RidgeReadout
-from QELM.training.measurements.projective import measure_projective_rho
+from QELM.training.measurements.projective import (
+    measure_projective_psi,
+    measure_projective_rho,
+)
 from QELM.utils import save_config, save_results
 
 # Feature sets, each fitted with its own readout: one-site expectation values
@@ -161,11 +179,14 @@ NBR_TIME_EVOLUTION = "projective_measurement.nbr_time_evolution"
 FINAL_MEASUREMENT = "projective_measurement.final_measurement"
 # Second word of the seed of the measurement generator: the issue number.
 MEASUREMENT_STREAM = 163
+# Simulated object: "density" (rho) or "vector" (psi), issue #183.
+STATE_REPRESENTATION = "state_representation"
+STATE_REPRESENTATIONS = ("density", "vector")
 
 
 def evolve_with_measurements(
     rho: np.ndarray,
-    U: np.ndarray,
+    U: np.ndarray | Callable[[np.ndarray], np.ndarray],
     n_steps: int,
     P: ProjectiveMeasurement,
     rng: np.random.Generator,
@@ -175,8 +196,12 @@ def evolve_with_measurements(
     """Apply ``n_steps`` steps ``U``, with a measurement round between two.
 
     Args:
-        rho: Initial density matrix of shape ``(2**N, 2**N)``.
-        U: One step of the evolution, same shape.
+        rho: Initial density matrix of shape ``(2**N, 2**N)``, or state
+            vector of shape ``(2**N,)``.
+        U: One step of the evolution: a unitary matrix of shape
+            ``(2**N, 2**N)``, applied as ``U rho U^dagger``, or a function
+            that returns the evolved state, e.g. ``psi -> U psi`` for a
+            state vector (issue #183).
         n_steps: Number of steps, ``>= 1``.
         P: Measurement of the system qubits, each with its probability ``p``.
         rng: Generator of the measurement choices and outcomes.
@@ -189,10 +214,17 @@ def evolve_with_measurements(
         The final state, after the last step (and its round when ``final``),
         and the number of qubits measured on the way.
     """
-    U_dag = U.conj().T
+    if callable(U):
+        step = U
+    else:
+        U_dag = U.conj().T
+
+        def step(state: np.ndarray) -> np.ndarray:
+            return U @ state @ U_dag
+
     n_measured = 0
     for j in range(n_steps):
-        rho = U @ rho @ U_dag
+        rho = step(rho)
         if final or j < n_steps - 1:
             measure = P.measure(rho, rng=rng)
             rho = measure.rho
@@ -206,7 +238,8 @@ def observable_features(rho: np.ndarray, system: list[int], name: str) -> np.nda
     """Return the features of one set of :data:`FEATURE_SETS` for ``rho``.
 
     Args:
-        rho: Density matrix of shape ``(2**N, 2**N)``.
+        rho: Density matrix of shape ``(2**N, 2**N)`` or state vector of
+            shape ``(2**N,)``.
         system: The system qubits.
         name: ``"X"``, ``"Y"`` or ``"Z"`` for ``<P_k>`` on each qubit of
             ``system``; ``"XX"``, ``"YY"`` or ``"ZZ"`` for ``<P_i P_j>`` on
@@ -245,7 +278,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             ``evolution.t``, ``samples.L``, ``samples.train_size``, ``seed``,
             the TFIM, embedding, measurement and training blocks, and
             ``projective_measurement.nbr_time_evolution`` (default 5) and
-            ``projective_measurement.final_measurement`` (default ``False``).
+            ``projective_measurement.final_measurement`` (default ``False``)
+            and ``state_representation`` (default ``"density"``).
 
     Returns:
         The arrays and metrics of the run: ``X`` (with the bias column),
@@ -272,8 +306,15 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         )
     dt = float(cfg.evolution.t) / nbr_time_evolution
     final = bool(OmegaConf.select(cfg, FINAL_MEASUREMENT, default=False))
+    representation = str(OmegaConf.select(cfg, STATE_REPRESENTATION, default="density"))
+    if representation not in STATE_REPRESENTATIONS:
+        raise ValueError(
+            f"{STATE_REPRESENTATION} must be one of {STATE_REPRESENTATIONS}, "
+            f"got {representation!r}."
+        )
+    vector = representation == "vector"
     n_rounds = nbr_time_evolution if final else nbr_time_evolution - 1
-    rho0 = sector.rho()
+    state0 = sector.state() if vector else sector.rho()
     P = ProjectiveMeasurement.from_config(cfg)
     Q1, Q2 = sector.Q1, sector.Q2
 
@@ -294,9 +335,20 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     for i in tqdm(range(L)):
         model = TransverseFieldIsingModel(tfim_params)
-        U = np.kron(identity_R, model.propagator(dt=dt))
-        # The label first: R measured in Z fixes the charge sector of S.
-        rho, r = measure_projective_rho(rho0, 0, N)
+        U: np.ndarray | Callable[[np.ndarray], np.ndarray]
+        if vector:
+            # 1_R (x) exp(-i H_S dt) on psi, one row per state of R.
+            def U(psi: np.ndarray, model: Any = model) -> np.ndarray:
+                rows = psi.reshape(2**Nr, 2**Ns)
+                return np.stack(
+                    [model.evolve(row, dt=dt) if row.any() else row for row in rows]
+                ).ravel()
+
+            # The label first: R measured in Z fixes the charge sector of S.
+            rho, r = measure_projective_psi(state0, 0, N)
+        else:
+            U = np.kron(identity_R, model.propagator(dt=dt))
+            rho, r = measure_projective_rho(state0, 0, N)
         Y[i] = Q1 if r == 1 else Q2
         rounds: list[np.ndarray] = []
         rho, n_measured[i] = evolve_with_measurements(

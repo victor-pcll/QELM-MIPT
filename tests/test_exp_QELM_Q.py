@@ -226,6 +226,63 @@ def test_evolve_with_measurements_no_round_after_the_last_step() -> None:
         assert -1 <= z <= 1
 
 
+@pytest.mark.parametrize(
+    "extra",
+    [
+        ("projective_measurement.p=0.5",),
+        (
+            "projective_measurement.p=1.0",
+            "projective_measurement.final_measurement=true",
+        ),
+        ("projective_measurement.p=0.3", "N=5", "TFIM.h=1"),
+    ],
+)
+def test_state_vector_matches_the_density_matrix(extra: tuple[str, ...]) -> None:
+    """state_representation=vector gives the results of rho for a seed (#183)."""
+    rho = _run(*extra, "state_representation=density")
+    psi = _run(*extra, "state_representation=vector")
+    np.testing.assert_array_equal(psi["Y"], rho["Y"])
+    np.testing.assert_array_equal(psi["M"], rho["M"])
+    np.testing.assert_array_equal(psi["n_measured"], rho["n_measured"])
+    for key in rho:
+        if key.startswith("features_"):
+            np.testing.assert_allclose(psi[key], rho[key], atol=1e-10)
+    np.testing.assert_allclose(psi["S_half"], rho["S_half"], atol=1e-10)
+    for key in ("accuracy", "accuracy_M_Z", "accuracy_XX"):
+        assert psi[key] == rho[key]
+
+
+def test_density_matrix_is_the_default() -> None:
+    np.testing.assert_array_equal(
+        _run("projective_measurement.p=0.5")["X"],
+        _run("projective_measurement.p=0.5", "state_representation=density")["X"],
+    )
+
+
+def test_rejects_an_unknown_state_representation() -> None:
+    with pytest.raises(ValueError, match="state_representation"):
+        _run("state_representation=mps")
+
+
+def test_evolve_with_measurements_takes_a_step_function() -> None:
+    """A callable step evolves a state vector like U rho U^dagger evolves rho."""
+    module = _load_script()
+    rng = np.random.default_rng(0)
+    A = rng.normal(size=(8, 8)) + 1j * rng.normal(size=(8, 8))
+    U = expm(-1j * (A + A.conj().T))
+    psi = rng.normal(size=8) + 1j * rng.normal(size=8)
+    psi /= np.linalg.norm(psi)
+    P = ProjectiveMeasurement({"p": 0.5, "Nr": 1})
+    out_psi, n_psi = module.evolve_with_measurements(
+        psi, lambda v: U @ v, 3, P, np.random.default_rng(1)
+    )
+    out_rho, n_rho = module.evolve_with_measurements(
+        np.outer(psi, psi.conj()), U, 3, P, np.random.default_rng(1)
+    )
+    assert n_psi == n_rho
+    np.testing.assert_allclose(np.outer(out_psi, out_psi.conj()), out_rho, atol=1e-12)
+
+
 def test_rejects_zero_steps() -> None:
     with pytest.raises(ValueError, match="nbr_time_evolution"):
         _run("projective_measurement.nbr_time_evolution=0")
@@ -265,3 +322,44 @@ def test_bash_sweep_writes_one_folder_per_run(tmp_path: Path) -> None:
     ):
         assert key in metrics
     assert (tmp_path / runs[0] / "exp_QELM_Q.npz").is_file()
+
+
+def test_bash_sweep_in_parallel_with_the_state_vector(tmp_path: Path) -> None:
+    """JOBS=2 runs two at a time, STATE=vector reaches the config (#183)."""
+    env = {
+        **os.environ,
+        "OUT_DIR": str(tmp_path),
+        "N_VALUES": "3 4",
+        "H_VALUES": "1",
+        "SEEDS": "42",
+        "P_VALUES": "0.0 0.5 1.0",
+        "L": "10",
+        "STATE": "vector",
+        "JOBS": "2",
+        "TQDM_DISABLE": "1",
+    }
+    subprocess.run(["bash", str(BASH_SCRIPT)], check=True, env=env, cwd=tmp_path)
+    runs = sorted(tmp_path.glob("*/metrics.json"))
+    assert len(runs) == 6
+    for run in runs:
+        config = json.loads((run.parent / "resolved_config.json").read_text())
+        assert config["state_representation"] == "vector"
+
+
+def test_bash_sweep_in_parallel_fails_when_a_run_fails(tmp_path: Path) -> None:
+    """A failed run in the background still fails the sweep."""
+    env = {
+        **os.environ,
+        "OUT_DIR": str(tmp_path),
+        "N_VALUES": "3",
+        "SEEDS": "42",
+        "P_VALUES": "0.0 2.0",  # p = 2 is not a probability
+        "L": "10",
+        "JOBS": "2",
+        "TQDM_DISABLE": "1",
+    }
+    result = subprocess.run(
+        ["bash", str(BASH_SCRIPT)], env=env, cwd=tmp_path, capture_output=True
+    )
+    assert result.returncode != 0
+    assert len(list(tmp_path.glob("*/metrics.json"))) == 1

@@ -28,6 +28,12 @@ Ns: ${int:${sub:${N},${Nr}}}
 ancilla_charge_sector:
   N: ${N}
 
+# Simulated object of experiments/QELM_Q/exp_QELM_Q.py (issue #183): density
+# follows the density matrix rho, vector the state vector psi, which stays pure
+# and costs O(2**N) instead of O(4**N). Both give the same results for a seed.
+# Override with state_representation=vector.
+state_representation: density
+
 # The evolution block (evolution.t, evolution.dt, evolution.n_steps) depends on the
 # Hamiltonian, so it lives in conf/models/ next to it.
 
