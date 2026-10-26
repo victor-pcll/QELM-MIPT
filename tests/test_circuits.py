@@ -8,16 +8,18 @@ import pytest
 from omegaconf import OmegaConf
 
 from QELM.evaluation import von_neumann_entropy
-from QELM.models.circuits import (
+from QELM.models.circuits.base import BrickworkCircuit, apply_two_qubit_gate
+from QELM.models.circuits.clifford import (
     CliffordBrickworkCircuit,
+    _phase_key,
+    clifford_group_2q,
+    random_clifford_gate,
+)
+from QELM.models.circuits.haar import (
     HaarBrickworkCircuit,
     U1BrickworkCircuit,
-    _phase_key,
-    apply_two_qubit_gate,
-    clifford_group_2q,
     haar_gate,
     haar_unitary,
-    random_clifford_gate,
     random_u1_gate,
 )
 from QELM.physics import get_site_operator
@@ -287,7 +289,7 @@ def test_random_clifford_gate_is_uniform_and_seeded() -> None:
     ],
 )
 def test_haar_and_clifford_circuits_keep_the_brickwork(
-    cls: type[U1BrickworkCircuit], name: str
+    cls: type[BrickworkCircuit], name: str
 ) -> None:
     """Same bonds as the U(1) circuit, gates of their own kind, the ancilla
     untouched, and the same seed gives the same gates."""
@@ -329,3 +331,34 @@ def test_haar_and_clifford_from_config() -> None:
         cfg = OmegaConf.create({cls.name: {"N": 4, "Nr": 1, "depth": 2}})
         circuit = cls.from_config(cfg)
         assert circuit.Ns == 3 and len(circuit.layers) == 2
+
+
+def test_circuits_package_layout() -> None:
+    """Issue #189: the base class and the gate application live in
+    ``circuits.base``, the Haar and U(1) gates in ``circuits.haar``, the
+    Clifford gates in ``circuits.clifford``, each circuit inheriting from
+    :class:`BrickworkCircuit`, and the package re-exports them all."""
+    import QELM.models.circuits as circuits
+
+    for cls, module in (
+        (U1BrickworkCircuit, "haar"),
+        (HaarBrickworkCircuit, "haar"),
+        (CliffordBrickworkCircuit, "clifford"),
+    ):
+        assert cls.__module__ == f"QELM.models.circuits.{module}"
+        assert issubclass(cls, BrickworkCircuit)
+        assert getattr(circuits, cls.__name__) is cls
+    # Haar and Clifford gates conserve no charge: they are not U(1) circuits.
+    assert not issubclass(HaarBrickworkCircuit, U1BrickworkCircuit)
+    assert not issubclass(CliffordBrickworkCircuit, U1BrickworkCircuit)
+    for name in circuits.__all__:
+        assert hasattr(circuits, name)
+
+
+def test_base_brickwork_has_no_gate_of_its_own() -> None:
+    """The base class only knows the geometry: drawing a gate is left to the
+    subclasses, and a circuit without layers needs none."""
+    geometry = BrickworkCircuit({"N": 5, "Nr": 1, "depth": 0})
+    assert geometry.bonds(0) == [(1, 2), (3, 4)]
+    with pytest.raises(NotImplementedError, match="draw_gate"):
+        BrickworkCircuit({"N": 5, "Nr": 1, "depth": 1})
