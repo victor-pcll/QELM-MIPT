@@ -26,7 +26,7 @@ Group files:
 
 | File | Contents |
 | --- | --- |
-| `conf/models/TFIM.yaml` | `models: TFIM`, the `TFIM` block (`N`, `J`, `h = 10 J`, `RUNS` random Hamiltonians) and the evolution block `evolution` (`t = 10 / J`, `n_steps = d = 4 N`, `dt = t / d`) |
+| `conf/models/TFIM.yaml` | `models: TFIM`, the `TFIM` block (`N`, `J`, `h = 10 J`, `basis`, `RUNS` random Hamiltonians; `basis: X` gives `H = h Σ Z_i + Σ J_ij X_i X_j`, `basis: Z` the condensed matter convention `H = -h Σ X_i - Σ J_ij Z_i Z_j`, issue #173) and the evolution block `evolution` (`t = 10 / J`, `n_steps = d = 4 N`, `dt = t / d`) |
 | `conf/models/haar_circuit.yaml` | `models: haar_circuit`, a `haar_circuit` block (`N`, `Nr`, `layers_per_step: 1`, `boundary: open`, `fixed_instance: false`): a brickwork of Haar-random two-qubit gates on the system qubits, the unitary dynamics of `experiments/QELM_M` in place of the TFIM (issue #171) |
 | `conf/models/clifford_circuit.yaml` | `models: clifford_circuit`, the same block for a brickwork of uniformly random two-qubit Clifford gates (issue #171) |
 | `conf/models/kitaev.yaml` | `models: kitaev`, a `kitaev` block with only `N`, and a fixed `evolution` block (`dt: 0.01`, `n_steps: 100`) |
