@@ -3,33 +3,22 @@
 from __future__ import annotations
 
 import importlib.util
-from math import comb
 from pathlib import Path
 
 import numpy as np
 import pytest
-from scipy import integrate, stats
 
 from QELM import load_config
 from QELM.evaluation.feature_distribution import (
     convergence_table,
     distribution_moments,
-    haar_moments,
-    haar_pdf,
     ks_distance,
     ks_to_normal,
     linear_observables,
 )
-from QELM.physics.operators import Z, get_site_operator
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "experiments" / "QELM_Z" / "exp_QELM_Z.py"
-
-
-def _haar_states(dim: int, n: int, rng: np.random.Generator) -> np.ndarray:
-    """``n`` Haar-random pure states of dimension ``dim``, shape ``(n, dim)``."""
-    psi = rng.normal(size=(n, dim)) + 1j * rng.normal(size=(n, dim))
-    return psi / np.linalg.norm(psi, axis=1, keepdims=True)
 
 
 def test_linear_observables_splits_the_features_label_by_label() -> None:
@@ -81,66 +70,6 @@ def test_samples_must_be_1d_with_two_values() -> None:
         distribution_moments([1.0])
     with pytest.raises(ValueError, match="1D"):
         distribution_moments(np.ones((3, 2)))
-
-
-def test_haar_moments_on_the_full_space_match_the_closed_forms() -> None:
-    for dim in (2, 8, 64):
-        m = haar_moments(dim)
-        assert m["mean"] == pytest.approx(0.0, abs=1e-12)
-        assert m["std"] == pytest.approx(1 / np.sqrt(dim + 1))
-        assert m["skewness"] == pytest.approx(0.0, abs=1e-12)
-        assert m["excess_kurtosis"] == pytest.approx(-6 / (dim + 3))
-
-
-def test_haar_pdf_is_a_density_with_the_haar_moments() -> None:
-    for dim, plus_dim in ((2, None), (16, None), (15, 10)):
-        m = haar_moments(dim, plus_dim)
-        norm = integrate.quad(lambda z: haar_pdf(z, dim, plus_dim), -1, 1)[0]
-        mean = integrate.quad(lambda z: z * haar_pdf(z, dim, plus_dim), -1, 1)[0]
-        assert norm == pytest.approx(1.0)
-        assert mean == pytest.approx(m["mean"], abs=1e-9)
-    np.testing.assert_allclose(haar_pdf([-0.5, 0.0, 0.9], 2), 0.5)
-    assert haar_pdf(1.5, 8) == 0.0
-
-
-def test_haar_law_matches_random_states_on_the_full_space() -> None:
-    """<Z_0> of Haar-random states on 4 qubits follows the Beta law."""
-    rng = np.random.default_rng(1)
-    N, n = 4, 20_000
-    psi = _haar_states(2**N, n, rng)
-    z0 = np.diag(get_site_operator(Z, 0, N)).real
-    values = np.abs(psi) ** 2 @ z0
-    m, ref = distribution_moments(values), haar_moments(2**N)
-    assert m["mean"] == pytest.approx(ref["mean"], abs=4 * m["sem"])
-    assert m["std"] == pytest.approx(ref["std"], rel=0.02)
-    cdf = lambda z: stats.beta.cdf((z + 1) / 2, 2 ** (N - 1), 2 ** (N - 1))  # noqa: E731
-    assert stats.kstest(values, cdf).pvalue > 1e-3
-
-
-def test_haar_law_matches_random_states_in_a_charge_sector() -> None:
-    """In the sector of charge Q on N qubits, <Z_0> = 2 B - 1 with
-    B ~ Beta(C(N-1, Q), C(N, Q) - C(N-1, Q)): the weight on site 0 empty."""
-    rng = np.random.default_rng(2)
-    N, Q, n = 5, 2, 20_000
-    basis = [b for b in range(2**N) if bin(b).count("1") == Q]
-    # Site 0 is the most significant bit, as in get_site_operator.
-    z0 = np.array([1.0 if not (b >> (N - 1)) & 1 else -1.0 for b in basis])
-    values = np.abs(_haar_states(len(basis), n, rng)) ** 2 @ z0
-    dim, plus = comb(N, Q), comb(N - 1, Q)
-    assert (z0 > 0).sum() == plus
-    ref = haar_moments(dim, plus)
-    assert ref["mean"] == pytest.approx(1 - 2 * Q / N)
-    m = distribution_moments(values)
-    assert m["mean"] == pytest.approx(ref["mean"], abs=4 * m["sem"])
-    assert m["std"] == pytest.approx(ref["std"], rel=0.02)
-    assert m["skewness"] == pytest.approx(ref["skewness"], abs=0.05)
-
-
-def test_haar_checks_the_dimensions() -> None:
-    with pytest.raises(ValueError, match="even"):
-        haar_moments(5)
-    with pytest.raises(ValueError, match="plus_dim"):
-        haar_pdf(0.0, 4, plus_dim=4)
 
 
 def test_ks_distances() -> None:

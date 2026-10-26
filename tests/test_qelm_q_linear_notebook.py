@@ -67,21 +67,16 @@ def test_notebook_runs_and_plots(
         np.testing.assert_allclose(r["obs"]["Y"], 0.0, atol=1e-10)
     assert len(namespace["ridge_table"]) == 4
     # One row per field; columns Q1, Q2 and both, one histogram per size,
-    # one Gaussian fit and one Haar curve each, and no KDE (PR #192).
+    # one Gaussian fit each, no KDE and no Haar curve (PR #192).
     axes_h = namespace["axes_h"]
     assert axes_h.shape == (2, 3)
     for ax in axes_h.flat:
         assert len(ax.containers) == 2
         labels = [line.get_label() for line in ax.get_lines()]
-        assert len(labels) == 2
-        assert sum(label.startswith("Haar") for label in labels) == 1
-        assert sum(label.startswith("Gaussian") for label in labels) == 1
-    titles = [ax.get_legend().get_texts()[-1].get_text() for ax in axes_h[0]]
-    assert titles == [
-        "Haar, sector Q = 2 (D = 6)",
-        "Haar, sector Q = 1 (D = 4)",
-        "Haar, global parity sector (D = 16)",
-    ]
+        assert len(labels) == 1 and labels[0].startswith("Gaussian")
+    assert "Q = 2" in axes_h[0, 0].get_title()
+    assert "Q = 1" in axes_h[0, 1].get_title()
+    assert "Q1 and Q2" in axes_h[0, 2].get_title()
     # The two sectors split each dataset.
     r = runs[0]
     n_q1 = len(namespace["sector_values"](r, "Q = 2"))

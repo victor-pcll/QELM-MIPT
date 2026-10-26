@@ -1,21 +1,13 @@
 """Distribution of the linear observables fed to the QELM readout (issue #191).
 
-The simple QELM (``experiments/QELM_Z/exp_QELM_Z.py``) evolves each sample
-unitarily, without measurement, and reads the one-site expectation values
-``<O_k> = <psi| O_k |psi>`` of the system qubits, for each Pauli ``O`` of
-``experiment.observables``. Over the dataset, each ``<O_k>`` is a random
+The unitary QELM (``experiments/QELM_Z/exp_QELM_Z.py``, or
+``experiments/QELM_Q/exp_QELM_Q.py`` at ``p = 0``) evolves each sample
+without measurement and reads the one-site expectation values
+``<O_k> = Tr(O_k rho)`` of the system qubits, for each Pauli ``O``. Over the dataset, each ``<O_k>`` is a random
 variable in ``[-1, 1]``: its distribution is the geometry of the features the
 linear readout sees. This module separates these features, summarizes the
-shape of their empirical distribution and compares it with two references:
-
-- a Gaussian of the same mean and standard deviation;
-- a Haar-random pure state, the limit of a fully scrambling unitary, drawn
-  in the space the dynamics can reach (a symmetry sector of dimension
-  ``D``). If the ``+1`` eigenspace of a one-site Pauli ``P`` has dimension
-  ``k`` in that space, the weight of the state on it is
-  ``B ~ Beta(k, D - k)`` and ``<P> = 2 B - 1``. On the full Hilbert space
-  (``k = D / 2``) this has mean 0, variance ``1 / (D + 1)`` and excess
-  kurtosis ``-6 / (D + 3)``.
+shape of their empirical distribution and compares it with a Gaussian of
+the same mean and standard deviation.
 
 The convergence of the empirical distribution with the number of samples
 ``n`` is measured by the two-sample Kolmogorov-Smirnov distance to the
@@ -99,55 +91,6 @@ def distribution_moments(values: ArrayLike) -> dict[str, float]:
     }
 
 
-def haar_moments(dim: int, plus_dim: int | None = None) -> dict[str, float]:
-    """Moments of ``<P>`` for a Haar-random pure state of dimension ``dim``.
-
-    ``P`` is a Pauli whose ``+1`` eigenspace has dimension ``plus_dim`` in
-    the space the state is drawn from. The weight of the state on it is
-    ``B ~ Beta(plus_dim, dim - plus_dim)`` and ``<P> = 2 B - 1``.
-
-    Args:
-        dim: Dimension ``D`` of the space the state is drawn from, at least 2.
-        plus_dim: Dimension of the ``+1`` eigenspace of ``P`` in it, in
-            ``[1, dim - 1]``. ``None`` takes ``dim / 2`` (a one-site Pauli on
-            the full Hilbert space, ``dim`` even).
-
-    Returns:
-        ``mean``, ``std``, ``skewness`` and ``excess_kurtosis``. With
-        ``plus_dim = dim / 2``: 0, ``1 / sqrt(D + 1)``, 0 and ``-6 / (D + 3)``.
-    """
-    a, b = _beta_parameters(dim, plus_dim)
-    mean, var, skew, kurt = (float(m) for m in stats.beta.stats(a, b, moments="mvsk"))
-    return {
-        "mean": 2 * mean - 1,
-        "std": 2 * float(np.sqrt(var)),
-        "skewness": skew,
-        "excess_kurtosis": kurt,
-    }
-
-
-def haar_pdf(z: ArrayLike, dim: int, plus_dim: int | None = None) -> np.ndarray:
-    """Density of ``<P>`` for a Haar-random pure state of dimension ``dim``.
-
-    ``<P> = 2 B - 1`` with ``B ~ Beta(plus_dim, dim - plus_dim)``, so the
-    density is ``Beta.pdf((z + 1) / 2) / 2``. With ``plus_dim = dim / 2`` it
-    is proportional to ``(1 - z**2)**(D/2 - 1)``, uniform at ``D = 2`` (one
-    qubit).
-
-    Args:
-        z: Points in ``[-1, 1]``, any shape.
-        dim: Dimension ``D`` of the space the state is drawn from, at least 2.
-        plus_dim: Dimension of the ``+1`` eigenspace of ``P`` in it;
-            ``None`` takes ``dim / 2``.
-
-    Returns:
-        The density at ``z``, same shape, 0 outside ``[-1, 1]``.
-    """
-    a, b = _beta_parameters(dim, plus_dim)
-    z = np.asarray(z, dtype=float)
-    return np.asarray(stats.beta.pdf((z + 1) / 2, a, b) / 2)
-
-
 def ks_to_normal(values: ArrayLike) -> float:
     """Kolmogorov-Smirnov distance to the Gaussian of the same mean and std.
 
@@ -226,21 +169,9 @@ def _sample(values: ArrayLike) -> np.ndarray:
     return v
 
 
-def _beta_parameters(dim: int, plus_dim: int | None) -> tuple[int, int]:
-    if plus_dim is None:
-        if dim < 2 or dim % 2:
-            raise ValueError(f"dim must be an even integer >= 2, got {dim}.")
-        plus_dim = dim // 2
-    if not 0 < plus_dim < dim:
-        raise ValueError(f"plus_dim must be in [1, dim - 1], got {plus_dim}, {dim}.")
-    return plus_dim, dim - plus_dim
-
-
 __all__ = [
     "convergence_table",
     "distribution_moments",
-    "haar_moments",
-    "haar_pdf",
     "ks_distance",
     "ks_to_normal",
     "linear_observables",

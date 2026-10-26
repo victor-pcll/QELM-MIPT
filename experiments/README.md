@@ -255,8 +255,7 @@ unitary QELM, for datasets of increasing size (`samples.L` = 100, 500, 2000,
 ridge readout of `Q` on each Pauli alone, and superimposes the histograms of
 one `<Z_k>` for the different sizes (`QELM.utils.plots.draw_histograms`),
 separately for the samples of charge `Q1`, of charge `Q2` and for both, each
-panel with its Gaussian fit and one Haar law (the sector `Q1`, the sector
-`Q2`, the global parity sector). It also measures the convergence of the
+panel with its Gaussian fit. It also measures the convergence of the
 empirical laws (Kolmogorov-Smirnov distance to the largest dataset) and
 their shape. `H` conserves the parity of the system and each sector has a
 definite parity, so `<X_k>` and `<Y_k>` are exactly 0.
