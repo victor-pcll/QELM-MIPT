@@ -22,6 +22,14 @@ class RidgeReadout(Trainer):
     rather than inverting the matrix. No intercept is fitted: add a constant
     column to ``Phi`` if a bias is needed. Selected with ``training/regression=ridge``.
 
+    ``alpha = 0`` is allowed and gives the limit ``alpha -> 0`` of that
+    solution, ``W = Phi^+ y`` with ``Phi^+`` the Moore-Penrose pseudo-inverse
+    (``numpy.linalg.lstsq``): ordinary least squares when ``Phi`` has full
+    column rank, and below ``n_samples = rank(Phi)`` the interpolating
+    solution (``Phi W = y``) of smallest norm. This is the unregularized
+    readout of the double-descent experiment (issue #181), whose test error
+    peaks at ``n_samples = rank(Phi)``.
+
     ``alpha`` is resolved in this order: the argument of :meth:`fit`, then
     ``alpha`` in the ``training`` config block, then 1e-3 (the value of
     ``conf/training/regression/ridge.yaml``, issue #92).
@@ -84,6 +92,13 @@ class RidgeReadout(Trainer):
                 f"targets must have {phi.shape[0]} rows like features, "
                 f"got shape {y.shape}."
             )
+        if lam == 0.0:
+            # No penalty: the limit alpha -> 0 of the ridge solution, the
+            # least-squares fit of smallest norm (issue #181). It exists for
+            # any shape of Phi, where Phi^T Phi is singular as soon as
+            # n_samples < n_features.
+            self.W = np.linalg.lstsq(phi, y, rcond=None)[0]
+            return "fitted"
         A = phi.T @ phi + lam * np.eye(phi.shape[1])
         self.W = np.linalg.solve(A, phi.T @ y)
         return "fitted"

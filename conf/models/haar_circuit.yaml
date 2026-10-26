@@ -1,7 +1,7 @@
 # @package _global_
 
 # Brickwork circuit of Haar-random two-qubit gates, each a 4 x 4 unitary drawn from the Haar
-# measure on U(4) (QELM.models.circuits.HaarBrickworkCircuit, issue #171).
+# measure on U(4) (QELM.models.circuits.haar.HaarBrickworkCircuit, issue #171).
 # It replaces the TFIM as the unitary dynamics of the QELM experiments on the
 # measurement record (experiments/QELM_M), with models=haar_circuit. The gates
 # act on the Ns system qubits only, never on the Nr ancillas.
