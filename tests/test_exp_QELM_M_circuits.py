@@ -20,7 +20,8 @@ import pytest
 from omegaconf import OmegaConf
 
 from QELM import load_config
-from QELM.models.circuits import U1BrickworkCircuit, _phase_key, clifford_group_2q
+from QELM.models.circuits.base import BrickworkCircuit
+from QELM.models.circuits.clifford import _phase_key, clifford_group_2q
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "experiments" / "QELM_M" / "exp_QELM_M.py"
@@ -45,13 +46,13 @@ def _overrides(model: str, *extra: str) -> list[str]:
 def _spy_layers(monkeypatch, module: ModuleType) -> list[tuple[int, list]]:
     """Record (t, gates) of every brickwork layer the run applies."""
     applied: list[tuple[int, list]] = []
-    apply_layer = U1BrickworkCircuit.apply_layer
+    apply_layer = BrickworkCircuit.apply_layer
 
     def spy(self, state, t):
         applied.append((t, [g for _, _, g in self.layers[t]]))
         return apply_layer(self, state, t)
 
-    monkeypatch.setattr(U1BrickworkCircuit, "apply_layer", spy)
+    monkeypatch.setattr(BrickworkCircuit, "apply_layer", spy)
     return applied
 
 

@@ -2,7 +2,7 @@
 
 # Brickwork circuit of random two-qubit Clifford gates, each drawn uniformly from the
 # 11 520 elements of the two-qubit Clifford group
-# (QELM.models.circuits.CliffordBrickworkCircuit, issue #171).
+# (QELM.models.circuits.clifford.CliffordBrickworkCircuit, issue #171).
 # It replaces the TFIM as the unitary dynamics of the QELM experiments on the
 # measurement record (experiments/QELM_M), with models=clifford_circuit. The gates
 # act on the Ns system qubits only, never on the Nr ancillas.

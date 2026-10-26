@@ -24,7 +24,7 @@ uv sync
 | --- | --- |
 | `conf/` | Hydra YAML: `config.yaml` plus groups `models`, `training/{measurements,readout,regression}`, `evaluation`, mirroring `src/QELM/` |
 | `data/` | Local time series and training datasets (gitignored); MNIST is downloaded to `data/mnist/` on first use |
-| `src/QELM/models/` | Hamiltonians and time evolution (transverse-field Ising model, Kitaev scaffold), random brickwork circuits of U(1), Haar and Clifford gates (`circuits.py`) |
+| `src/QELM/models/` | Hamiltonians and time evolution (transverse-field Ising model, Kitaev scaffold), random brickwork circuits in the package `circuits/` (issue #189): `base.py` (`BrickworkCircuit`, gate application), `haar.py` (U(1) and Haar gates), `clifford.py` (Clifford gates) |
 | `src/QELM/physics/` | Quantum primitives: Pauli matrices and site operators |
 | `src/QELM/embedding/` | Initial-state embeddings (`Embedding` base, ancilla + charge-sector state, angle encoding `RotationEmbedding` of a static input) |
 | `src/QELM/datasets/` | Static classification datasets: MNIST and scikit-learn's 8x8 digits as a task between a few chosen digits, and their PCA to rotation angles (`AngleEncoder`) |
