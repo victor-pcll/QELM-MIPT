@@ -25,7 +25,8 @@ from QELM.evaluation.learnability import (
     sep_posterior,
     site_bits,
 )
-from QELM.models.circuits import U1BrickworkCircuit, apply_two_qubit_gate
+from QELM.models.circuits.base import apply_two_qubit_gate
+from QELM.models.circuits.haar import U1BrickworkCircuit
 
 
 def test_site_bits_matches_the_circuit_convention() -> None:
