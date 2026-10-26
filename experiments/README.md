@@ -90,8 +90,9 @@ sample, instead of the observables; an unmeasured qubit (`p < 1`) counts as 0.
 The target is the outcome ±1 of the ancilla `R` measured in Z at the end.
 `R` is a reference qubit that the TFIM does not act on, so this label is the
 charge sector the system started in, ±1 with probability 1/2 whatever `p`
-(issue #104); `accuracy_optimal` is the accuracy of the Bayes classifier
-`sign(<Z_0>)`, the ceiling of the readout.
+(issue #104). No Bayes ceiling is reported (issue #195): the former
+`accuracy_optimal`, `sign(<Z_0>)` on the exact state of `R`, used
+`P(Y | rho_R)` while the readout only sees `M`, so it was removed with `<Z_0>`.
 Each run lands in `outputs/exp_QELM_M/<date_time>/N<N>_seed<seed>_p<p>/`.
 
 `H_VALUES` sweeps the transverse field `TFIM.h`, in units of `TFIM.J = 1`
@@ -184,9 +185,8 @@ MODEL=clifford_circuit P_VALUES="0.2 0.5 1.0" ./experiments/QELM_M/exp_QELM_M_ra
 `notebooks/results/05_QELM_M_circuits.ipynb` runs the ratio sweep once per
 model in `outputs/QELM_M_circuits/<date_time>/<model>/`, draws the curves
 and heatmaps of notebook 03 for each, and compares the three dynamics
-(`comparison_models.png`): the balanced accuracy of the readout and the
-Bayes accuracy `accuracy_optimal` against `p`, and the NMSE against the
-ratio. Its last section runs the same sweep of the two circuits with one
+(`comparison_models.png`): the balanced accuracy of the readout against
+`p`, and the NMSE against the ratio. Its last section runs the same sweep of the two circuits with one
 fixed draw of their gates per seed (`EXTRA_OVERRIDES="<model>.fixed_instance=true"`,
 any Hydra overrides added to every run of the ratio launcher), in
 `<model>_fixed/`, and compares the two (`comparison_fixed_circuit.png`).
