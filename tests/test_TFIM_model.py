@@ -142,3 +142,99 @@ def test_disorder_is_reproducible_with_seed():
     np.random.seed(0)
     second = TransverseFieldIsingModel({"N": 3, "J": 1.0, "h": 0.5}).J_matrix
     np.testing.assert_array_equal(first, second)
+
+
+# =====================================================================
+# 5. PARAMÈTRE ``basis`` (issue #173)
+# =====================================================================
+
+
+def _dense_tfim(
+    h: float, J_matrix: np.ndarray, field: np.ndarray, coupling: np.ndarray
+) -> np.ndarray:
+    """``h * sum_i field_i + sum_{i<j} J_ij coupling_i coupling_j``, dense."""
+    from QELM.physics.operators import get_site_operator
+
+    N = J_matrix.shape[0]
+    H = sum(h * get_site_operator(field, i, N) for i in range(N))
+    for i in range(N):
+        for j in range(i + 1, N):
+            H = H + J_matrix[i, j] * (
+                get_site_operator(coupling, i, N) @ get_site_operator(coupling, j, N)
+            )
+    return np.asarray(H)
+
+
+def test_default_basis_is_x_and_unchanged():
+    """Sans ``basis``, H est la convention X : h sum Z_i + sum J_ij X_i X_j."""
+    from QELM.physics.operators import X, Z
+
+    np.random.seed(3)
+    model = TransverseFieldIsingModel({"N": 4, "J": 1.0, "h": 0.7})
+    assert model.basis == "X"
+    expected = _dense_tfim(0.7, model.J_matrix, field=Z, coupling=X)
+    np.testing.assert_allclose(model.hamiltonian().toarray(), expected, atol=1e-14)
+
+    np.random.seed(3)
+    explicit = TransverseFieldIsingModel({"N": 4, "J": 1.0, "h": 0.7, "basis": "X"})
+    np.testing.assert_array_equal(
+        explicit.hamiltonian().toarray(), model.hamiltonian().toarray()
+    )
+
+
+def test_basis_z_is_condensed_matter_convention():
+    """``basis = "Z"`` : H = -h sum X_i - sum J_ij Z_i Z_j, hermitien."""
+    from QELM.physics.operators import X, Z
+
+    np.random.seed(5)
+    model = TransverseFieldIsingModel({"N": 4, "J": 1.0, "h": 0.7, "basis": "Z"})
+    H = model.hamiltonian()
+    expected = _dense_tfim(-0.7, -model.J_matrix, field=X, coupling=Z)
+    np.testing.assert_allclose(H.toarray(), expected, atol=1e-14)
+    assert_sparse_hermitian(H, atol=1e-12)
+
+
+def test_bases_are_related_by_hadamard_and_sign_flip():
+    """H_Z = -(H^{⊗N}) H_X (H^{⊗N}) avec le même désordre : spectres opposés."""
+    N = 3
+    np.random.seed(7)
+    model_x = TransverseFieldIsingModel({"N": N, "J": 1.0, "h": 0.4})
+    np.random.seed(7)
+    model_z = TransverseFieldIsingModel({"N": N, "J": 1.0, "h": 0.4, "basis": "Z"})
+    np.testing.assert_array_equal(model_x.J_matrix, model_z.J_matrix)
+
+    hadamard = np.array([[1, 1], [1, -1]], dtype=complex) / np.sqrt(2)
+    W = hadamard
+    for _ in range(N - 1):
+        W = np.kron(W, hadamard)
+    H_x = model_x.hamiltonian().toarray()
+    H_z = model_z.hamiltonian().toarray()
+    np.testing.assert_allclose(H_z, -(W @ H_x @ W), atol=1e-13)
+    np.testing.assert_allclose(
+        np.linalg.eigvalsh(H_z), np.sort(-np.linalg.eigvalsh(H_x)), atol=1e-12
+    )
+
+
+def test_invalid_basis_raises():
+    """Une base autre que X ou Z est refusée."""
+    with pytest.raises(ValueError, match="basis"):
+        TransverseFieldIsingModel({"N": 2, "J": 1.0, "h": 0.5, "basis": "Y"})
+
+
+def test_tfim_yaml_basis_default_and_override():
+    """``conf/models/TFIM.yaml`` vaut ``basis: X`` ; ``TFIM.basis=Z`` le change."""
+    from pathlib import Path
+
+    from hydra import compose, initialize_config_dir
+    from hydra.core.global_hydra import GlobalHydra
+
+    from QELM.models import get_model
+
+    conf = Path(__file__).resolve().parents[1] / "conf"
+    for overrides, basis in ((["N=3"], "X"), (["N=3", "TFIM.basis=Z"], "Z")):
+        GlobalHydra.instance().clear()
+        with initialize_config_dir(version_base="1.3", config_dir=str(conf)):
+            cfg = compose(config_name="config", overrides=overrides)
+        GlobalHydra.instance().clear()
+        model = get_model(str(cfg.models)).from_config(cfg)
+        assert model.basis == basis
