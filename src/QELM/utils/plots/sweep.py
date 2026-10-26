@@ -168,6 +168,7 @@ def draw_companion(
     label: str | None = None,
     log: bool = False,
     size_key: str = "N",
+    linestyle: str = "--",
 ) -> Any | None:
     """Overlay a second metric of the same sweep on a panel, dashed.
 
@@ -188,6 +189,9 @@ def draw_companion(
         label: Legend label.
         log: The y axis is logarithmic, as in :func:`draw_curve`.
         size_key: Row key of the size.
+        linestyle: Style of the line, dashed by default; another style
+            tells two companions of one curve apart, e.g. the QDA and K-NN
+            ceilings of the ridge accuracy (issue #202).
 
     Returns:
         The ``ErrorbarContainer``, or ``None`` when the summary has no
@@ -197,7 +201,7 @@ def draw_companion(
     if not rows or any(f"{metric}_mean" not in r for r in rows):
         return None
     curve = sweep_curve(rows, size, x_key, metric, size_key=size_key)
-    return draw_curve(ax, curve, color, label=label, log=log, linestyle="--")
+    return draw_curve(ax, curve, color, label=label, log=log, linestyle=linestyle)
 
 
 def draw_references(
