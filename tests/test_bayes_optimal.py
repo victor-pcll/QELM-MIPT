@@ -16,6 +16,7 @@ from sklearn.discriminant_analysis import (  # type: ignore[import-untyped]
 
 from QELM.evaluation.bayes_optimal import (
     QDA,
+    GaussianMixtureBayes,
     evaluate_bayes_optimal_limit,
     knn_classifier,
     pca_plane,
@@ -114,12 +115,14 @@ def test_ceilings_on_separated_and_on_identical_sectors() -> None:
     X, y = _gaussians(300, [[0, 0, 0], [10, 10, 10]], [[1, 1, 1]] * 2)
     out = evaluate_bayes_optimal_limit(X[:400], y[:400], X[400:], y[400:])
     assert out["bayes_estimate_qda"] == 1.0
+    assert out["bayes_estimate_gmm"] == 1.0
     assert out["bayes_estimate_knn"] == 1.0
     assert out["n_neighbors"] == 20  # round(sqrt(400))
 
     X, y = _gaussians(1000, [[0, 0, 0], [0, 0, 0]], [[1, 1, 1]] * 2, seed=3)
     out = evaluate_bayes_optimal_limit(X[:1000], y[:1000], X[1000:], y[1000:])
     assert abs(out["bayes_estimate_qda"] - 0.5) < 0.06
+    assert abs(out["bayes_estimate_gmm"] - 0.5) < 0.06
     assert abs(out["bayes_estimate_knn"] - 0.5) < 0.06
 
 
@@ -142,7 +145,35 @@ def test_qda_ceiling_is_nan_without_enough_samples_per_sector() -> None:
     X, y = _gaussians(4, [[0] * 5, [3] * 5], [[1] * 5] * 2)
     out = evaluate_bayes_optimal_limit(X, y, X, y)
     assert np.isnan(out["bayes_estimate_qda"])
+    assert 0.0 <= out["bayes_estimate_gmm"] <= 1.0
     assert 0.0 <= out["bayes_estimate_knn"] <= 1.0
+    # Fewer samples in a sector than Gaussians: no mixture either.
+    out = evaluate_bayes_optimal_limit(X, y, X, y, gmm_components=5)
+    assert np.isnan(out["bayes_estimate_gmm"])
+
+
+def test_mixture_follows_clusters_that_split_one_sector() -> None:
+    """Sector 0 in two clusters on both sides of sector 1, as the measured
+    <Z_k> at high p: one Gaussian per sector blurs them, the mixture and
+    the K-NN do not."""
+    rng = np.random.default_rng(5)
+    n = 600
+    side = rng.choice([-2.0, 2.0], size=n)
+    X0 = np.column_stack([side, np.zeros(n)]) + 0.3 * rng.normal(size=(n, 2))
+    X1 = np.column_stack([0.3 * rng.normal(size=n), 2.0 * rng.normal(size=n)])
+    X = np.vstack([X0, X1])
+    y = np.repeat([0.0, 1.0], n)
+    order = rng.permutation(2 * n)
+    X, y = X[order], y[order]
+    out = evaluate_bayes_optimal_limit(X[:800], y[:800], X[800:], y[800:], seed=1)
+    assert out["bayes_estimate_gmm"] > 0.97
+    assert out["bayes_estimate_knn"] > 0.95
+    assert out["bayes_estimate_gmm"] > out["bayes_estimate_qda"] + 0.05
+    # The seed fixes the mixture.
+    again = evaluate_bayes_optimal_limit(X[:800], y[:800], X[800:], y[800:], seed=1)
+    assert again["bayes_estimate_gmm"] == out["bayes_estimate_gmm"]
+    gmm = GaussianMixtureBayes(n_components=3, random_state=1).fit(X[:800], y[:800])
+    assert gmm.score(X[800:], y[800:]) == out["bayes_estimate_gmm"]
 
 
 def test_knn_neighbors() -> None:

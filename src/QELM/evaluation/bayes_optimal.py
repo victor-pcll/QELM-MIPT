@@ -28,7 +28,13 @@ is there but not linearly; if they fall to 0.5 too, it is gone.
   ``f_k``, and by the Cover-Hart theorem its error approaches the Bayes
   error when ``K`` and ``n_train / K`` both grow.
 
-:func:`evaluate_bayes_optimal_limit` scores both on a train/test split.
+- :class:`GaussianMixtureBayes`, the Bayes rule with a mixture of ``K``
+  Gaussians per sector (scikit-learn's ``GaussianMixture``, issue #200): for
+  multimodal ``f_k``, e.g. the bundles of trajectories that the measurements
+  make at high ``p``, where one Gaussian per sector blurs the clusters and
+  the QDA can fall below the ridge readout.
+
+:func:`evaluate_bayes_optimal_limit` scores the three on a train/test split.
 :func:`pca_plane` and :func:`project_gaussians` bring the data and the
 fitted Gaussians onto the plane of largest variance, to draw the contours
 of ``f_1`` and ``f_2`` (:func:`QELM.utils.plots.draw_qda_contours`).
@@ -38,7 +44,14 @@ from __future__ import annotations
 
 import numpy as np
 from numpy.typing import ArrayLike
+from sklearn.mixture import GaussianMixture  # type: ignore[import-untyped]
 from sklearn.neighbors import KNeighborsClassifier  # type: ignore[import-untyped]
+
+# Defaults of evaluate_bayes_optimal_limit, so that a plot refits the same
+# models as the run: the floor of the QDA variances and the number of
+# Gaussians per sector of the mixture.
+QDA_REG_PARAM = 1.0e-6
+GMM_COMPONENTS = 3
 
 
 class QDA:
@@ -210,10 +223,12 @@ def evaluate_bayes_optimal_limit(
     y_train: ArrayLike,
     X_test: ArrayLike,
     y_test: ArrayLike,
-    reg_param: float = 1.0e-6,
+    reg_param: float = QDA_REG_PARAM,
     n_neighbors: int | None = None,
+    gmm_components: int = GMM_COMPONENTS,
+    seed: int = 0,
 ) -> dict[str, float]:
-    """Score the QDA and the K-NN on a split: two ceilings of the accuracy.
+    """Score the QDA, the mixture and the K-NN on a split: ceilings of the accuracy.
 
     Args:
         X_train: Training features, shape ``(n_train, d)``, without a bias
@@ -227,13 +242,18 @@ def evaluate_bayes_optimal_limit(
             its covariance singular; it does not change the result
             otherwise.
         n_neighbors: ``K`` of the K-NN, default ``round(sqrt(n_train))``.
+        gmm_components: Number of Gaussians per sector of the mixture
+            (:class:`GaussianMixtureBayes`).
+        seed: ``random_state`` of the mixture, its only random step.
 
     Returns:
-        ``bayes_estimate_qda`` and ``bayes_estimate_knn``, the test
-        accuracies, and ``n_neighbors``, the ``K`` used.
-        ``bayes_estimate_qda`` is ``nan`` when a sector has no more training
-        samples than features: its covariance is then singular and the QDA
-        would fit the noise of the training set, so it gives no ceiling.
+        ``bayes_estimate_qda``, ``bayes_estimate_gmm`` and
+        ``bayes_estimate_knn``, the test accuracies, and ``n_neighbors``, the
+        ``K`` of the K-NN. ``bayes_estimate_qda`` is ``nan`` when a sector
+        has no more training samples than features: its covariance is then
+        singular and the QDA would fit the noise of the training set, so it
+        gives no ceiling. ``bayes_estimate_gmm`` is ``nan`` when a sector
+        has fewer samples than ``gmm_components``.
     """
     X_tr, y_tr = _as_samples(X_train, y_train)
     X_te, y_te = _as_samples(X_test, y_test)
@@ -243,12 +263,130 @@ def evaluate_bayes_optimal_limit(
         qda_accuracy = qda.score(X_te, y_te)
     else:
         qda_accuracy = float("nan")
+    if counts.min() >= gmm_components:
+        gmm = GaussianMixtureBayes(n_components=gmm_components, random_state=seed)
+        gmm_accuracy = gmm.fit(X_tr, y_tr).score(X_te, y_te)
+    else:
+        gmm_accuracy = float("nan")
     knn = knn_classifier(len(y_tr), n_neighbors).fit(X_tr, y_tr)
     return {
         "bayes_estimate_qda": qda_accuracy,
+        "bayes_estimate_gmm": gmm_accuracy,
         "bayes_estimate_knn": float(np.mean(knn.predict(X_te) == y_te)),
         "n_neighbors": float(knn.n_neighbors),
     }
+
+
+class GaussianMixtureBayes:
+    """Bayes rule with a mixture of ``K`` Gaussians per class (issue #200).
+
+    The QDA models each ``f_k`` by one Gaussian. When the features of a
+    sector are multimodal (several bundles of measurement trajectories), one
+    Gaussian blurs them, and the QDA can miss a separation that is there.
+    Here each ``f_k`` is a mixture
+
+        ``f_k(x) = sum_m w_km N(x; mu_km, Sigma_km)``,
+
+    fitted by expectation-maximization on the training samples of class
+    ``k`` (``sklearn.mixture.GaussianMixture``, full covariances). The
+    discriminant is the log-posterior up to a shared constant,
+    ``delta_k(x) = log f_k(x) + log pi_k``, and the predicted class the one
+    of largest ``delta_k``, as in :class:`QDA`. With ``K = 1`` and
+    ``reg_covar = 0`` it is the QDA.
+
+    Args:
+        n_components: ``K``, the number of Gaussians per class.
+        reg_covar: Added to the diagonal of every covariance, so that a
+            feature that does not vary within a component (a qubit at
+            ``+-1``) does not make it singular.
+        random_state: Seed of the initialization (k-means) of each mixture,
+            for a reproducible fit.
+        n_init: Number of initializations of each mixture; the best
+            likelihood is kept.
+
+    Attributes:
+        classes_: The sorted class labels, shape ``(C,)``.
+        priors_: ``pi_k``, shape ``(C,)``.
+        mixtures_: The fitted ``GaussianMixture`` of each class, in the
+            order of ``classes_``.
+    """
+
+    def __init__(
+        self,
+        n_components: int = 3,
+        reg_covar: float = 1.0e-6,
+        random_state: int | None = None,
+        n_init: int = 1,
+    ) -> None:
+        if n_components < 1:
+            raise ValueError(f"n_components must be >= 1, got {n_components}.")
+        self.n_components = n_components
+        self.reg_covar = reg_covar
+        self.random_state = random_state
+        self.n_init = n_init
+
+    def fit(self, X: ArrayLike, y: ArrayLike) -> GaussianMixtureBayes:
+        """Fit the prior and the mixture of every class.
+
+        Args:
+            X: Training features, shape ``(n, d)``.
+            y: Training labels, shape ``(n,)``, at least two classes.
+
+        Returns:
+            ``self``.
+
+        Raises:
+            ValueError: If the shapes do not match, there are fewer than two
+                classes or a class has fewer samples than ``n_components``.
+        """
+        X_arr, y_arr = _as_samples(X, y)
+        self.classes_, counts = np.unique(y_arr, return_counts=True)
+        if self.classes_.size < 2:
+            raise ValueError(
+                f"Need at least two classes, got {self.classes_.size}: {self.classes_}."
+            )
+        if counts.min() < self.n_components:
+            raise ValueError(
+                f"Class {self.classes_[np.argmin(counts)]} has {counts.min()} "
+                f"samples, fewer than n_components = {self.n_components}."
+            )
+        self.priors_ = counts / len(y_arr)
+        self.mixtures_ = [
+            GaussianMixture(
+                n_components=self.n_components,
+                covariance_type="full",
+                reg_covar=self.reg_covar,
+                random_state=self.random_state,
+                n_init=self.n_init,
+            ).fit(X_arr[y_arr == label])
+            for label in self.classes_
+        ]
+        return self
+
+    def decision_function(self, X: ArrayLike) -> np.ndarray:
+        """Return ``delta_k(x) = log f_k(x) + log pi_k``, shape ``(n, C)``."""
+        X_arr = np.asarray(X, dtype=np.float64)
+        return np.array(
+            [
+                mixture.score_samples(X_arr) + np.log(prior)
+                for mixture, prior in zip(self.mixtures_, self.priors_, strict=True)
+            ]
+        ).T
+
+    def predict_proba(self, X: ArrayLike) -> np.ndarray:
+        """Return the posterior ``P(k | x)`` of every class, shape ``(n, C)``."""
+        delta = self.decision_function(X)
+        weights = np.exp(delta - delta.max(axis=1, keepdims=True))
+        return np.asarray(weights / weights.sum(axis=1, keepdims=True))
+
+    def predict(self, X: ArrayLike) -> np.ndarray:
+        """Return the class of largest ``delta_k`` of every sample, ``(n,)``."""
+        return np.asarray(self.classes_[np.argmax(self.decision_function(X), axis=1)])
+
+    def score(self, X: ArrayLike, y: ArrayLike) -> float:
+        """Return the accuracy of :meth:`predict` on ``(X, y)``."""
+        X_arr, y_arr = _as_samples(X, y)
+        return float(np.mean(self.predict(X_arr) == y_arr))
 
 
 def pca_plane(

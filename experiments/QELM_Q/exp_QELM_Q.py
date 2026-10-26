@@ -73,17 +73,21 @@ is only read by these readouts: it never changes the state, the other
 feature sets or the unsuffixed scores. At ``p = 0`` it is all zeros, so
 ``M`` alone is at chance and ``M_Z``, ``M_XX`` are ``Z``, ``XX``.
 
-Two ceilings of the accuracy on ``<Z_k>`` come with it (issue #202),
+Three ceilings of the accuracy on ``<Z_k>`` come with it (issue #202),
 from the same split and the same ``<Z_k>`` without the bias column
 (:func:`QELM.evaluation.bayes_optimal.evaluate_bayes_optimal_limit`):
 ``bayes_estimate_qda``, a quadratic discriminant analysis (one Gaussian
-fitted per charge sector, the Bayes rule if the features are Gaussian), and
-``bayes_estimate_knn``, ``sqrt(train_size)`` nearest neighbors weighted by
-distance (no assumption on the distributions). When the ridge ``accuracy``
-falls to 0.5, they tell decoherence (both ceilings at 0.5 too: the sectors
-overlap) from a learnability wall (ceilings well above 0.5: the charge is
-in ``<Z_k>``, but not linearly). ``experiments/QELM_Q/plot_bayes_ceiling.py``
-draws them over the ridge accuracy, with the QDA contours on the PCA plane.
+fitted per charge sector, the Bayes rule if the features are Gaussian),
+``bayes_estimate_gmm``, the Bayes rule with a mixture of 3 Gaussians per
+sector (for the multimodal sectors that the measurements make at high
+``p``), and ``bayes_estimate_knn``, ``sqrt(train_size)`` nearest neighbors
+weighted by distance (no assumption on the distributions). When the ridge
+``accuracy`` falls to 0.5, they tell decoherence (the ceilings at 0.5 too:
+the sectors overlap) from a learnability wall (ceilings well above 0.5: the
+charge is in ``<Z_k>``, but not linearly).
+``experiments/QELM_Q/plot_bayes_ceiling.py`` draws them over the ridge
+accuracy, with the QDA and mixture densities and the ridge and K-NN decision
+regions on the PCA plane.
 
 The half-system entanglement entropy of the final state, ``S_half[i]``
 (von Neumann, in bits, of the first ``Ns // 2`` system qubits; the state of
@@ -113,8 +117,9 @@ Everything is written to the Hydra run directory, by default
   ``n_measured`` (number of collapses per sample), of shape ``(L,)``;
 - ``metrics.json``: ``nmse``, ``nmse_err``, ``r2``, ``accuracy``,
   ``accuracy_baseline``, ``balanced_accuracy``, ``S_half_mean``,
-  ``n_measured_mean``, ``bayes_estimate_qda``, ``bayes_estimate_knn``, the
-  scores of each feature set and the shapes used;
+  ``n_measured_mean``, ``bayes_estimate_qda``, ``bayes_estimate_gmm``,
+  ``bayes_estimate_knn``, the scores of each feature set and the shapes
+  used;
 - ``.hydra/config.yaml`` and ``resolved_config.json``: the config of the run.
 """
 
@@ -164,6 +169,7 @@ EXTRA_METRICS = (
     "S_half_mean",
     "n_measured_mean",
     "bayes_estimate_qda",
+    "bayes_estimate_gmm",
     "bayes_estimate_knn",
     *(
         f"{score}_{name}"
@@ -270,8 +276,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         ``y_test``, ``y_pred``, ``W``, ``S_half``,
         ``n_measured``, ``nmse``, ``nmse_err``, ``r2``, ``accuracy``,
         ``accuracy_baseline``, ``balanced_accuracy``, ``S_half_mean``,
-        ``n_measured_mean``, ``bayes_estimate_qda``, ``bayes_estimate_knn``
-        (issue #202) and, for each set ``<name>`` of
+        ``n_measured_mean``, ``bayes_estimate_qda``, ``bayes_estimate_gmm``,
+        ``bayes_estimate_knn`` (issue #202) and, for each set ``<name>`` of
         :data:`FEATURE_SETS` and :data:`RECORD_SETS`, ``features_<name>``
         (with the bias column),
         ``accuracy_<name>``, ``balanced_accuracy_<name>`` and ``r2_<name>``.
@@ -358,7 +364,11 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     y_pred = solver.predict(X[train:])
     # Ceilings of the accuracy on the same <Z_k>, without the bias column.
     bayes = evaluate_bayes_optimal_limit(
-        observed["Z"][:train], y_train, observed["Z"][train:], y_test
+        observed["Z"][:train],
+        y_train,
+        observed["Z"][train:],
+        y_test,
+        seed=int(cfg.seed),
     )
 
     return {
@@ -379,6 +389,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "S_half_mean": float(np.mean(S_half)),
         "n_measured_mean": float(np.mean(n_measured)),
         "bayes_estimate_qda": bayes["bayes_estimate_qda"],
+        "bayes_estimate_gmm": bayes["bayes_estimate_gmm"],
         "bayes_estimate_knn": bayes["bayes_estimate_knn"],
         **sets,
     }
@@ -403,6 +414,7 @@ def main(cfg: DictConfig) -> None:
     print(f"balanced accuracy: {results['balanced_accuracy']:.6g}")
     print(f"S_half (mean, bits): {results['S_half_mean']:.6g}")
     print(f"Bayes ceiling, QDA: {results['bayes_estimate_qda']:.6g}")
+    print(f"Bayes ceiling, GMM: {results['bayes_estimate_gmm']:.6g}")
     print(f"Bayes ceiling, K-NN: {results['bayes_estimate_knn']:.6g}")
     for name in (*FEATURE_SETS, *RECORD_SETS):
         print(f"accuracy on <{name}>: {results[f'accuracy_{name}']:.6g}")
