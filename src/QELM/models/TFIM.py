@@ -9,7 +9,6 @@ import numpy as np
 import scipy.sparse as sp
 
 from QELM.models.base import HamiltonianModel
-from QELM.physics.operators import X, Z, get_site_operator
 
 
 class TransverseFieldIsingModel(HamiltonianModel):
@@ -46,20 +45,37 @@ class TransverseFieldIsingModel(HamiltonianModel):
         per row, so ``H`` has at most ``2**N * (1 + N(N-1)/2)`` non-zero
         entries instead of ``4**N``. Use ``H.toarray()`` for a dense copy.
 
+        The entries are written directly from the bits of the basis states
+        (issue #201), without the Kronecker products of
+        :func:`QELM.physics.operators.get_site_operator`: ``Z_i`` is
+        diagonal, ``+1`` when bit ``i`` of the state is 0 and ``-1`` when it
+        is 1, and ``X_i X_j`` maps ``|b>`` to ``|b XOR m_ij>``, with ``m_ij``
+        the mask of the bits ``i`` and ``j`` (site 0 the most significant
+        bit). Distinct pairs give distinct masks, so no two terms share an
+        off-diagonal entry.
+
         Returns:
             Complex Hermitian CSR matrix of shape ``(2**N, 2**N)``. It is
             also stored in ``self._H``.
         """
-        H: sp.csr_matrix = sp.csr_matrix((self.dim, self.dim), dtype=np.complex128)
+        basis = np.arange(self.dim)
+        shifts = self.N - 1 - np.arange(self.N)
+        bits = (basis[:, None] >> shifts[None, :]) & 1
+        diagonal = self.h * np.sum(1 - 2 * bits, axis=1)
 
+        rows = [basis]
+        cols = [basis]
+        values = [diagonal.astype(np.complex128)]
         for i in range(self.N):
-            H = H + self.h * get_site_operator(Z, i, self.N, sparse=True)
-
-        for i in range(self.N):
-            Xi = get_site_operator(X, i, self.N, sparse=True)
             for j in range(i + 1, self.N):
-                Xj = get_site_operator(X, j, self.N, sparse=True)
-                H = H + self.J_matrix[i, j] * (Xi @ Xj)
-
-        self._H = H.tocsr()
-        return H.tocsr()
+                mask = (1 << int(shifts[i])) | (1 << int(shifts[j]))
+                rows.append(basis)
+                cols.append(basis ^ mask)
+                values.append(np.full(self.dim, self.J_matrix[i, j], dtype=complex))
+        H = sp.csr_matrix(
+            (np.concatenate(values), (np.concatenate(rows), np.concatenate(cols))),
+            shape=(self.dim, self.dim),
+            dtype=np.complex128,
+        )
+        self._H = H
+        return H

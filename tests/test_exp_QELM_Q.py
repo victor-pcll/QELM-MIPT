@@ -283,6 +283,32 @@ def test_evolve_with_measurements_takes_a_step_function() -> None:
     np.testing.assert_allclose(np.outer(out_psi, out_psi.conj()), out_rho, atol=1e-12)
 
 
+@pytest.mark.parametrize(("delta", "N_", "L_"), [(10, 4, 40), (7.5, 5, 37)])
+def test_delta_sets_the_number_of_samples(delta: float, N_: int, L_: int) -> None:
+    """samples.delta replaces L by int(delta * N); train_size follows (#201)."""
+    module = _load_script()
+    cfg = load_config(
+        [*OVERRIDES, f"N={N_}", f"samples.delta={delta}", "samples.L=999"]
+    )
+    out = module.run(cfg)
+    assert out["delta"] == delta
+    assert out["Y"].shape == (L_,)
+    assert cfg.samples.L == L_
+    assert out["y_test"].shape == (L_ - int(0.7 * L_),)
+
+
+def test_without_delta_l_is_kept() -> None:
+    out = _run("projective_measurement.p=0.5")
+    assert out["delta"] is None
+    assert out["Y"].shape == (L,)
+
+
+@pytest.mark.parametrize("delta", ["0", "-1", "0.1"])
+def test_rejects_a_delta_without_samples(delta: str) -> None:
+    with pytest.raises(ValueError, match="samples.delta"):
+        _run(f"samples.delta={delta}")
+
+
 def test_rejects_zero_steps() -> None:
     with pytest.raises(ValueError, match="nbr_time_evolution"):
         _run("projective_measurement.nbr_time_evolution=0")
@@ -344,6 +370,29 @@ def test_bash_sweep_in_parallel_with_the_state_vector(tmp_path: Path) -> None:
     for run in runs:
         config = json.loads((run.parent / "resolved_config.json").read_text())
         assert config["state_representation"] == "vector"
+
+
+def test_bash_sweep_with_delta_scales_l_with_n(tmp_path: Path) -> None:
+    """DELTA=7.5 gives L = int(7.5 N): 22 at N = 3, 30 at N = 4 (#201)."""
+    env = {
+        **os.environ,
+        "OUT_DIR": str(tmp_path),
+        "N_VALUES": "3 4",
+        "SEEDS": "42",
+        "P_VALUES": "0.5",
+        "L": "999",  # ignored with DELTA
+        "DELTA": "7.5",
+        "TQDM_DISABLE": "1",
+    }
+    subprocess.run(["bash", str(BASH_SCRIPT)], check=True, env=env, cwd=tmp_path)
+    for N_, L_ in ((3, 22), (4, 30)):
+        (run,) = tmp_path.glob(f"N{N_}_*/metrics.json")
+        metrics = json.loads(run.read_text())
+        assert metrics["n_samples"] == L_
+        assert metrics["delta"] == 7.5
+        config = json.loads((run.parent / "resolved_config.json").read_text())
+        assert config["samples"]["L"] == L_
+        assert config["samples"]["delta"] == 7.5
 
 
 def test_bash_sweep_in_parallel_fails_when_a_run_fails(tmp_path: Path) -> None:

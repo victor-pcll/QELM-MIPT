@@ -42,7 +42,7 @@ def test_notebook_runs_the_sweep_and_plots(
         "FSS_H_VALUES": "1 2",
         "FSS_P_POINTS": "3",
         "FSS_SEEDS": "42",
-        "FSS_L": "10",
+        "FSS_DELTA": "3",  # L = 9 at N = 3, 12 at N = 4
         "FSS_JOBS": "2",
     }.items():
         monkeypatch.setenv(key, value)
@@ -111,7 +111,11 @@ def test_notebook_runs_the_sweep_and_plots(
         assert "[M, <Z_k>]" in ax.get_title()
     assert "h = 2 J" in axes_fss[1, 0].get_title()
     labels = axes_fss[0, 0].get_legend_handles_labels()[1]
-    assert sorted(labels) == ["N = 3", "N = 4", "chance"]
+    assert sorted(labels) == ["N = 3, L = 9", "N = 4, L = 12", "chance"]
+    assert "delta = 3" in axes_fss[0, 1].get_title()
+    # L = int(delta N) in every run (#201).
+    assert sorted({(r["N"], r["n_samples"]) for r in fss_rows}) == [(3, 9), (4, 12)]
+    assert {r["delta"] for r in fss_rows} == {3.0}
     fss_path = namespace["figure_fss"]
     assert fss_path.parent == namespace["fss_dir"]
     data = json.loads(fss_path.with_suffix(".json").read_text())

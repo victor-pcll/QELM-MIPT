@@ -142,3 +142,19 @@ def test_disorder_is_reproducible_with_seed():
     np.random.seed(0)
     second = TransverseFieldIsingModel({"N": 3, "J": 1.0, "h": 0.5}).J_matrix
     np.testing.assert_array_equal(first, second)
+
+
+@pytest.mark.parametrize("N", [1, 2, 3, 5])
+@pytest.mark.parametrize("h", [0.0, 0.37, 2.0])
+def test_hamiltonian_matches_the_kronecker_products(N: int, h: float) -> None:
+    """The bitwise H equals h sum Z_i + sum_{i<j} J_ij X_i X_j (issue #201)."""
+    from QELM.physics.operators import X, Z, get_site_operator
+
+    np.random.seed(7)
+    model = TransverseFieldIsingModel({"N": N, "J": 1.0, "h": h})
+    expected = sum(h * get_site_operator(Z, i, N) for i in range(N)) + sum(
+        model.J_matrix[i, j] * get_site_operator(X, i, N) @ get_site_operator(X, j, N)
+        for i in range(N)
+        for j in range(i + 1, N)
+    )
+    np.testing.assert_allclose(model.hamiltonian().toarray(), expected, atol=1e-12)

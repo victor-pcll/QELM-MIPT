@@ -44,6 +44,10 @@ state_representation: density
 # Samples. Not read by the pipeline yet.
 samples:
   L: 10000 # number of samples
+  # Ratio of samples to qubits (issue #201): when set, experiments/QELM_Q
+  # replaces L by int(delta * N), so that the data grow with the number of
+  # features of the readout. Override with samples.delta=200.
+  delta: null
   train_fraction: 0.7
   train_size: ${int:${mul:${samples.train_fraction},${samples.L}}} # int(0.7 * L)
 

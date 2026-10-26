@@ -16,6 +16,8 @@
 #     OUT_ROOT=/tmp/qelm      write under /tmp/qelm instead of outputs
 #     OUT_DIR=...             write the sweep exactly there (the notebook)
 #     L=1000                  number of samples per run
+#     DELTA=200               samples per qubit: each run gets
+#                             L = int(DELTA * N), and L is ignored (issue #201)
 #     ALPHA=1e-2              ridge regularization (training.alpha, default 1e-3)
 #     N_VALUES="4 6"          total numbers of qubits, ancilla included
 #     H_VALUES="10 1"         transverse fields TFIM.h, in units of TFIM.J = 1
@@ -79,7 +81,14 @@ for N in "${N_VALUES[@]}"; do
         for SEED in "${SEEDS[@]}"; do
           for p in "${P_VALUES[@]}"; do
             RUN_DIR="$OUT_DIR/N${N}_h${h}_t${T}_final${FINAL}_seed${SEED}_p${p}"
-            echo "--- models=$MODEL N=$N TFIM.h=$h t=$T final=$FINAL seed=$SEED samples.L=$L training.alpha=${ALPHA:-config default} p=$p"
+            # With DELTA, L = int(DELTA * N), as exp_QELM_Q computes it: both
+            # samples.L and samples.delta land in the run's config (#201).
+            if [[ -n "${DELTA:-}" ]]; then
+              L_RUN="$(awk -v d="$DELTA" -v n="$N" 'BEGIN { printf "%d", d * n }')"
+            else
+              L_RUN="$L"
+            fi
+            echo "--- models=$MODEL N=$N TFIM.h=$h t=$T final=$FINAL seed=$SEED samples.L=$L_RUN delta=${DELTA:-none} training.alpha=${ALPHA:-config default} p=$p"
             # With JOBS > 1, wait for a free slot, then start the run in the
             # background; the statuses are collected at the end. No `wait -n`,
             # which the bash 3.2 of macOS lacks.
@@ -92,7 +101,8 @@ for N in "${N_VALUES[@]}"; do
               "TFIM.h=$h" \
               "evolution.t=$T" \
               "seed=$SEED" \
-              "samples.L=$L" \
+              "samples.L=$L_RUN" \
+              ${DELTA:+"samples.delta=$DELTA"} \
               ${ALPHA:+"training.alpha=$ALPHA"} \
               "projective_measurement.p=$p" \
               "projective_measurement.final_measurement=$FINAL" \
