@@ -2,46 +2,46 @@
 
 from __future__ import annotations
 
-from QELM.encoding.base import Embedding
+from QELM.encoding.base import Encoding
 from QELM.encoding.charge_sector import (
-    AncillaChargeSectorEmbedding,
+    AncillaChargeSectorEncoding,
     charge_sector_indices,
     charge_sector_state,
     product_charge_index,
 )
-from QELM.encoding.rotation import RotationEmbedding
+from QELM.encoding.rotation import RotationEncoding
 
-_EMBEDDINGS: dict[str, type[Embedding]] = {
-    AncillaChargeSectorEmbedding.name: AncillaChargeSectorEmbedding,
-    RotationEmbedding.name: RotationEmbedding,
+_ENCODINGS: dict[str, type[Encoding]] = {
+    AncillaChargeSectorEncoding.name: AncillaChargeSectorEncoding,
+    RotationEncoding.name: RotationEncoding,
 }
 
 
-def get_embedding(name: str) -> type[Embedding]:
-    """Return the embedding class for a config key.
+def get_encoding(name: str) -> type[Encoding]:
+    """Return the encoding class for a config key.
 
     Args:
-        name: Embedding name such as ``"ancilla_charge_sector"``.
+        name: Encoding name such as ``"ancilla_charge_sector"``.
 
     Returns:
-        The matching :class:`Embedding` subclass.
+        The matching :class:`Encoding` subclass.
 
     Raises:
         KeyError: If ``name`` is not registered.
     """
     try:
-        return _EMBEDDINGS[name]
+        return _ENCODINGS[name]
     except KeyError as exc:
-        known = ", ".join(sorted(_EMBEDDINGS))
-        raise KeyError(f"Unknown embedding {name!r}. Known: {known}.") from exc
+        known = ", ".join(sorted(_ENCODINGS))
+        raise KeyError(f"Unknown encoding {name!r}. Known: {known}.") from exc
 
 
 __all__ = [
-    "AncillaChargeSectorEmbedding",
-    "Embedding",
-    "RotationEmbedding",
+    "AncillaChargeSectorEncoding",
+    "Encoding",
+    "RotationEncoding",
     "charge_sector_indices",
     "charge_sector_state",
-    "get_embedding",
+    "get_encoding",
     "product_charge_index",
 ]

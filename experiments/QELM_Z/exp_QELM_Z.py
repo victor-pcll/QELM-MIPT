@@ -5,7 +5,7 @@ No measurement during the evolution. For each sample ``i`` (``samples.L`` in
 total):
 
 1. Draw a new TFIM (new disorder ``J_ij``) and prepare the initial state
-   with :class:`AncillaChargeSectorEmbedding`: the ancilla ``R`` (qubit 0)
+   with :class:`AncillaChargeSectorEncoding`: the ancilla ``R`` (qubit 0)
    entangled with the charge of the ``N - 1`` system qubits.
 2. Evolve it for the total time ``evolution.t`` in one step,
    ``U(t) = exp(-i H t)``. Without measurements the state stays pure, so the
@@ -49,7 +49,7 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
-from QELM.encoding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.evaluation.metrics import NMSE, R2, NMSE_err
 from QELM.training import RidgeReadout, SingleObservable
 from QELM.utils import save_config, save_results
@@ -63,7 +63,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Args:
         cfg: Composed config (``load_config`` or Hydra). Reads
             ``evolution.t``, ``samples.L``, ``samples.train_size``, the TFIM,
-            embedding and training blocks, and the optional
+            encoding and training blocks, and the optional
             ``experiment.observables`` (default ``[Z, Y, X]``).
 
     Returns:
@@ -75,9 +75,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         OmegaConf.select(cfg, "experiment.observables", default=DEFAULT_OBSERVABLES)
     )
 
-    sector = AncillaChargeSectorEmbedding.from_config(cfg)
+    sector = AncillaChargeSectorEncoding.from_config(cfg)
     solver = RidgeReadout.from_config(cfg)
-    # Qubit counts from the config, not from the model or the embedding
+    # Qubit counts from the config, not from the model or the encoding
     # (issue #88): N in total, Ns system qubits, Nr ancillas.
     N, Ns, Nr = check_qubit_counts(cfg)
     t = float(cfg.evolution.t)

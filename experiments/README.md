@@ -266,7 +266,7 @@ run of `experiments/double_descent/double_descent.py` is one seed:
 1. Each image is reduced to `N` principal components (default `N = 8`),
    fitted on the training images of the chosen digits, and each component is
    mapped to an angle in `[0, pi]` (`QELM.datasets.AngleEncoder`).
-2. Qubit `i` starts in `R_y(theta_i)|0>` (`QELM.encoding.RotationEmbedding`),
+2. Qubit `i` starts in `R_y(theta_i)|0>` (`QELM.encoding.RotationEncoding`),
    with no ancilla (`Nr = 0`).
 3. One fixed quench `U = exp(-i H t)` acts on every image: a single TFIM,
    drawn once per seed, with `h = J` (not the `10 J` of the TFIM config, at

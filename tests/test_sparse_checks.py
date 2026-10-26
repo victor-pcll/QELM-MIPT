@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 
-from QELM.encoding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.models.TFIM import TransverseFieldIsingModel
 from sparse_checks import assert_sparse_hermitian
 
@@ -66,7 +66,7 @@ def test_tfim_hamiltonian_is_hermitian() -> None:
     assert_sparse_hermitian(model.hamiltonian(), atol=1e-12)
 
 
-def test_sparse_embedding_density_matrix_is_hermitian() -> None:
-    """rho creux de l'embedding est hermitien."""
-    embedding = AncillaChargeSectorEmbedding({"N": 5})
-    assert_sparse_hermitian(embedding.density_matrix(sparse=True), atol=1e-12)
+def test_sparse_encoding_density_matrix_is_hermitian() -> None:
+    """rho creux de l'encoding est hermitien."""
+    encoding = AncillaChargeSectorEncoding({"N": 5})
+    assert_sparse_hermitian(encoding.density_matrix(sparse=True), atol=1e-12)

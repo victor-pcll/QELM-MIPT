@@ -4,7 +4,7 @@
 # qubits: list of measured sites in order, or null for every system qubit
 #   (Nr .. N-1).
 # Nr: ancilla qubits at the start of the chain, never measured by default.
-#   It follows the top-level Nr; 1 matches AncillaChargeSectorEmbedding.
+#   It follows the top-level Nr; 1 matches AncillaChargeSectorEncoding.
 # p: probability of measuring each target qubit; measure(rho, p=...) overrides it.
 # nbr_time_evolution: number of time-evolution steps of length
 #   evolution.t / nbr_time_evolution, each followed by a measurement of the

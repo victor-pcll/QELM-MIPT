@@ -10,7 +10,7 @@ import pytest
 from omegaconf import OmegaConf
 
 from QELM import check_qubit_counts, load_config
-from QELM.encoding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.training import ProjectiveMeasurement
 
 
@@ -23,13 +23,13 @@ def test_default_counts() -> None:
 
 @pytest.mark.parametrize("model", ["TFIM", "kitaev"])
 def test_every_block_follows_N(model: str) -> None:
-    """N=6 reaches the model, the embedding, the readouts and Ns."""
+    """N=6 reaches the model, the encoding, the readouts and Ns."""
     cfg = load_config([f"models={model}", "N=6"])
     assert check_qubit_counts(cfg) == (6, 5, 1)
     assert cfg[model].N == 6
     assert cfg.ancilla_charge_sector.N == 6
     assert cfg.single_observable.N == cfg.double_observable.N == 6
-    assert AncillaChargeSectorEmbedding.from_config(cfg).Ns == 5
+    assert AncillaChargeSectorEncoding.from_config(cfg).Ns == 5
 
 
 def test_n_steps_follows_N() -> None:

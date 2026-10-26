@@ -4,7 +4,7 @@
 For each sample ``i`` (``samples.L`` in total):
 
 1. Draw a new TFIM (new disorder ``J_ij``) on the ``Ns = N - 1`` system
-   qubits and start from the state of :class:`AncillaChargeSectorEmbedding`:
+   qubits and start from the state of :class:`AncillaChargeSectorEncoding`:
    the ancilla ``R`` (qubit 0) entangled with the charge of the system.
    ``R`` is a reference qubit, as in Barratt et al. (2022) and Agrawal et
    al. (2024): the TFIM acts on the system only, ``U = 1_R (x) U_S``
@@ -136,7 +136,7 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
-from QELM.encoding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.evaluation import (
     mean_single_qubit_entropy,
     renyi_entropy,
@@ -260,7 +260,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Args:
         cfg: Composed config (``load_config`` or Hydra). Reads
             ``models``, ``samples.L``, ``samples.train_size``, the model
-            block (TFIM with ``evolution.t``, or a circuit), the embedding,
+            block (TFIM with ``evolution.t``, or a circuit), the encoding,
             measurement and training blocks, and the optional
             ``projective_measurement.nbr_time_evolution`` (default 5).
 
@@ -276,9 +276,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     """
     set_seed(cfg)
 
-    sector = AncillaChargeSectorEmbedding.from_config(cfg)
+    sector = AncillaChargeSectorEncoding.from_config(cfg)
     solver = RidgeReadout.from_config(cfg)
-    # Qubit counts from the config, not from the model or the embedding
+    # Qubit counts from the config, not from the model or the encoding
     # (issue #88): N in total, Ns system qubits, Nr ancillas.
     N, Ns, Nr = check_qubit_counts(cfg)
     # The number of time-evolution steps is its own parameter, not tied to
@@ -305,7 +305,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     else:
         known = ", ".join([TransverseFieldIsingModel.name, *CIRCUITS])
         raise ValueError(f"models={model_name} is not supported here. Known: {known}.")
-    # Every sample starts from the embedded state, not from the collapsed
+    # Every sample starts from the encoded state, not from the collapsed
     # state of the previous sample (issue #101).
     rho0 = sector.rho()
     P = ProjectiveMeasurement.from_config(cfg)

@@ -83,7 +83,7 @@ def partial_trace(state: np.ndarray | sp.spmatrix, keep: Sequence[int]) -> np.nd
 
     Args:
         state: State vector ``(2**N,)`` (or a sparse column ``(2**N, 1)``,
-            as returned by ``Embedding.state(sparse=True)``), for which
+            as returned by ``Encoding.state(sparse=True)``), for which
             ``rho = |psi><psi|`` is never formed, or a density matrix
             ``(2**N, 2**N)``, dense or sparse. A sparse ``rho`` is traced
             entry by entry, without a dense copy.
