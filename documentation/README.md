@@ -8,3 +8,4 @@ Notes for this repository. Scientific parameters stay in Hydra YAML under `conf/
 - [Running](running.md) — command-line overrides and the notebooks
 - [Checkpoints and local data](checkpoints.md) — `outputs/`, `data/`, and `wandb/`
 - [Code quality](code-quality.md) — Ruff, Mypy, pytest, and the seed from config
+- [Contributing](contributing.md) — issues, draft pull requests, and who marks a pull request ready

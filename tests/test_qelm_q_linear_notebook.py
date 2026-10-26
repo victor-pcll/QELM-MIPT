@@ -1,4 +1,4 @@
-"""notebooks/results/07_QELM_Q_linear_observables.ipynb on a small run (#191).
+"""notebooks/results/08_QELM_Q_linear_observables.ipynb on a small run (#191).
 
 The code cells are executed in order, as Jupyter would, with the datasets
 shrunk through the environment variables the notebook reads.
@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = REPO_ROOT / "notebooks" / "results" / "07_QELM_Q_linear_observables.ipynb"
+NOTEBOOK = REPO_ROOT / "notebooks" / "results" / "08_QELM_Q_linear_observables.ipynb"
 
 
 def _run_cells(namespace: dict) -> None:
