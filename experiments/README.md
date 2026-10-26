@@ -248,28 +248,46 @@ made a run at `N = 6` about 6 times faster.
 
 ### Bayes ceilings of the accuracy on `<Z_k>` (issue #202)
 
-Every run of `exp_QELM_Q.py` also writes two ceilings of the ridge
+Every run of `exp_QELM_Q.py` also writes three ceilings of the ridge
 `accuracy`, on the same split and the same `<Z_k>`
 (`src/QELM/evaluation/bayes_optimal.py`): `bayes_estimate_qda`, a quadratic
 discriminant analysis written in NumPy (one Gaussian per charge sector,
-checked against scikit-learn in `tests/test_bayes_optimal.py`), and
+checked against scikit-learn in `tests/test_bayes_optimal.py`),
+`bayes_estimate_gmm`, the Bayes rule with a mixture of 3 Gaussians per
+sector (`GaussianMixtureBayes`, seeded with the seed of the run), and
 `bayes_estimate_knn`, `sqrt(train_size)` nearest neighbors weighted by
 distance. Where the ridge accuracy falls to 0.5, ceilings at 0.5 mean the
 two sectors overlap (decoherence), ceilings well above 0.5 mean the charge
-is still in `<Z_k>` but not linearly (learnability transition). After a
-sweep over `N` and `p`,
+is still in `<Z_k>` but not linearly (learnability transition). At high `p`
+the measured qubits split a sector into several clusters, which one
+Gaussian blurs: there the QDA can fall below the ridge readout, and the
+mixture and the K-NN are the ceilings to read. After a sweep over `N` and
+`p`, with 500 samples per run so that these clusters are dense enough to
+see,
 
 ```bash
-uv run python experiments/QELM_Q/plot_bayes_ceiling.py outputs/exp_QELM_Q/<date_time> --h 1
+N_VALUES="4 6" H_VALUES=1 P_VALUES="0 0.5 1" L=500 ./experiments/QELM_Q/exp_QELM_Q.sh
+uv run python experiments/QELM_Q/plot_bayes_ceiling.py outputs/exp_QELM_Q/<date_time>
 ```
 
-writes `bayes_ceiling.png` (the ridge accuracy against `p` per `N`, the QDA
-ceiling dashed and the K-NN one dash-dotted in the same color; `--no-ceilings`
-draws the ridge alone) and `qda_contours.png` (per `(N, p)`, the test
-`<Z_k>` on their PCA plane colored by sector, with the 1 and 2 sigma ellipses
-of the Gaussians fitted by the QDA), each with its `.json`. `--h`, `--t`,
-`--final` pick one setting of a sweep that holds several, `--p` the columns
-of the contour figure.
+writes, each with its `.json`:
+
+- `bayes_ceiling.png`: the ridge accuracy against `p` per `N`, with the QDA
+  ceiling dashed, the GMM one dotted and the K-NN one dash-dotted in the
+  same color (`--no-ceilings` draws the ridge alone);
+- on the PCA plane of the test `<Z_k>`, one panel per `(N, p)`, the samples
+  colored by sector and: `qda_contours.png`, the 1 and 2 sigma ellipses of
+  the QDA Gaussians; `gmm_contours.png`, the contour lines of the mixture
+  density of each sector and the 1 sigma ellipse of each component;
+  `ridge_regions.png` and `knn_regions.png`, the decision regions of the
+  ridge readout and of the K-NN on the plane, with their misclassified test
+  samples crossed. The regions are the slice of a classifier of all `Ns`
+  coordinates by the plane through the mean of the samples, so a sample far
+  from the plane can lie in the region of the other class and still be
+  right; the crosses are the true mistakes.
+
+`--h`, `--t`, `--final` pick one setting of a sweep that holds several,
+`--p` the columns of the PCA figures.
 
 ### Is the QDA ceiling enough? QDA against GMM, SVM and K-NN (issue #200)
 

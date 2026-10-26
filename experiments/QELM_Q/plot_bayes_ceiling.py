@@ -2,43 +2,57 @@
 """Draw the Bayes ceilings of a p-sweep of exp_QELM_Q (issue #202).
 
 Reads the run folders written by ``exp_QELM_Q.sh`` (one per ``N``, seed and
-``p``), averages over the seeds and draws two figures in the sweep folder:
+``p``), averages over the seeds and draws five figures in the sweep folder:
 
 - ``bayes_ceiling.png``: the accuracy of the ridge readout of ``Q`` from
   ``<Z_k>`` against ``p``, one solid curve per size ``N`` (finite-size
-  scaling), with, in the same color, its two ceilings: the QDA
-  (``bayes_estimate_qda``, dashed) and the K-NN (``bayes_estimate_knn``,
-  dash-dotted), and chance (0.5, dotted). ``--no-ceilings`` leaves the
+  scaling), with, in the same color, its three ceilings: the QDA
+  (``bayes_estimate_qda``, dashed), the mixture of Gaussians
+  (``bayes_estimate_gmm``, dotted) and the K-NN (``bayes_estimate_knn``,
+  dash-dotted), and chance (0.5, gray dotted). ``--no-ceilings`` leaves the
   ceilings out.
-- ``qda_contours.png``: one panel per ``(N, p)``, the test ``<Z_k>`` of one
-  run projected on their plane of largest variance (PCA), colored by
-  charge sector, and the 1 and 2 sigma ellipses of the Gaussian ``f_k``
-  fitted by the QDA on the training samples of each sector.
+- Four figures on the PCA plane, one panel per ``(N, p)``: the test
+  ``<Z_k>`` of one run projected on their plane of largest variance,
+  colored by charge sector, with
+
+  - ``qda_contours.png``: the 1 and 2 sigma ellipses of the Gaussian
+    ``f_k`` fitted by the QDA to each sector;
+  - ``gmm_contours.png``: the contour lines of the mixture of Gaussians
+    fitted to each sector, and the 1 sigma ellipse of each component;
+  - ``ridge_regions.png`` and ``knn_regions.png``: the decision regions of
+    the ridge readout and of the K-NN on the plane, with the test samples
+    they get wrong crossed.
 
 Reading them together: where the ridge accuracy falls to 0.5,
 
-- ceilings at 0.5 and ellipses on top of each other: the sectors overlap,
+- ceilings at 0.5 and densities on top of each other: the sectors overlap,
   the information is erased (decoherence);
-- ceilings well above 0.5 and ellipses apart: the information is in
-  ``<Z_k>`` but not linearly (learnability transition).
+- ceilings well above 0.5 and densities apart: the information is in
+  ``<Z_k>`` but not linearly (learnability transition): the ridge boundary
+  is a straight line through clusters that the K-NN regions and the mixture
+  contours follow.
 
-The QDA of the contours is refitted from the ``.npz`` of the run, on the
-same split as the run, so its means and covariances are those behind
-``bayes_estimate_qda``. Each figure is written with its data
-(:func:`QELM.utils.plots.save_figure`).
+Every model is refitted from the ``.npz`` of the run, on the split of the
+run (and with its seed for the mixture), so it is the model behind the
+ceiling it illustrates; the ridge readout is the weights ``W`` of the run.
+Each figure is written with its data (:func:`QELM.utils.plots.save_figure`).
 
 The sweep must hold one value of ``TFIM.h``, ``evolution.t`` and
 ``final_measurement``, or the one to plot is chosen with ``--h``, ``--t``
-and ``--final``:
+and ``--final``. 500 samples per run (``L=500``) give clusters dense enough
+to read at ``p = 1``:
 
+    N_VALUES="4 6" H_VALUES=1 P_VALUES="0 0.5 1" L=500 \\
+        ./experiments/QELM_Q/exp_QELM_Q.sh
     uv run python experiments/QELM_Q/plot_bayes_ceiling.py \\
-        outputs/exp_QELM_Q/<date_time> --h 1 --p 0 0.5 1
+        outputs/exp_QELM_Q/<date_time> --p 0 0.5 1
 """
 
 from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -46,13 +60,21 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
-from QELM.evaluation.bayes_optimal import QDA
+from QELM.evaluation.bayes_optimal import (
+    GMM_COMPONENTS,
+    QDA,
+    QDA_REG_PARAM,
+    GaussianMixtureBayes,
+    knn_classifier,
+)
 from QELM.utils import latest_sweep, load_sweep, summarize
 from QELM.utils.plots import (
     COLORS,
     color_map,
     draw_companion,
     draw_curve,
+    draw_decision_regions,
+    draw_gmm_contours,
     draw_qda_contours,
     save_figure,
     sizes,
@@ -70,14 +92,25 @@ KEYS = (
 )
 # Parameters that the plotted runs must share.
 FIXED = ("h", "t", "final")
-METRICS = ("accuracy", "bayes_estimate_qda", "bayes_estimate_knn")
+METRICS = (
+    "accuracy",
+    "bayes_estimate_qda",
+    "bayes_estimate_gmm",
+    "bayes_estimate_knn",
+)
 # (metric, legend name, line style) of the ceilings.
 CEILINGS = (
     ("bayes_estimate_qda", "QDA", "--"),
+    ("bayes_estimate_gmm", "GMM", ":"),
     ("bayes_estimate_knn", "K-NN", "-."),
 )
-# Same regularization as evaluate_bayes_optimal_limit.
-REG_PARAM = 1.0e-6
+# Figures on the PCA plane: name -> (file name, title).
+PLANES = {
+    "qda": ("qda_contours", "QDA densities"),
+    "gmm": ("gmm_contours", f"Mixtures of {GMM_COMPONENTS} Gaussians"),
+    "ridge": ("ridge_regions", "Ridge decision regions"),
+    "knn": ("knn_regions", "K-NN decision regions"),
+}
 NPZ = "exp_QELM_Q.npz"
 
 
@@ -127,7 +160,8 @@ def draw_ceilings(
     Args:
         rows: Runs of one ``(h, t, final)``, from :func:`select_runs`.
         values: Their ``h``, ``t`` and ``final``.
-        ceilings: Draw the QDA and K-NN ceilings of each size, in its color.
+        ceilings: Draw the QDA, GMM and K-NN ceilings of each size, in its
+            color.
 
     Returns:
         The open figure.
@@ -168,42 +202,113 @@ def draw_ceilings(
     return fig
 
 
-def fit_run(run_dir: Path) -> tuple[QDA, np.ndarray, np.ndarray]:
-    """Refit the QDA of a run on its training samples.
+@dataclass(frozen=True)
+class RunFit:
+    """The models of one run, refitted on its split.
+
+    Attributes:
+        qda: The QDA of ``bayes_estimate_qda``.
+        gmm: The mixture of ``bayes_estimate_gmm``.
+        knn: The K-NN of ``bayes_estimate_knn``.
+        W: The ridge weights of the run, bias last, shape ``(d + 1,)``.
+        threshold: Midpoint of the two charges: the ridge readout predicts
+            the larger charge at or above it.
+        X_test: The test ``<Z_k>`` (bias column dropped), ``(n_test, d)``.
+        y_test: Their charges, ``(n_test,)``.
+    """
+
+    qda: QDA
+    gmm: GaussianMixtureBayes
+    knn: Any
+    W: np.ndarray
+    threshold: float
+    X_test: np.ndarray
+    y_test: np.ndarray
+
+    @property
+    def classes(self) -> np.ndarray:
+        """The two charges, sorted."""
+        return np.asarray(self.qda.classes_)
+
+    def predict_ridge(self, X: np.ndarray) -> np.ndarray:
+        """Charge given by the ridge readout, as ``accuracy`` counts it."""
+        y = np.hstack([X, np.ones((len(X), 1))]) @ self.W
+        low, high = self.classes
+        return np.where(y >= self.threshold, high, low)
+
+
+def fit_run(run_dir: Path, seed: int) -> RunFit:
+    """Refit the models of a run on its training samples.
 
     Args:
         run_dir: Folder of one run, holding :data:`NPZ`.
+        seed: Seed of the run, the ``random_state`` of its mixture.
 
     Returns:
-        The fitted QDA, the test ``<Z_k>`` (bias column dropped) and their
-        charges.
+        The :class:`RunFit`.
     """
     with np.load(run_dir / NPZ) as data:
         X, Y, n_test = data["X"][:, :-1], data["Y"], len(data["y_test"])
+        W = np.ravel(data["W"])
     train = len(Y) - n_test
-    qda = QDA(reg_param=REG_PARAM, tol=0.0).fit(X[:train], Y[:train])
-    return qda, X[train:], Y[train:]
+    X_train, y_train = X[:train], Y[:train]
+    qda = QDA(reg_param=QDA_REG_PARAM, tol=0.0).fit(X_train, y_train)
+    gmm = GaussianMixtureBayes(n_components=GMM_COMPONENTS, random_state=seed)
+    knn = knn_classifier(train).fit(X_train, y_train)
+    return RunFit(
+        qda=qda,
+        gmm=gmm.fit(X_train, y_train),
+        knn=knn,
+        W=W,
+        threshold=float(np.mean(qda.classes_)),
+        X_test=X[train:],
+        y_test=Y[train:],
+    )
 
 
-def draw_contours(
+def draw_panel(ax: Any, fit: RunFit, method: str) -> dict[str, Any]:
+    """Draw one model of a run on the PCA plane of its test samples.
+
+    Args:
+        ax: Axis to draw on.
+        fit: The models of the run.
+        method: A key of :data:`PLANES`.
+
+    Returns:
+        What the drawing function of :mod:`QELM.utils.plots.bayes` returns.
+    """
+    names = [f"Q = {q:g}" for q in fit.classes]
+    data = (ax, fit.X_test, fit.y_test)
+    if method == "qda":
+        return draw_qda_contours(*data, fit.qda, names=names, colors=COLORS[:2])
+    if method == "gmm":
+        return draw_gmm_contours(*data, fit.gmm, names=names, colors=COLORS[:2])
+    predict = {"ridge": fit.predict_ridge, "knn": fit.knn.predict}[method]
+    return draw_decision_regions(
+        *data, predict, fit.classes, names=names, colors=COLORS[:2]
+    )
+
+
+def draw_plane(
     sweep_dir: Path,
     rows: Sequence[dict[str, Any]],
     values: dict[str, Any],
+    method: str = "qda",
     p_values: Sequence[float] | None = None,
 ) -> tuple[Figure, dict[str, Any]]:
-    """Draw the QDA contours on the PCA plane, one panel per ``(N, p)``.
+    """Draw one model on the PCA plane, one panel per ``(N, p)``.
 
     Args:
         sweep_dir: Folder of the sweep.
         rows: Runs of one ``(h, t, final)``, from :func:`select_runs`.
         values: Their ``h``, ``t`` and ``final``.
+        method: A key of :data:`PLANES`.
         p_values: Values of ``p`` to draw, default every value of the
             sweep. A point with several seeds draws the smallest seed.
 
     Returns:
-        The open figure and, per panel ``"N<N>_p<p>"``, the plane and the
-        projected Gaussians (:func:`~QELM.utils.plots.draw_qda_contours`)
-        with the run drawn and its two ceilings.
+        The open figure and, per panel ``"N<N>_p<p>"``, the run drawn, its
+        ridge accuracy and ceilings, and what :func:`draw_panel` returns.
     """
     Ns = sorted({int(r["N"]) for r in rows})
     ps = sorted({float(r["p"]) for r in rows} if p_values is None else p_values)
@@ -225,27 +330,25 @@ def draw_contours(
                 ax.set_axis_off()
                 continue
             run = runs[0]
-            qda, X_test, y_test = fit_run(sweep_dir / run["run"])
-            names = [f"Q = {q:g}" for q in qda.classes_]
-            plane = draw_qda_contours(
-                ax, X_test, y_test, qda, names=names, colors=COLORS[:2]
+            fit = fit_run(sweep_dir / run["run"], int(run["seed"]))
+            drawn = draw_panel(ax, fit, method)
+            scores = ", ".join(
+                f"{name} {run[metric]:.2f}"
+                for metric, name in (
+                    ("accuracy", "ridge"),
+                    *((m, n) for m, n, _ in CEILINGS),
+                )
             )
-            ax.set_title(
-                f"N = {N}, p = {p:g}\nQDA {run['bayes_estimate_qda']:.2f}, "
-                f"ridge {run['accuracy']:.2f}",
-                fontsize=12,
-            )
+            ax.set_title(f"N = {N}, p = {p:g}\n{scores}", fontsize=10)
             extra[f"N{N}_p{p:g}"] = {
                 "run": run["run"],
-                "accuracy": run["accuracy"],
-                "bayes_estimate_qda": run["bayes_estimate_qda"],
-                "bayes_estimate_knn": run["bayes_estimate_knn"],
-                **plane,
+                **{metric: run[metric] for metric in METRICS},
+                **drawn,
             }
     axes[0, 0].legend(fontsize=8)
+    title = PLANES[method][1]
     fig.suptitle(
-        rf"QDA densities on the PCA plane of $\langle Z_k \rangle$, "
-        f"{subtitle(values)}"
+        rf"{title} on the PCA plane of $\langle Z_k \rangle$, {subtitle(values)}"
     )
     return fig, extra
 
@@ -255,26 +358,28 @@ def plot_sweep(
     ceilings: bool = True,
     p_values: Sequence[float] | None = None,
     **fixed: Any,
-) -> tuple[Path, Path]:
-    """Write ``bayes_ceiling.png`` and ``qda_contours.png`` with their data.
+) -> dict[str, Path]:
+    """Write ``bayes_ceiling.png`` and the figures of :data:`PLANES`.
 
     Args:
         sweep_dir: Folder of the sweep.
         ceilings: As in :func:`draw_ceilings`.
-        p_values: As in :func:`draw_contours`.
+        p_values: As in :func:`draw_plane`.
         fixed: ``h``, ``t``, ``final`` to keep, as in :func:`select_runs`.
 
     Returns:
-        The paths of the two PNG files.
+        The path of each PNG file, ``"ceiling"`` and the keys of
+        :data:`PLANES`; each has its ``.json`` next to it.
     """
     rows, values = select_runs(load_sweep(sweep_dir, keys=KEYS), **fixed)
     fig = draw_ceilings(rows, values, ceilings)
-    accuracy_png = save_figure(fig, sweep_dir, "bayes_ceiling", data=values)
+    out = {"ceiling": save_figure(fig, sweep_dir, "bayes_ceiling", data=values)}
     plt.close(fig)
-    fig, extra = draw_contours(sweep_dir, rows, values, p_values)
-    contours_png = save_figure(fig, sweep_dir, "qda_contours", data=extra)
-    plt.close(fig)
-    return accuracy_png, contours_png
+    for method, (name, _) in PLANES.items():
+        fig, extra = draw_plane(sweep_dir, rows, values, method, p_values)
+        out[method] = save_figure(fig, sweep_dir, name, data=extra)
+        plt.close(fig)
+    return out
 
 
 def main() -> None:
@@ -296,12 +401,12 @@ def main() -> None:
         help="final_measurement to plot",
     )
     parser.add_argument(
-        "--p", type=float, nargs="+", default=None, help="p of the contour panels"
+        "--p", type=float, nargs="+", default=None, help="p of the PCA panels"
     )
     parser.add_argument(
         "--no-ceilings",
         action="store_true",
-        help="draw the ridge accuracy only, without the QDA and K-NN ceilings",
+        help="draw the ridge accuracy only, without the ceilings",
     )
     args = parser.parse_args()
     sweep_dir = args.sweep_dir or latest_sweep(Path("outputs") / "exp_QELM_Q")
@@ -313,7 +418,7 @@ def main() -> None:
         h=args.h,
         t=args.t,
         final=final,
-    ):
+    ).values():
         print(f"Figure: {png}")
 
 

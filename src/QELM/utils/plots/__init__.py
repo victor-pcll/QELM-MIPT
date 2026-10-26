@@ -11,15 +11,22 @@ Kept out of ``QELM.utils`` on purpose: Matplotlib is a dev dependency, so
   their comparison;
 - :mod:`~QELM.utils.plots.heatmap`: color maps of a metric over a sweep of
   two parameters;
-- :mod:`~QELM.utils.plots.bayes`: the samples and the Gaussians of the
-  QDA on the plane of the PCA (issue #202);
+- :mod:`~QELM.utils.plots.bayes`: the samples with the densities of the
+  QDA and of the mixtures, or the decision regions of a classifier, on the
+  plane of the PCA (issue #202);
 - :mod:`~QELM.utils.plots.io`: :func:`save_figure`, the figure and its data
   in the output folder of the run.
 """
 
 from __future__ import annotations
 
-from QELM.utils.plots.bayes import draw_qda_contours, ellipse
+from QELM.utils.plots.bayes import (
+    draw_decision_regions,
+    draw_gmm_contours,
+    draw_qda_contours,
+    ellipse,
+    gaussian_density,
+)
 from QELM.utils.plots.heatmap import (
     SweepGrid,
     cell_edges,
@@ -59,12 +66,15 @@ __all__ = [
     "compare_same_size",
     "draw_companion",
     "draw_curve",
+    "draw_decision_regions",
+    "draw_gmm_contours",
     "draw_heatmap",
     "draw_qda_contours",
     "draw_references",
     "draw_residuals",
     "ellipse",
     "figure_data",
+    "gaussian_density",
     "print_comparison",
     "same_size",
     "save_figure",
