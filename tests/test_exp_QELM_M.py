@@ -14,7 +14,7 @@ import pytest
 from omegaconf import OmegaConf
 
 from QELM import TransverseFieldIsingModel, load_config
-from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.evaluation.metrics import accuracy, balanced_accuracy, majority_accuracy
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -82,11 +82,11 @@ def _spy_run(monkeypatch, cfg):
     return module.run(cfg), propagators, measured
 
 
-def test_every_sample_starts_from_the_embedded_state(monkeypatch) -> None:
-    """Each sample evolves the embedded state of AncillaChargeSectorEmbedding,
+def test_every_sample_starts_from_the_encoded_state(monkeypatch) -> None:
+    """Each sample evolves the encoded state of AncillaChargeSectorEncoding,
     not the collapsed state left by the previous sample (issue #101)."""
     cfg = load_config(OVERRIDES)
-    rho0 = AncillaChargeSectorEmbedding.from_config(cfg).rho()
+    rho0 = AncillaChargeSectorEncoding.from_config(cfg).rho()
     _, propagators, measured = _spy_run(monkeypatch, cfg)
     steps = 5  # default projective_measurement.nbr_time_evolution
     assert len(propagators) == L and len(measured) == L * steps
@@ -134,7 +134,7 @@ def test_cached_propagator_matches_evolve() -> None:
     computes, so caching U per sample changes no result."""
     cfg = load_config(OVERRIDES)
     model = TransverseFieldIsingModel.from_config(cfg)
-    rho = AncillaChargeSectorEmbedding.from_config(cfg).rho()
+    rho = AncillaChargeSectorEncoding.from_config(cfg).rho()
     dt = float(cfg.evolution.t) / (N - 1)
     U = model.propagator(dt=dt)
     np.testing.assert_allclose(

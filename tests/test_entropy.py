@@ -13,7 +13,7 @@ import pytest
 import scipy.sparse as sp
 
 from QELM import load_config
-from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.evaluation import (
     entanglement_spectrum,
     mean_single_qubit_entropy,
@@ -308,11 +308,11 @@ def test_omitted_sector_still_checks_the_state_shape() -> None:
         von_neumann_entropy(np.ones((3, 3)) / 3)
 
 
-def test_ancilla_entropy_of_the_embedding() -> None:
-    """The charge-sector embedding entangles the ancilla with S: 1 bit, and
+def test_ancilla_entropy_of_the_encoding() -> None:
+    """The charge-sector encoding entangles the ancilla with S: 1 bit, and
     the ancilla metric of evaluation.metrics is the case A = {0}."""
     cfg = load_config(["N=5"])
-    emb = AncillaChargeSectorEmbedding.from_config(cfg)
+    emb = AncillaChargeSectorEncoding.from_config(cfg)
     rho = emb.density_matrix()
     assert von_neumann_entropy(emb.state(), [0]) == pytest.approx(1.0)
     assert metrics.von_neumann_entropy(rho, 5) == pytest.approx(

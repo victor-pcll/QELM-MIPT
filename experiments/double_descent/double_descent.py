@@ -15,7 +15,7 @@ linear readout of local observables.
    images of those digits, and map each to an angle in ``[0, pi]``
    (:class:`QELM.datasets.AngleEncoder`).
 3. Encode the angles in a product state, qubit ``i`` in
-   ``R_y(theta_i)|0>`` (:class:`QELM.embedding.RotationEmbedding`), and
+   ``R_y(theta_i)|0>`` (:class:`QELM.encoding.RotationEncoding`), and
    apply one fixed quench ``U = exp(-i H t)``: a single TFIM, drawn once
    for the seed and shared by every image. Measure the one-site observables
    ``<P_i>`` and the correlators ``<A_i B_j>`` of the final state: the
@@ -78,7 +78,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
 from QELM.datasets import AngleEncoder, load_digit_classes
-from QELM.embedding import RotationEmbedding
+from QELM.encoding import RotationEncoding
 from QELM.evaluation.double_descent import (
     SWEEP_STATISTICS,
     add_bias,
@@ -110,7 +110,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Args:
         cfg: Composed config (``load_config(config_name="double_descent")``
             or Hydra). Reads ``N``, ``TFIM``, ``evolution.t``,
-            ``rotation_embedding``, ``training.alpha`` and the
+            ``rotation_encoding``, ``training.alpha`` and the
             ``double_descent`` block.
 
     Returns:
@@ -151,9 +151,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     y_pool, y_test = data.y_train[pool], data.y_test[test]
 
     # 3. The encoded states and the quench: one TFIM for every image.
-    embedding = RotationEmbedding.from_config(cfg)
+    encoding = RotationEncoding.from_config(cfg)
     names, ops = observable_operators(N, single, pairs)
-    psi_pool, psi_test = embedding.states(theta_pool), embedding.states(theta_test)
+    psi_pool, psi_test = encoding.states(theta_pool), encoding.states(theta_test)
     features: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     model = TransverseFieldIsingModel.from_config(cfg)
     t = float(cfg.evolution.t)
@@ -165,7 +165,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     # t = 0: the simulated features against their closed form.
     t0_pool = expectations(psi_pool, ops)
-    closed = product_state_features(embedding.bloch_vectors(theta_pool), single, pairs)
+    closed = product_state_features(encoding.bloch_vectors(theta_pool), single, pairs)
     t0_max_deviation = float(np.max(np.abs(t0_pool - closed)))
     features["qelm_t0"] = (
         add_bias(t0_pool),

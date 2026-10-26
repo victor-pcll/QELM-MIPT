@@ -12,12 +12,12 @@ Scientific parameters and secrets live in different files.
 | --- | --- |
 | `defaults` | `models: TFIM`, `training/measurements: projective`, `training/readout@single_observable: single`, `training/readout@double_observable: double`, `training/regression: ridge`, `evaluation: default` |
 | `seed` | Integer passed to NumPy at startup. See [Code quality](code-quality.md). |
-| `ancilla_charge_sector.N` | Total qubit count of the initial state, `${${models}.N}`: it follows the selected Hamiltonian. Read by `AncillaChargeSectorEmbedding.from_config(cfg)` |
+| `ancilla_charge_sector.N` | Total qubit count of the initial state, `${${models}.N}`: it follows the selected Hamiltonian. Read by `AncillaChargeSectorEncoding.from_config(cfg)` |
 | `samples.L`, `samples.train_fraction`, `samples.train_size` | Number of samples and training split, `train_size = int(0.7 * L)`. Not read by the pipeline yet |
 | `single_observable.observables`, `double_observable.pairs` | Features measured on the final state: `<O_i>` for each label (default `[Z]`), `<A_i B_j>` for each pair (default `[[Z, Z]]`). Several entries allowed; `[]` or a missing block gives no feature. Read by `SingleObservable.from_config(cfg)` / `DoubleObservable.from_config(cfg)` |
 | `single_observable.N`, `double_observable.N` | Qubit count, `${${models}.N}`. `operators()` uses it when called without `N`; `operators(N=...)` overrides it |
 | `projective_measurement.qubits` | Sites measured by `ProjectiveMeasurement`, in order; `null` (default) measures every system qubit `Nr .. N-1`. Read by `ProjectiveMeasurement.from_config(cfg)`, which also works without the block |
-| `projective_measurement.Nr` | Ancilla qubits at the start of the chain, default `1` (the single ancilla of `AncillaChargeSectorEmbedding`). With `qubits: null` they are never measured; an explicit `qubits` list ignores it. Without the key, `Nr = 0` |
+| `projective_measurement.Nr` | Ancilla qubits at the start of the chain, default `1` (the single ancilla of `AncillaChargeSectorEncoding`). With `qubits: null` they are never measured; an explicit `qubits` list ignores it. Without the key, `Nr = 0` |
 | `projective_measurement.p` | Probability of measuring each target qubit, default `1.0`. `measure(rho)` uses it; `measure(rho, p=...)` overrides it; without the key, `p = 1.0`. It is the only measurement probability in the config: override it with `projective_measurement.p=0.5` |
 | `checkpoint` | Where the run writes its `.npz`. See [Checkpoints and local data](checkpoints.md). |
 | `hydra.run.dir` | `outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}` |
@@ -62,7 +62,7 @@ cp .env.example .env
 Three top-level keys name the qubit counts everywhere (issue #88):
 
 - `N`: the **total** number of qubits, ancilla included. Each model file sets its default (`conf/models/TFIM.yaml`: 10); override it with `N=6`.
-- `Nr`: the number of **ancilla** (readout) qubits, the first sites of the chain. Default 1 (`conf/config.yaml`), which matches `AncillaChargeSectorEmbedding`.
+- `Nr`: the number of **ancilla** (readout) qubits, the first sites of the chain. Default 1 (`conf/config.yaml`), which matches `AncillaChargeSectorEncoding`.
 - `Ns`: the number of **system** qubits, never set by hand: `Ns: ${int:${sub:${N},${Nr}}}`, so `N = Ns + Nr` always holds.
 
-The model block (`TFIM.N`), the embedding (`ancilla_charge_sector.N`), the readouts (`single_observable.N`, `double_observable.N`) and the projective measurement (`projective_measurement.Nr`) only interpolate these keys. `load_config` and the experiment scripts call `QELM.check_qubit_counts(cfg)`, which returns `(N, Ns, Nr)` and raises `ValueError` when a copy disagrees with its source, for example after `TFIM.N=6` instead of `N=6`. Scripts take the counts from it, never from a model or an embedding. In Python, `Ns` and `Nr` are also the attribute names (`Embedding.Ns`, `ProjectiveMeasurement.Nr`), and `QELM.physics.qubit_counts(rho, Nr)` returns `(N, Ns, Nr)` for a density matrix.
+The model block (`TFIM.N`), the encoding (`ancilla_charge_sector.N`), the readouts (`single_observable.N`, `double_observable.N`) and the projective measurement (`projective_measurement.Nr`) only interpolate these keys. `load_config` and the experiment scripts call `QELM.check_qubit_counts(cfg)`, which returns `(N, Ns, Nr)` and raises `ValueError` when a copy disagrees with its source, for example after `TFIM.N=6` instead of `N=6`. Scripts take the counts from it, never from a model or an encoding. In Python, `Ns` and `Nr` are also the attribute names (`Encoding.Ns`, `ProjectiveMeasurement.Nr`), and `QELM.physics.qubit_counts(rho, Nr)` returns `(N, Ns, Nr)` for a density matrix.
