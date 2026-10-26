@@ -74,7 +74,7 @@ def test_same_features_and_scores_as_the_tfim_run(model: str) -> None:
     np.testing.assert_array_equal(out["X"][:, -1], 1.0)
     assert set(np.unique(out["X"][:, :-1])) <= {-1.0, 1.0}
     assert set(np.unique(out["Y"])) <= {-1.0, 1.0}
-    for key in ("nmse", "r2", "accuracy", "balanced_accuracy", "accuracy_optimal"):
+    for key in ("nmse", "r2", "accuracy", "balanced_accuracy"):
         assert np.isfinite(out[key])
     # Every system qubit measured at the last step: the ancilla is pure.
     np.testing.assert_allclose(out["S_vN"], 0.0, atol=1e-8)
@@ -86,9 +86,7 @@ def test_no_measurement_leaves_the_reference_maximally_mixed(model: str) -> None
     out = _load_script().run(
         load_config(_overrides(model, "projective_measurement.p=0"))
     )
-    np.testing.assert_allclose(out["Z0"], 0.0, atol=1e-10)
     np.testing.assert_allclose(out["S_vN"], 1.0, atol=1e-9)
-    assert out["accuracy_optimal"] == pytest.approx(0.5)
 
 
 @pytest.mark.parametrize("model", CIRCUITS)

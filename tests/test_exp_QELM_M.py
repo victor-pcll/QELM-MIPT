@@ -144,12 +144,21 @@ def test_cached_propagator_matches_evolve() -> None:
 
 @pytest.mark.parametrize("p", [0.0, 0.5, 1.0])
 def test_target_is_the_measured_reference_label(p: float) -> None:
-    """Issue #104: Y[i] is the outcome +-1 of R measured in Z, and Z0[i] is
-    <Z_0> just before, in [-1, 1]."""
+    """Issue #104: Y[i] is the outcome +-1 of R measured in Z."""
     out = _load_script().run(load_config([*OVERRIDES, f"projective_measurement.p={p}"]))
-    assert out["Y"].shape == out["Z0"].shape == (L,)
+    assert out["Y"].shape == (L,)
     assert set(np.unique(out["Y"])) <= {-1.0, 1.0}
-    assert np.all(np.abs(out["Z0"]) <= 1 + 1e-12)
+
+
+def test_no_bayes_ceiling_from_the_exact_ancilla_state() -> None:
+    """Issue #195: the readout sees only the record M, so the exact <Z_0> of
+    the ancilla and the accuracy_optimal built on it, P(Y | rho_R) rather
+    than P(Y | M), are no longer computed, saved or reported."""
+    module = _load_script()
+    out = module.run(load_config(OVERRIDES))
+    assert "Z0" not in out
+    assert "accuracy_optimal" not in out
+    assert "accuracy_optimal" not in module.EXTRA_METRICS
 
 
 @pytest.mark.parametrize("p", [0.0, 0.5, 1.0])
@@ -167,12 +176,11 @@ def test_label_is_balanced_whatever_p(p: float) -> None:
 
 def test_no_measurement_leaves_the_reference_maximally_mixed() -> None:
     """p = 0: R does not evolve and the system is never measured, so
-    rho_R = I / 2 at the end: Z0 = 0 and S(rho_R) = 1 bit in every sample.
-    The record holds no information on the label."""
+    rho_R = I / 2 at the end: S(rho_R) = 1 bit in every sample. The record
+    holds no information on the label: every feature but the bias is 0."""
     out = _load_script().run(load_config([*OVERRIDES, "projective_measurement.p=0"]))
-    np.testing.assert_allclose(out["Z0"], 0.0, atol=1e-10)
     np.testing.assert_allclose(out["S_vN"], 1.0, atol=1e-9)
-    assert out["accuracy_optimal"] == pytest.approx(0.5)
+    np.testing.assert_array_equal(out["X"][:, :-1], 0.0)
 
 
 def test_full_measurement_reveals_the_label_through_the_parity() -> None:
@@ -186,8 +194,6 @@ def test_full_measurement_reveals_the_label_through_the_parity() -> None:
     Ns = N - 1
     parity = (-1) ** (Ns // 2) * np.prod(out["M"][:, -1, :], axis=1)
     np.testing.assert_array_equal(out["Y"], parity)
-    np.testing.assert_allclose(out["Z0"], out["Y"], atol=1e-10)
-    assert out["accuracy_optimal"] == pytest.approx(1.0)
 
 
 def test_p_override_sets_the_share_of_measured_qubits() -> None:
@@ -345,14 +351,6 @@ def test_old_step_count_keys_are_rejected(old_key: str) -> None:
         _load_script().run(load_config([*OVERRIDES, f"+{old_key}=2"]))
 
 
-def _binary_entropy(q: np.ndarray) -> np.ndarray:
-    """H(q) = -q log2 q - (1 - q) log2(1 - q), with 0 log 0 = 0."""
-    q = np.clip(q, 0.0, 1.0)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        h = -q * np.log2(q) - (1 - q) * np.log2(1 - q)
-    return np.nan_to_num(h, nan=0.0)
-
-
 @pytest.mark.parametrize("p", [1.0, 0.5, 0.1])
 def test_ancilla_entropies_are_recorded(p: float) -> None:
     """One von Neumann and one Rényi-1 entropy of the ancilla per sample, in
@@ -366,9 +364,6 @@ def test_ancilla_entropies_are_recorded(p: float) -> None:
     assert np.all(S_vN >= -1e-12) and np.all(S_vN <= 1.0 + 1e-12)
     assert out["S_vN_mean"] == pytest.approx(np.mean(S_vN))
     assert out["S_renyi_1_mean"] == pytest.approx(np.mean(S_renyi_1))
-    # Dephasing rho_R in the Z basis can only raise its entropy, so S(rho_R)
-    # is at most the binary entropy of its diagonal (1 +- <Z_0>) / 2.
-    assert np.all(S_vN <= _binary_entropy((1 + out["Z0"]) / 2) + 1e-9)
 
 
 def test_measuring_every_qubit_purifies_the_ancilla() -> None:

@@ -61,10 +61,11 @@ def test_notebook_runs_the_three_sweeps_and_plots(
         assert len(list((sweep_dir / model).glob("N3_*"))) == 8
         table = tables[model]
         assert [(r["p"], r["n_runs"]) for r in table] == [(0.0, 2)] * 2 + [(1.0, 2)] * 2
-        # p = 0: the record is empty, the Bayes classifier is at chance.
+        # p = 0: the record is empty, the ancilla stays maximally mixed.
+        # No Bayes accuracy is recorded any more (#195).
         for r in table:
+            assert "accuracy_optimal_mean" not in r
             if r["p"] == 0.0:
-                assert r["accuracy_optimal_mean"] == pytest.approx(0.5)
                 assert r["S_vN_mean_mean"] == pytest.approx(1.0)
 
     # Curves and heatmaps: one row of panels per model and N.
@@ -82,11 +83,12 @@ def test_notebook_runs_the_three_sweeps_and_plots(
 
     # The comparison: one curve per model in each panel.
     axes_cmp = namespace["axes_cmp"]
-    assert axes_cmp.shape == (1, 3)
+    # Two panels (#195): balanced accuracy against p, NMSE against the ratio.
+    assert axes_cmp.shape == (1, 2)
     for ax in axes_cmp[0]:
         labels = ax.get_legend_handles_labels()[1]
         assert [lab for lab in labels if lab in MODELS] == list(MODELS)
-    assert axes_cmp[0, 2].get_yscale() == "log"
+    assert axes_cmp[0, 1].get_yscale() == "log"
     assert len(shows) == 6  # 3 figures, then 3 for the fixed circuits
     for name in ("metrics_vs_alpha_ratio", "heatmaps_p_alpha_ratio"):
         assert (sweep_dir / f"{name}.png").is_file()
