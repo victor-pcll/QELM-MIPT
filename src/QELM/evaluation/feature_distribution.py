@@ -3,11 +3,12 @@
 The unitary QELM (``experiments/QELM_Z/exp_QELM_Z.py``, or
 ``experiments/QELM_Q/exp_QELM_Q.py`` at ``p = 0``) evolves each sample
 without measurement and reads the one-site expectation values
-``<O_k> = Tr(O_k rho)`` of the system qubits, for each Pauli ``O``. Over the dataset, each ``<O_k>`` is a random
-variable in ``[-1, 1]``: its distribution is the geometry of the features the
-linear readout sees. This module separates these features, summarizes the
-shape of their empirical distribution and compares it with a Gaussian of
-the same mean and standard deviation.
+``<O_k> = Tr(O_k rho)`` of the system qubits, for each Pauli ``O``. Over
+the dataset, each ``<O_k>`` is a random variable in ``[-1, 1]``: its
+distribution is the geometry of the features the linear readout sees. This
+module separates these features, summarizes the shape of their empirical
+distribution and compares it with a Gaussian of the same mean and standard
+deviation.
 
 The convergence of the empirical distribution with the number of samples
 ``n`` is measured by the two-sample Kolmogorov-Smirnov distance to the
