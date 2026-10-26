@@ -20,7 +20,7 @@ Agrawal et al., PRX 14, 041012 (2024), Eq. (B1) (issue #137): the system
 qubits alternate ``|0>, |1>, |0>, |1>, ...`` (charge ``Ns // 2``), and the
 last ``|1>`` is flipped to ``|0>`` for the charge ``Ns // 2 - 1``. For
 ``Ns = 6``: ``|010101>`` and ``|010100>``. The paper then scrambles the
-charge with random U(1) gates (:class:`QELM.models.circuits.U1BrickworkCircuit`).
+charge with random U(1) gates (:class:`QELM.models.circuits.haar.U1BrickworkCircuit`).
 """
 
 from __future__ import annotations
