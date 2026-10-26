@@ -1,12 +1,21 @@
-# Double descent of the QELM on a static image task, MNIST 3 vs 5 (issue
-# #181). Primary config of experiments/double_descent/double_descent.py: the
-# main config, with the pseudo-inverse readout and the blocks below.
+# Double descent of the QELM on a static image task, MNIST 3 vs 5 by default
+# (issue #181), after "Harnessing quantum extreme learning machines for image
+# classification", Phys. Rev. Applied (2025). Primary config of
+# experiments/double_descent/double_descent.py: the main config, with an
+# unregularized ridge readout and the blocks below.
 #
 #   uv run python experiments/double_descent/double_descent.py seed=0
 defaults:
   - config
-  - override training/regression: pinv
   - _self_
+
+# The ridge readout (conf/training/regression/ridge.yaml) without penalty:
+# alpha = 0 is the limit alpha -> 0 of ridge regression, W = pinv(Phi) @ Y,
+# least squares above n_train = rank(Phi) and the minimum-norm interpolation
+# below, which exposes the interpolation peak. Set training.alpha > 0 to
+# regularize it (the peak is then smoothed away).
+training:
+  alpha: 0.0
 
 # One qubit per principal component, no ancilla: the input is the image, not
 # an ancilla entangled with the system.
@@ -34,11 +43,15 @@ double_descent:
   dataset: mnist
   data_dir: data/mnist
   download: true
-  # The binary task: first digit labelled +1, second -1.
-  digits: [3, 5]
+  # The digits to tell apart, two or more: [3, 5] is the binary task of the
+  # issue, [3, 5, 8] or more make it harder. Image of digit classes[k] gets
+  # the label k, and the readout learns its one-hot target (K outputs for K
+  # classes; the prediction is the largest output).
+  classes: [3, 5]
   # Training pool: n_pool images drawn once per seed from the training
   # images; every training set of the sweep is a subset of it. The test set:
-  # n_test images of the test split, null for all of them (1902 for 3 vs 5).
+  # n_test images of the test split of those digits, null for all of them
+  # (1902 for 3 vs 5).
   n_pool: 2000
   n_test: null
   # Observables measured after the quench: <P_i> for each label of single,
@@ -65,5 +78,5 @@ double_descent:
   models: [qelm, qelm_t0, elm, linear]
   elm_activation: relu
   # Also fit a linear readout on every pixel, on all the training images of
-  # the two digits: the classical reference accuracy of this task.
+  # those digits: the classical reference accuracy of this task.
   pixel_baseline: true

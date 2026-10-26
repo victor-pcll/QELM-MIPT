@@ -1,9 +1,11 @@
 """Double descent of a linear readout on fixed features (issue #181).
 
-A readout ``W = Phi^+ y`` (:class:`~QELM.training.PseudoInverseReadout`,
-no penalty) is fitted on ``n_train`` samples of a feature matrix with
-``n_features = rank(Phi)`` independent columns. With
-``alpha = n_train / n_features``:
+A linear readout (:class:`~QELM.training.RidgeReadout`) is fitted on
+``n_train`` samples of a feature matrix with ``n_features = rank(Phi)``
+independent columns, to one-hot targets: ``K`` outputs for ``K`` classes,
+the predicted class being the largest output. With the penalty
+``alpha_ridge = 0`` the readout is ``W = Phi^+ Y``, the limit of ridge
+regression without penalty, and with ``alpha = n_train / n_features``:
 
 - ``alpha < 1``: more weights than equations; the readout interpolates the
   training set (train error 0) with the smallest-norm weights;
@@ -15,9 +17,10 @@ no penalty) is fitted on ``n_train`` samples of a feature matrix with
 
 The peak sits at ``n_train = rank(Phi)``, not at the number of columns: two
 linearly dependent observables (for instance ``<Y_i> = 0`` for a real
-state) shift it. This module computes the features (quantum, closed form at
-``t = 0``, and the classical random-feature baseline) and runs the sweep
-over ``n_train``.
+state) shift it. A ridge penalty ``alpha_ridge > 0`` caps ``||W||`` and
+smooths the peak away. This module computes the features (quantum, closed
+form at ``t = 0``, and the classical random-feature baseline) and runs the
+sweep over ``n_train``.
 """
 
 from __future__ import annotations
@@ -27,9 +30,10 @@ from dataclasses import dataclass
 
 import numpy as np
 import scipy.sparse as sp
+from sklearn.metrics import confusion_matrix  # type: ignore[import-untyped]
 
 from QELM.physics.operators import get_site_operator, pauli
-from QELM.training.regression.pinv import PseudoInverseReadout
+from QELM.training.regression.ridge import RidgeReadout
 
 # Statistics of a sweep, each of shape (n_ratios, n_repeats).
 SWEEP_STATISTICS = (
@@ -223,13 +227,51 @@ def n_train_grid(alpha_ratios: Sequence[float], n_features: int) -> np.ndarray:
     return np.maximum(1, np.rint(ratios * n_features)).astype(np.int64)
 
 
-def classification_error(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """Fraction of ``sign(y_pred)`` different from the labels ``+-1``.
+def one_hot(labels: np.ndarray, n_classes: int) -> np.ndarray:
+    """Return the one-hot targets of class indices ``0 .. n_classes - 1``.
 
-    A prediction of exactly 0 counts as ``+1``.
+    Args:
+        labels: Integer class indices of shape ``(n_samples,)``.
+        n_classes: Number of classes ``K``.
+
+    Returns:
+        Array of shape ``(n_samples, K)``, 1 in the column of the class and
+        0 elsewhere.
     """
-    labels = np.where(np.asarray(y_pred) >= 0, 1.0, -1.0)
-    return float(np.mean(labels != np.asarray(y_true)))
+    labels = np.asarray(labels, dtype=np.int64)
+    return np.eye(n_classes)[labels]
+
+
+def predict_classes(outputs: np.ndarray) -> np.ndarray:
+    """Return the class of each sample: the index of its largest output.
+
+    Args:
+        outputs: Readout outputs of shape ``(n_samples, K)``.
+
+    Returns:
+        Integer array of shape ``(n_samples,)``.
+    """
+    return np.argmax(np.asarray(outputs), axis=1)
+
+
+def classification_error(labels: np.ndarray, outputs: np.ndarray) -> float:
+    """Fraction of samples whose largest output is not their class.
+
+    Args:
+        labels: Class indices of shape ``(n_samples,)``.
+        outputs: Readout outputs of shape ``(n_samples, K)``.
+    """
+    return float(np.mean(predict_classes(outputs) != np.asarray(labels)))
+
+
+def mse(targets: np.ndarray, outputs: np.ndarray) -> float:
+    """Mean squared error over every sample and every output.
+
+    Args:
+        targets: One-hot targets of shape ``(n_samples, K)``.
+        outputs: Readout outputs of the same shape.
+    """
+    return float(np.mean((np.asarray(outputs) - np.asarray(targets)) ** 2))
 
 
 @dataclass
@@ -241,10 +283,11 @@ class SweepResult:
         n_columns: Number of columns, bias included.
         n_train: Training-set sizes, shape ``(n_ratios,)``.
         alpha: ``n_train / n_features``, shape ``(n_ratios,)``.
-        train_mse, test_mse: Mean squared error of the readout output
-            against the labels ``+-1``, shape ``(n_ratios, n_repeats)``.
-        train_error, test_error: Classification error of ``sign(output)``.
-        weight_norm: ``||W||_2`` of the fitted readout.
+        train_mse, test_mse: Mean squared error of the readout outputs
+            against the one-hot targets (:func:`mse`), shape
+            ``(n_ratios, n_repeats)``.
+        train_error, test_error: Classification error of the largest output.
+        weight_norm: Frobenius norm ``||W||`` of the fitted readout.
     """
 
     n_features: int
@@ -264,30 +307,33 @@ class SweepResult:
 
 def double_descent_sweep(
     features_pool: np.ndarray,
-    y_pool: np.ndarray,
+    labels_pool: np.ndarray,
     features_test: np.ndarray,
-    y_test: np.ndarray,
+    labels_test: np.ndarray,
     alpha_ratios: Sequence[float],
     n_repeats: int,
     rng: np.random.Generator,
-    rcond: float | None = None,
+    ridge_alpha: float = 0.0,
+    n_classes: int | None = None,
     n_features: int | None = None,
 ) -> SweepResult:
-    """Fit the pseudo-inverse readout on random subsets of the pool.
+    """Fit the ridge readout on random subsets of the pool.
 
     For each ratio, ``n_repeats`` training sets of ``n_train`` samples are
-    drawn from the pool without replacement; the readout is fitted on each
-    and scored on it and on the whole test set.
+    drawn from the pool without replacement; the readout is fitted on each,
+    to the one-hot targets, and scored on it and on the whole test set.
 
     Args:
         features_pool: Features of the training pool, ``(n_pool, n_columns)``.
-        y_pool: Labels ``+-1`` of the pool.
+        labels_pool: Class indices of the pool, ``(n_pool,)``.
         features_test: Features of the test set, ``(n_test, n_columns)``.
-        y_test: Labels of the test set.
+        labels_test: Class indices of the test set.
         alpha_ratios: Ratios ``n_train / n_features`` to scan.
         n_repeats: Training sets drawn per ratio.
         rng: Generator of the training sets.
-        rcond: Cutoff of the pseudo-inverse (``None`` for NumPy's default).
+        ridge_alpha: Ridge penalty; 0 (default) for the unregularized
+            minimum-norm readout, which shows the interpolation peak.
+        n_classes: Number of classes; ``None`` for the largest label + 1.
         n_features: Number of independent features; ``None`` computes the
             rank of ``features_pool``.
 
@@ -299,6 +345,11 @@ def double_descent_sweep(
     """
     features_pool = np.asarray(features_pool, dtype=np.float64)
     features_test = np.asarray(features_test, dtype=np.float64)
+    labels_pool = np.asarray(labels_pool, dtype=np.int64)
+    labels_test = np.asarray(labels_test, dtype=np.int64)
+    if n_classes is None:
+        n_classes = int(max(labels_pool.max(), labels_test.max())) + 1
+    Y_pool, Y_test = one_hot(labels_pool, n_classes), one_hot(labels_test, n_classes)
     if n_features is None:
         n_features = numerical_rank(features_pool)
     n_train = n_train_grid(alpha_ratios, n_features)
@@ -310,18 +361,18 @@ def double_descent_sweep(
             f"{n_pool} samples: enlarge the pool or lower the largest ratio."
         )
     stats = {key: np.empty((n_train.size, n_repeats)) for key in SWEEP_STATISTICS}
-    readout = PseudoInverseReadout({"rcond": rcond})
+    readout = RidgeReadout({"alpha": ridge_alpha})
     for a, n in enumerate(n_train):
         for r in range(n_repeats):
             subset = rng.choice(n_pool, size=int(n), replace=False)
-            phi, y = features_pool[subset], y_pool[subset]
-            readout.fit(phi, y)
+            phi, Y = features_pool[subset], Y_pool[subset]
+            readout.fit(phi, Y)
             assert readout.W is not None
             fit, pred = readout.predict(phi), readout.predict(features_test)
-            stats["train_mse"][a, r] = float(np.mean((fit - y) ** 2))
-            stats["test_mse"][a, r] = float(np.mean((pred - y_test) ** 2))
-            stats["train_error"][a, r] = classification_error(y, fit)
-            stats["test_error"][a, r] = classification_error(y_test, pred)
+            stats["train_mse"][a, r] = mse(Y, fit)
+            stats["test_mse"][a, r] = mse(Y_test, pred)
+            stats["train_error"][a, r] = classification_error(labels_pool[subset], fit)
+            stats["test_error"][a, r] = classification_error(labels_test, pred)
             stats["weight_norm"][a, r] = float(np.linalg.norm(readout.W))
     return SweepResult(
         n_features=n_features,
@@ -332,14 +383,33 @@ def double_descent_sweep(
     )
 
 
-def full_pool_accuracy(
+def full_pool_fit(
     features_pool: np.ndarray,
-    y_pool: np.ndarray,
+    labels_pool: np.ndarray,
     features_test: np.ndarray,
-    y_test: np.ndarray,
-    rcond: float | None = None,
-) -> float:
-    """Test accuracy of the pseudo-inverse readout fitted on the whole pool."""
-    readout = PseudoInverseReadout({"rcond": rcond})
-    readout.fit(features_pool, y_pool)
-    return 1.0 - classification_error(y_test, readout.predict(features_test))
+    labels_test: np.ndarray,
+    n_classes: int,
+    ridge_alpha: float = 0.0,
+) -> tuple[float, np.ndarray]:
+    """Fit the readout on the whole pool; score it on the test set.
+
+    Args:
+        features_pool: Features of the pool, ``(n_pool, n_columns)``.
+        labels_pool: Class indices of the pool.
+        features_test: Features of the test set.
+        labels_test: Class indices of the test set.
+        n_classes: Number of classes ``K``.
+        ridge_alpha: Ridge penalty.
+
+    Returns:
+        ``(accuracy, confusion)``: the test accuracy, and the confusion
+        matrix of shape ``(K, K)`` whose entry ``[i, j]`` counts the test
+        samples of class ``i`` predicted as class ``j``
+        (``sklearn.metrics.confusion_matrix``).
+    """
+    readout = RidgeReadout({"alpha": ridge_alpha})
+    readout.fit(features_pool, one_hot(labels_pool, n_classes))
+    predicted = predict_classes(readout.predict(features_test))
+    labels_test = np.asarray(labels_test, dtype=np.int64)
+    confusion = confusion_matrix(labels_test, predicted, labels=np.arange(n_classes))
+    return float(np.mean(predicted == labels_test)), np.asarray(confusion)

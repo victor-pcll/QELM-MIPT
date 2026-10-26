@@ -25,7 +25,6 @@ def test_conf_tree_mirrors_the_package() -> None:
         "training/readout/double.yaml",
         "training/regression/linear.yaml",
         "training/regression/ridge.yaml",
-        "training/regression/pinv.yaml",
         "evaluation/default.yaml",
     }
     found = {

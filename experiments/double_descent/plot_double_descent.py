@@ -15,6 +15,13 @@ classification error. The figure is ``double_descent.png`` with its data
 accuracies and peak positions go to ``summary.json``, all in the sweep
 folder.
 
+A second figure, ``confusion_matrices.png`` (with its ``.json``), shows for
+each model the confusion matrix on the test set of the readout fitted on
+the whole pool, summed over the seeds and normalized by row: entry
+``[i, j]`` is the fraction of the test images of digit ``classes[i]``
+predicted as ``classes[j]``. A strong diagonal is a good readout; the
+off-diagonal entries name the digits it confuses.
+
     uv run python experiments/double_descent/plot_double_descent.py \
         outputs/double_descent/<date_time>
 """
@@ -34,6 +41,7 @@ from matplotlib.figure import Figure
 from QELM.utils.plots import color_map, save_figure, subplots
 
 LABELS = {
+    "pixels": "linear on pixels",
     "qelm": "QELM",
     "qelm_t0": "QELM, t = 0",
     "elm": "classical ELM",
@@ -78,6 +86,13 @@ def curve(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return ``(alpha, mean over seeds, standard error over seeds)``.
 
+    The runs share the requested ratios (``double_descent.alpha_ratios``),
+    but not always the actual ones: ``n_train = round(ratio * rank)`` and
+    the rank can differ by one between seeds (a ReLU of the classical ELM
+    that is active on every image of one pool adds no independent column).
+    The points are matched by index and placed at the mean actual ratio;
+    the ratio 1 is exactly 1 for every seed.
+
     Args:
         runs: Output of :func:`load_runs`, every run with the same ratios.
         model: Model name, such as ``"qelm"``.
@@ -85,13 +100,14 @@ def curve(
         reduce: ``"median"`` or ``"mean"`` over the training sets of a seed.
 
     Raises:
-        ValueError: If the runs do not share the same ratios.
+        ValueError: If the runs do not scan the same number of ratios.
     """
-    alpha = runs[0]["arrays"][f"{model}_alpha"]
+    alphas = [run["arrays"][f"{model}_alpha"] for run in runs]
+    if len({a.shape for a in alphas}) != 1:
+        raise ValueError(f"The runs do not share the ratios of {model}.")
+    alpha = np.mean(alphas, axis=0)
     per_seed = []
     for run in runs:
-        if not np.allclose(run["arrays"][f"{model}_alpha"], alpha):
-            raise ValueError(f"The runs do not share the ratios of {model}.")
         values = run["arrays"][f"{model}_{statistic}"]
         per_seed.append(
             np.median(values, axis=1) if reduce == "median" else values.mean(axis=1)
@@ -108,7 +124,12 @@ def curve(
 def summary(runs: Sequence[dict[str, Any]]) -> dict[str, Any]:
     """Accuracies, ranks and peak positions, averaged over the seeds."""
     models = list(runs[0]["models"])
-    out: dict[str, Any] = {"n_runs": len(runs), "models": {}}
+    out: dict[str, Any] = {
+        "n_runs": len(runs),
+        "classes": list(runs[0]["classes"]),
+        "ridge_alpha": runs[0]["ridge_alpha"],
+        "models": {},
+    }
     for model in models:
         alpha, test_mse, _ = curve(runs, model, "test_mse", "median")
         acc = np.array([run[f"accuracy_{model}"] for run in runs])
@@ -119,11 +140,13 @@ def summary(runs: Sequence[dict[str, Any]]) -> dict[str, Any]:
             "accuracy_std": float(acc.std(ddof=1)) if len(runs) > 1 else float("nan"),
             "peak_alpha_per_seed": [run[f"peak_alpha_{model}"] for run in runs],
             "peak_alpha_of_mean": float(alpha[int(np.argmax(test_mse))]),
+            "confusion": confusion(runs, model).tolist(),
         }
     if "accuracy_pixels" in runs[0]:
         out["accuracy_pixels_mean"] = float(
             np.mean([run["accuracy_pixels"] for run in runs])
         )
+        out["confusion_pixels"] = confusion(runs, "pixels").tolist()
     out["t0_max_deviation"] = float(max(run["t0_max_deviation"] for run in runs))
     return out
 
@@ -153,7 +176,58 @@ def draw(runs: Sequence[dict[str, Any]]) -> tuple[Figure, Any]:
         ax.set_xlabel(r"$\alpha = N_{train} / N_{features}$")
         ax.set_title(title)
     axes[0, 0].legend()
-    fig.suptitle(f"Double descent, pseudo-inverse readout ({len(runs)} seeds)")
+    classes = ", ".join(str(d) for d in runs[0]["classes"])
+    alpha = runs[0]["ridge_alpha"]
+    readout = "unregularized" if alpha == 0 else f"ridge alpha = {alpha:g}"
+    fig.suptitle(
+        f"Double descent, digits {classes}, {readout} readout ({len(runs)} seeds)"
+    )
+    return fig, axes
+
+
+def confusion(runs: Sequence[dict[str, Any]], model: str) -> np.ndarray:
+    """Return the confusion matrix of ``model``, summed over the seeds (counts)."""
+    return np.sum([run["arrays"][f"confusion_{model}"] for run in runs], axis=0)
+
+
+def draw_confusion(runs: Sequence[dict[str, Any]]) -> tuple[Figure, Any]:
+    """Draw one row-normalized confusion matrix per model.
+
+    Rows are the true digits, columns the predicted ones; each cell shows
+    the fraction of the true digit's test images. The pixel baseline is
+    the last panel when the runs have it.
+
+    Returns:
+        ``(figure, axes)``, one axis per panel.
+    """
+    models = list(runs[0]["models"])
+    if "confusion_pixels" in runs[0]["arrays"]:
+        models.append("pixels")
+    digits = [str(d) for d in runs[0]["classes"]]
+    fig, axes = subplots(1, len(models), figsize=(3.6 * len(models), 4.6))
+    axes = np.atleast_1d(axes)
+    for ax, model in zip(axes, models, strict=True):
+        counts = confusion(runs, model)
+        fractions = counts / np.maximum(counts.sum(axis=1, keepdims=True), 1)
+        ax.matshow(fractions, cmap="Blues", vmin=0.0, vmax=1.0)
+        for i in range(len(digits)):
+            for j in range(len(digits)):
+                ax.text(
+                    j,
+                    i,
+                    f"{fractions[i, j]:.2f}",
+                    ha="center",
+                    va="center",
+                    color="white" if fractions[i, j] > 0.5 else "black",
+                    fontsize=10,
+                )
+        ax.set_xticks(range(len(digits)), digits)
+        ax.set_yticks(range(len(digits)), digits)
+        ax.xaxis.set_ticks_position("bottom")
+        ax.set_xlabel("predicted digit")
+        ax.set_ylabel("true digit")
+        ax.set_title(LABELS.get(model, model))
+    fig.suptitle(f"Confusion matrices on the test set ({len(runs)} seeds)")
     return fig, axes
 
 
@@ -164,6 +238,17 @@ def plot_sweep(sweep_dir: str | Path) -> dict[str, Any]:
     fig, _ = draw(runs)
     table = summary(runs)
     save_figure(fig, sweep_dir, "double_descent", data={"summary": table})
+    plt.close(fig)
+    fig, _ = draw_confusion(runs)
+    matrices = {key: value["confusion"] for key, value in table["models"].items()}
+    if "confusion_pixels" in table:
+        matrices["pixels"] = table["confusion_pixels"]
+    save_figure(
+        fig,
+        sweep_dir,
+        "confusion_matrices",
+        data={"classes": table["classes"], "confusion": matrices},
+    )
     plt.close(fig)
     (sweep_dir / "summary.json").write_text(json.dumps(table, indent=2) + "\n")
     return table
@@ -180,7 +265,10 @@ def main(argv: Sequence[str] | None = None) -> None:
             f"{model}: accuracy {row['accuracy_mean']:.4f}, "
             f"peak at alpha = {row['peak_alpha_of_mean']:.3g}"
         )
-    print(f"Saved double_descent.png and summary.json to {args.sweep_dir}")
+    print(
+        "Saved double_descent.png, confusion_matrices.png and summary.json to "
+        f"{args.sweep_dir}"
+    )
 
 
 if __name__ == "__main__":

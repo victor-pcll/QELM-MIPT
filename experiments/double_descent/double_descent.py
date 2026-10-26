@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
-"""Double descent of the QELM on MNIST 3 vs 5, for one seed (issue #181).
+"""Double descent of the QELM on MNIST digits, for one seed (issue #181).
 
-1. Load the binary task (:func:`QELM.datasets.load_digit_pair`): MNIST
-   images of the two digits of ``double_descent.digits``, labelled ``+1``
-   and ``-1``. Draw a training pool of ``n_pool`` images and a test set of
+The protocol follows the QELM image classification of "Harnessing quantum
+extreme learning machines for image classification", Phys. Rev. Applied
+(2025): PCA of the images, angle encoding, a fixed quantum reservoir and a
+linear readout of local observables.
+
+1. Load the task (:func:`QELM.datasets.load_digit_classes`): MNIST images
+   of the digits of ``double_descent.classes`` (3 vs 5 by default; more
+   digits make the task harder), image of digit ``classes[k]`` labelled
+   ``k``. Draw a training pool of ``n_pool`` images and a test set of
    ``n_test`` images.
 2. Reduce each image to ``N`` principal components, fitted on the training
-   images of the two digits, and map each to an angle in ``[0, pi]``
+   images of those digits, and map each to an angle in ``[0, pi]``
    (:class:`QELM.datasets.AngleEncoder`).
 3. Encode the angles in a product state, qubit ``i`` in
    ``R_y(theta_i)|0>`` (:class:`QELM.embedding.RotationEmbedding`), and
@@ -14,8 +20,10 @@
    for the seed and shared by every image. Measure the one-site observables
    ``<P_i>`` and the correlators ``<A_i B_j>`` of the final state: the
    features, plus a bias column.
-4. For each model (``double_descent.models``), fit the pseudo-inverse
-   readout ``W = Phi^+ y`` (no penalty) on random training sets of
+4. For each model (``double_descent.models``), fit the ridge readout
+   (``training.alpha``, 0 by default: ``W = Phi^+ Y``, no penalty) to the
+   one-hot targets ``Y``, ``K`` outputs for ``K`` classes, the predicted
+   class being the largest output, on random training sets of
    ``n_train = round(alpha * n_features)`` images of the pool, for every
    ``alpha`` of ``double_descent.alpha_ratios``, ``n_repeats`` times, and
    score it on the test set
@@ -31,7 +39,7 @@ The three sanity checks of the issue are in the same run:
   (``t0_max_deviation``, 0 up to rounding), so its readout is a linear
   regression on fixed functions of the encoded input;
 - ``peak_alpha_<model>`` is the ratio where the median test MSE is largest,
-  1 when the pseudo-inverse and the rank are right.
+  1 when the unregularized readout and the rank are right.
 
 Run from the repository root:
 
@@ -43,14 +51,17 @@ Everything is written to the Hydra run directory, by default
 - ``double_descent.npz``: for each model ``m``, ``<m>_alpha``,
   ``<m>_n_train`` and the statistics ``<m>_train_mse``, ``<m>_test_mse``,
   ``<m>_train_error``, ``<m>_test_error``, ``<m>_weight_norm``, of shape
-  ``(n_ratios, n_repeats)``; and the angles ``theta_pool``, ``theta_test``,
-  labels ``y_pool``, ``y_test`` and the QELM features ``features_qelm_pool``;
+  ``(n_ratios, n_repeats)``; ``confusion_<m>``, the ``(K, K)`` confusion
+  matrix on the test set of the readout fitted on the whole pool (entry
+  ``[i, j]``: images of ``classes[i]`` predicted as ``classes[j]``);
+  ``classes``, the angles ``theta_pool``, ``theta_test``, the class indices
+  ``y_pool``, ``y_test`` and the QELM features ``features_qelm_pool``;
 - ``metrics.json``: per model the rank ``n_features_<m>``, the number of
   columns ``n_columns_<m>``, the test accuracy of the readout fitted on the
   whole pool ``accuracy_<m>``, ``peak_alpha_<m>`` and the median test MSE
   at ``alpha = 1``; ``accuracy_pixels``, the classical reference (a linear
-  readout on every pixel, fitted on all the training images of the two
-  digits), and ``t0_max_deviation``;
+  readout on every pixel, fitted on all the training images of those
+  digits) with its ``confusion_pixels``, and ``t0_max_deviation``;
 - ``.hydra/config.yaml`` and ``resolved_config.json``.
 """
 
@@ -66,19 +77,19 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
-from QELM.datasets import AngleEncoder, load_digit_pair
+from QELM.datasets import AngleEncoder, load_digit_classes
 from QELM.embedding import RotationEmbedding
 from QELM.evaluation.double_descent import (
     SWEEP_STATISTICS,
     add_bias,
     double_descent_sweep,
     expectations,
-    full_pool_accuracy,
+    full_pool_fit,
     observable_operators,
     product_state_features,
     random_features,
 )
-from QELM.training import PseudoInverseReadout
+from QELM.training import RidgeReadout
 from QELM.utils import save_config
 
 MODELS = ("qelm", "qelm_t0", "elm", "linear")
@@ -99,7 +110,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Args:
         cfg: Composed config (``load_config(config_name="double_descent")``
             or Hydra). Reads ``N``, ``TFIM``, ``evolution.t``,
-            ``rotation_embedding``, ``training.rcond`` and the
+            ``rotation_embedding``, ``training.alpha`` and the
             ``double_descent`` block.
 
     Returns:
@@ -121,12 +132,12 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         raise ValueError(f"Unknown models {unknown}. Known: {', '.join(MODELS)}.")
     single = [str(label) for label in dd.single]
     pairs = [[str(a), str(b)] for a, b in dd.pairs]
-    rcond = PseudoInverseReadout.from_config(cfg).rcond
+    ridge_alpha = RidgeReadout.from_config(cfg).config_alpha
 
     # 1-2. The task, the pool, the test set and the angles.
-    data = load_digit_pair(
+    data = load_digit_classes(
         dataset=str(dd.dataset),
-        digits=(int(dd.digits[0]), int(dd.digits[1])),
+        classes=[int(d) for d in dd.classes],
         root=str(dd.data_dir),
         download=bool(dd.download),
         seed=seed,
@@ -185,10 +196,13 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "theta_test": theta_test,
         "y_pool": y_pool,
         "y_test": y_test,
+        "classes": np.array(data.classes),
+        "n_classes": data.n_classes,
         "features_qelm_pool": features["qelm"][0],
         "observables": np.array(names + ["bias"]),
         "J_matrix": model.J_matrix,
         "t0_max_deviation": t0_max_deviation,
+        "ridge_alpha": ridge_alpha,
         "n_pool": len(pool),
         "n_test": len(test),
         "models": models,
@@ -204,7 +218,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             [float(a) for a in dd.alpha_ratios],
             int(dd.n_repeats),
             sweep_rng,
-            rcond=rcond,
+            ridge_alpha=ridge_alpha,
+            n_classes=data.n_classes,
         )
         results[f"{name}_alpha"] = sweep.alpha
         results[f"{name}_n_train"] = sweep.n_train
@@ -217,20 +232,25 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         results[f"test_mse_at_threshold_{name}"] = (
             float(np.median(sweep.test_mse[at_one[0]])) if at_one.size else float("nan")
         )
-        results[f"accuracy_{name}"] = full_pool_accuracy(
-            phi_pool, y_pool, phi_test, y_test, rcond=rcond
+        accuracy, confusion = full_pool_fit(
+            phi_pool, y_pool, phi_test, y_test, data.n_classes, ridge_alpha
         )
+        results[f"accuracy_{name}"] = accuracy
+        results[f"confusion_{name}"] = confusion
     if bool(dd.pixel_baseline):
-        # Every training image of the two digits, not only the pool: with 785
+        # Every training image of those digits, not only the pool: with 785
         # weights, a pool of 2000 images sits close to the interpolation peak
         # of the pixel readout itself.
-        results["accuracy_pixels"] = full_pool_accuracy(
+        accuracy, confusion = full_pool_fit(
             add_bias(data.x_train),
             data.y_train,
             add_bias(data.x_test[test]),
             y_test,
-            rcond=rcond,
+            data.n_classes,
+            ridge_alpha,
         )
+        results["accuracy_pixels"] = accuracy
+        results["confusion_pixels"] = confusion
     return results
 
 
@@ -244,6 +264,8 @@ def save(results: dict[str, Any], out_dir: Path) -> None:
         if isinstance(value, (bool, int, float, np.integer, np.floating)):
             metrics[key] = value.item() if isinstance(value, np.generic) else value
     metrics["models"] = list(results["models"])
+    metrics["classes"] = [int(d) for d in results["classes"]]
+    metrics["ridge_alpha"] = float(results["ridge_alpha"])
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
 
 
@@ -259,6 +281,8 @@ def main(cfg: DictConfig) -> None:
     out_dir = Path(HydraConfig.get().runtime.output_dir)
     save(results, out_dir)
     save_config(cfg, out_dir)
+    classes = [int(d) for d in results["classes"]]
+    print(f"classes: {classes}  ridge alpha: {results['ridge_alpha']}")
     print(f"pool: {results['n_pool']}  test: {results['n_test']}")
     print(f"t = 0 features vs closed form: {results['t0_max_deviation']:.2e}")
     for name in results["models"]:

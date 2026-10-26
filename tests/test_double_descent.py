@@ -11,10 +11,13 @@ from QELM.evaluation.double_descent import (
     classification_error,
     double_descent_sweep,
     expectations,
-    full_pool_accuracy,
+    full_pool_fit,
+    mse,
     n_train_grid,
     numerical_rank,
     observable_operators,
+    one_hot,
+    predict_classes,
     product_state_features,
     random_features,
 )
@@ -99,22 +102,31 @@ def test_n_train_grid() -> None:
     )
 
 
-def test_classification_error() -> None:
-    assert classification_error(np.array([1, -1, 1]), np.array([0.2, 0.1, 0.0])) == (
-        pytest.approx(1 / 3)
-    )
+def test_one_hot_prediction_and_errors() -> None:
+    Y = one_hot(np.array([0, 2, 1]), 3)
+    np.testing.assert_array_equal(Y, [[1, 0, 0], [0, 0, 1], [0, 1, 0]])
+    outputs = np.array([[0.9, 0.1, 0.0], [0.2, 0.5, 0.3], [0.1, 0.7, 0.2]])
+    np.testing.assert_array_equal(predict_classes(outputs), [0, 1, 1])
+    assert classification_error(np.array([0, 2, 1]), outputs) == pytest.approx(1 / 3)
+    assert mse(Y, Y) == 0.0
+    assert mse(Y, np.zeros((3, 3))) == pytest.approx(1 / 3)
 
 
-def _linear_task(n: int, d: int, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
+def _linear_task(
+    n: int, d: int, n_classes: int = 2, seed: int = 0
+) -> tuple[np.ndarray, np.ndarray]:
+    """Gaussian features; the class is the largest of noisy linear scores."""
     rng = np.random.default_rng(seed)
     phi = rng.normal(size=(n, d))
-    y = np.sign(phi @ rng.normal(size=d) + 0.5 * rng.normal(size=n))
-    return phi, y
+    scores = phi @ rng.normal(size=(d, n_classes))
+    labels = np.argmax(scores + 0.5 * rng.normal(size=scores.shape), axis=1)
+    return phi, labels
 
 
-def test_sweep_peaks_at_the_interpolation_threshold() -> None:
+@pytest.mark.parametrize("n_classes", [2, 4])
+def test_sweep_peaks_at_the_interpolation_threshold(n_classes: int) -> None:
     """Check 3 of the issue, on Gaussian features of known rank."""
-    phi, y = _linear_task(1500, 20)
+    phi, y = _linear_task(1500, 20, n_classes)
     ratios = [0.25, 0.5, 0.75, 0.9, 1.0, 1.1, 1.5, 2.0, 5.0]
     sweep = double_descent_sweep(
         phi[:1000],
@@ -133,13 +145,22 @@ def test_sweep_peaks_at_the_interpolation_threshold() -> None:
     below = sweep.alpha < 1
     np.testing.assert_allclose(sweep.train_mse[below], 0.0, atol=1e-18)
     np.testing.assert_allclose(sweep.train_error[below], 0.0)
-    assert np.all(sweep.train_mse[~below + (sweep.alpha == 1)][1:] >= 0)
     # Second descent: the test MSE falls again far above the threshold.
     median = np.median(sweep.test_mse, axis=1)
     assert median[-1] < median[4] / 10
     # The weights blow up at the threshold.
     norms = np.median(sweep.weight_norm, axis=1)
     assert np.argmax(norms) == 4
+
+
+def test_ridge_penalty_smooths_the_peak() -> None:
+    phi, y = _linear_task(1500, 20)
+    args = (phi[:1000], y[:1000], phi[1000:], y[1000:], [0.5, 1.0, 2.0], 20)
+    free = double_descent_sweep(*args, np.random.default_rng(0))
+    ridge = double_descent_sweep(*args, np.random.default_rng(0), ridge_alpha=1.0)
+    at_one = 1
+    assert np.median(ridge.test_mse[at_one]) < np.median(free.test_mse[at_one]) / 5
+    assert np.median(ridge.weight_norm[at_one]) < np.median(free.weight_norm[at_one])
 
 
 def test_peak_follows_the_rank_not_the_column_count() -> None:
@@ -166,6 +187,16 @@ def test_sweep_needs_a_large_enough_pool() -> None:
         double_descent_sweep(phi, y, phi, y, [10.0], 2, np.random.default_rng(0))
 
 
-def test_full_pool_accuracy() -> None:
-    phi, y = _linear_task(800, 5)
-    assert full_pool_accuracy(phi[:600], y[:600], phi[600:], y[600:]) > 0.8
+def test_full_pool_fit_and_confusion_matrix() -> None:
+    phi, y = _linear_task(900, 6, n_classes=3)
+    accuracy, confusion = full_pool_fit(phi[:600], y[:600], phi[600:], y[600:], 3)
+    assert accuracy > 0.7
+    assert confusion.shape == (3, 3)
+    # Rows are the true classes, so they count the test samples of each.
+    np.testing.assert_array_equal(
+        confusion.sum(axis=1), np.bincount(y[600:], minlength=3)
+    )
+    assert np.trace(confusion) / confusion.sum() == pytest.approx(accuracy)
+    # A class absent from the test set still gets its row and column.
+    _, padded = full_pool_fit(phi[:600], y[:600], phi[600:610], np.zeros(10, int), 4)
+    assert padded.shape == (4, 4)

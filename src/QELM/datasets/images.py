@@ -1,4 +1,4 @@
-"""MNIST and the 8x8 digits, reduced to a binary task between two digits.
+"""MNIST and the 8x8 digits, reduced to a task between a few chosen digits.
 
 MNIST (LeCun, Cortes and Burges) is not committed: :func:`download_mnist`
 fetches its four IDX files once into ``data/mnist/`` (gitignored), checks
@@ -13,6 +13,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import urllib.request
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -55,15 +56,16 @@ _IDX_TYPES: dict[int, np.dtype[Any]] = {
 
 
 @dataclass(frozen=True)
-class DigitPair:
-    """Binary task between two digits, split into train and test.
+class DigitClasses:
+    """Classification task between a few digits, split into train and test.
 
     Attributes:
         x_train: Pixels in ``[0, 1]``, of shape ``(n_train, n_pixels)``.
-        y_train: Labels ``+1`` (first digit) or ``-1`` (second), ``(n_train,)``.
+        y_train: Class index ``k`` of each image, its digit being
+            ``classes[k]``, of shape ``(n_train,)``.
         x_test: Pixels of the test images, ``(n_test, n_pixels)``.
-        y_test: Labels of the test images, ``(n_test,)``.
-        digits: The two digits, the first one labelled ``+1``.
+        y_test: Class indices of the test images, ``(n_test,)``.
+        classes: The digits, in the order of the class indices.
         dataset: ``"mnist"`` or ``"digits"``.
     """
 
@@ -71,8 +73,13 @@ class DigitPair:
     y_train: np.ndarray
     x_test: np.ndarray
     y_test: np.ndarray
-    digits: tuple[int, int]
+    classes: tuple[int, ...]
     dataset: str
+
+    @property
+    def n_classes(self) -> int:
+        """Number of classes ``K``."""
+        return len(self.classes)
 
 
 def read_idx(path: str | Path) -> np.ndarray:
@@ -200,45 +207,57 @@ def _load_sklearn_digits(
     return x[train], y[train], x[test], y[test]
 
 
-def load_digit_pair(
+def load_digit_classes(
     dataset: str = "mnist",
-    digits: tuple[int, int] = (3, 5),
+    classes: Sequence[int] = (3, 5),
     root: str | Path = "data/mnist",
     download: bool = True,
     test_fraction: float = 0.3,
     seed: int = 0,
-) -> DigitPair:
-    """Return the binary task "first digit (+1) or second digit (-1)".
+) -> DigitClasses:
+    """Return the task "which of ``classes`` is this digit?".
+
+    Image ``n`` of digit ``classes[k]`` gets the label ``k``; the readout
+    learns the one-hot target of ``k`` (``QELM.evaluation.double_descent``).
+    Two classes give the binary task of issue #181 (3 vs 5); more make it
+    harder.
 
     Args:
         dataset: ``"mnist"`` (its own train and test split) or ``"digits"``
             (scikit-learn's 8x8 digits, split at random).
-        digits: The two digits; the first is labelled ``+1``.
+        classes: Two or more distinct digits, from 0 to 9.
         root: MNIST folder, for ``dataset="mnist"``.
         download: Fetch MNIST if missing.
         test_fraction: Fraction of the 8x8 digits kept for the test set.
         seed: Seed of the train and test split of the 8x8 digits.
 
     Returns:
-        The :class:`DigitPair`.
+        The :class:`DigitClasses`.
 
     Raises:
-        ValueError: If ``dataset`` is unknown or the two digits are equal.
+        ValueError: If ``dataset`` is unknown, or ``classes`` holds fewer
+            than two digits, a repeated digit or one outside 0 to 9.
     """
-    first, second = (int(d) for d in digits)
-    if first == second:
-        raise ValueError(f"The two digits must differ, got {digits!r}.")
+    digits = tuple(int(d) for d in classes)
+    if len(digits) < 2 or len(set(digits)) != len(digits):
+        raise ValueError(
+            f"classes must hold two or more distinct digits, got {classes!r}."
+        )
+    if not all(0 <= d <= 9 for d in digits):
+        raise ValueError(f"classes must be digits from 0 to 9, got {classes!r}.")
     if dataset == "mnist":
         x_tr, y_tr, x_te, y_te = load_mnist(root, download=download)
     elif dataset == "digits":
         x_tr, y_tr, x_te, y_te = _load_sklearn_digits(test_fraction, seed)
     else:
         raise ValueError(f"dataset must be one of {DATASETS}, got {dataset!r}.")
+    index = np.full(10, -1, dtype=np.int64)
+    index[list(digits)] = np.arange(len(digits))
 
     def pick(x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        keep = (y == first) | (y == second)
-        return x[keep], np.where(y[keep] == first, 1.0, -1.0)
+        keep = index[y] >= 0
+        return x[keep], index[y[keep]]
 
     x_train, y_train = pick(x_tr, y_tr)
     x_test, y_test = pick(x_te, y_te)
-    return DigitPair(x_train, y_train, x_test, y_test, (first, second), dataset)
+    return DigitClasses(x_train, y_train, x_test, y_test, digits, dataset)

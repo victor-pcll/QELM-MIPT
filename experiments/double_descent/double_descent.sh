@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Double descent of the QELM on MNIST 3 vs 5 (issue #181): runs
+# Double descent of the QELM on MNIST digits, 3 vs 5 by default (issue
+# #181): runs
 # experiments/double_descent/double_descent.py once per seed, then draws the
 # test and train errors against alpha = n_train / n_features with
 # plot_double_descent.py.
@@ -11,13 +12,17 @@
 # The first run downloads MNIST to data/mnist/ (about 11 MB, gitignored).
 # Each run writes its sweep over alpha, metrics.json, its log and its Hydra
 # config to
-#     outputs/double_descent/<date_time>/N<N>_seed<seed>/
-# and the figure and summary.json land in outputs/double_descent/<date_time>/.
+#     outputs/double_descent/<date_time>/N<N>_c<classes>_seed<seed>/
+# (c35 for the digits 3 and 5), and the figures (double_descent.png,
+# confusion_matrices.png) and summary.json land in
+# outputs/double_descent/<date_time>/.
 # Environment variables change the defaults:
 #     OUT_ROOT=/tmp/qelm          write under /tmp/qelm instead of outputs
 #     OUT_DIR=path/to/sweep       write the sweep exactly there (issue #151)
 #     N=8                         qubits, one per principal component
 #     SEEDS="0 1 2"               reservoirs (TFIM draws), pools and ELM layers
+#     CLASSES="3 5"               digits to tell apart, two or more ("3 5 8")
+#     RIDGE_ALPHA=0.0             ridge penalty training.alpha (0: no penalty)
 #     DATASET=mnist               mnist, or digits (8x8, bundled with scikit-learn)
 #     N_POOL=2000                 training pool
 #     N_TEST=null                 test images (null: the whole test split)
@@ -44,6 +49,8 @@ unset VIRTUAL_ENV
 EXPERIMENT="double_descent"
 N="${N:-8}"
 read -r -a SEEDS <<< "${SEEDS:-0 1 2}"
+read -r -a CLASSES <<< "${CLASSES:-3 5}"
+RIDGE_ALPHA="${RIDGE_ALPHA:-0.0}"
 DATASET="${DATASET:-mnist}"
 N_POOL="${N_POOL:-2000}"
 N_TEST="${N_TEST:-null}"
@@ -59,13 +66,19 @@ OUT_DIR="${OUT_DIR:-$OUT_ROOT/$EXPERIMENT/$STAMP}"
 mkdir -p "$OUT_DIR"
 echo "Writing outputs to $OUT_DIR"
 
+# Hydra list of the digits, [3,5,8], and their tag in the run folder, 358.
+CLASS_LIST="[$(IFS=,; echo "${CLASSES[*]}")]"
+CLASS_TAG="$(IFS=; echo "${CLASSES[*]}")"
+
 for SEED in "${SEEDS[@]}"; do
-  RUN_DIR="$OUT_DIR/N${N}_seed${SEED}"
-  echo "--- N=$N seed=$SEED dataset=$DATASET"
+  RUN_DIR="$OUT_DIR/N${N}_c${CLASS_TAG}_seed${SEED}"
+  echo "--- N=$N seed=$SEED classes=$CLASS_TAG dataset=$DATASET"
   uv run python experiments/double_descent/double_descent.py \
     "N=$N" \
     "seed=$SEED" \
     "double_descent.dataset=$DATASET" \
+    "double_descent.classes=$CLASS_LIST" \
+    "training.alpha=$RIDGE_ALPHA" \
     "double_descent.n_pool=$N_POOL" \
     "double_descent.n_test=$N_TEST" \
     "double_descent.n_repeats=$N_REPEATS" \

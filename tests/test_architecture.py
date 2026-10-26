@@ -44,7 +44,6 @@ def test_training_modules_split_by_role() -> None:
         training.Trainer: "QELM.training.regression.base",
         training.LinearReadout: "QELM.training.regression.linear",
         training.RidgeReadout: "QELM.training.regression.ridge",
-        training.PseudoInverseReadout: "QELM.training.regression.pinv",
     }
     for cls, module in expected.items():
         assert cls.__module__ == module, cls
@@ -76,7 +75,6 @@ def test_trainer_and_readout_registries() -> None:
     """Config keys still select the same classes."""
     assert training.get_trainer("linear") is training.LinearReadout
     assert training.get_trainer("ridge") is training.RidgeReadout
-    assert training.get_trainer("pinv") is training.PseudoInverseReadout
     assert training.get_readout("projective_measurement") is (
         training.ProjectiveMeasurement
     )
@@ -86,5 +84,5 @@ def test_old_trainer_name_readout_is_gone() -> None:
     """``readout`` a été renommé ``linear`` (issue #49)."""
     import pytest
 
-    with pytest.raises(KeyError, match="Known: linear, pinv, ridge"):
+    with pytest.raises(KeyError, match="Known: linear, ridge"):
         training.get_trainer("readout")

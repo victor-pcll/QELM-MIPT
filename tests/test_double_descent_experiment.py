@@ -53,10 +53,11 @@ def _cfg(*overrides: str):  # noqa: ANN202
 def test_config_composes() -> None:
     cfg = load_config(config_name="double_descent")
     assert (cfg.N, cfg.Ns, cfg.Nr) == (8, 8, 0)
-    assert cfg.training.name == "pinv"
+    assert cfg.training.name == "ridge"
+    assert cfg.training.alpha == 0.0
     assert cfg.TFIM.h == cfg.TFIM.J == 1.0
     assert cfg.evolution.t == 10.0
-    assert list(cfg.double_descent.digits) == [3, 5]
+    assert list(cfg.double_descent.classes) == [3, 5]
     assert 1.0 in list(cfg.double_descent.alpha_ratios)
     assert list(cfg.double_descent.models) == ["qelm", "qelm_t0", "elm", "linear"]
 
@@ -87,6 +88,39 @@ def test_run_gives_the_three_checks() -> None:
     assert results["test_mse_at_threshold_qelm"] > np.median(
         results["qelm_test_mse"][-1]
     )
+    # Binary task: two classes, one-hot targets, a 2 x 2 confusion matrix
+    # whose rows count the test images of each digit.
+    assert results["n_classes"] == 2
+    np.testing.assert_array_equal(results["classes"], [3, 5])
+    assert set(np.unique(results["y_pool"])) == {0, 1}
+    for model in ("qelm", "qelm_t0", "elm", "linear", "pixels"):
+        confusion = results[f"confusion_{model}"]
+        assert confusion.shape == (2, 2)
+        np.testing.assert_array_equal(
+            confusion.sum(axis=1), np.bincount(results["y_test"], minlength=2)
+        )
+        assert np.trace(confusion) / confusion.sum() == pytest.approx(
+            results[f"accuracy_{model}"]
+        )
+    assert results["ridge_alpha"] == 0.0
+
+
+def test_run_with_more_digits() -> None:
+    """Multi-class: three digits, three outputs, a 3 x 3 confusion matrix."""
+    results = _load(SCRIPT).run(_cfg("double_descent.classes=[3,5,8]"))
+    assert results["n_classes"] == 3
+    assert set(np.unique(results["y_test"])) == {0, 1, 2}
+    assert results["confusion_qelm"].shape == (3, 3)
+    assert results["accuracy_qelm"] > 0.8
+    assert results["peak_alpha_qelm"] == 1.0
+
+
+def test_ridge_penalty_removes_the_peak() -> None:
+    run = _load(SCRIPT).run
+    free = run(_cfg())
+    ridge = run(_cfg("training.alpha=0.1"))
+    assert ridge["ridge_alpha"] == 0.1
+    assert ridge["test_mse_at_threshold_qelm"] < free["test_mse_at_threshold_qelm"]
 
 
 def test_same_seed_same_run_and_seeds_differ() -> None:
@@ -116,6 +150,7 @@ def test_launcher_runs_the_seeds_and_plots(tmp_path: Path) -> None:
         "DATASET": "digits",
         "N_POOL": "200",
         "N_REPEATS": "3",
+        "CLASSES": "3 5",
         "OUT_DIR": str(tmp_path / "sweep"),
         "EXTRA_OVERRIDES": f"double_descent.alpha_ratios={RATIOS}",
     }
@@ -130,10 +165,10 @@ def test_launcher_runs_the_seeds_and_plots(tmp_path: Path) -> None:
     assert out.returncode == 0, out.stdout + out.stderr
     sweep = tmp_path / "sweep"
     assert sorted(p.name for p in sweep.iterdir() if p.is_dir()) == [
-        "N3_seed0",
-        "N3_seed1",
+        "N3_c35_seed0",
+        "N3_c35_seed1",
     ]
-    run_dir = sweep / "N3_seed0"
+    run_dir = sweep / "N3_c35_seed0"
     for name in ("double_descent.npz", "metrics.json", "resolved_config.json"):
         assert (run_dir / name).is_file()
     metrics = json.loads((run_dir / "metrics.json").read_text())
@@ -146,13 +181,24 @@ def test_launcher_runs_the_seeds_and_plots(tmp_path: Path) -> None:
     summary = json.loads((sweep / "summary.json").read_text())
     assert summary["models"]["qelm"]["peak_alpha_of_mean"] == 1.0
     assert summary["models"]["qelm"]["n_features"] == [19, 19]
+    assert summary["classes"] == [3, 5]
+    # The confusion matrices, summed over the two seeds.
+    assert (sweep / "confusion_matrices.png").is_file()
+    confusion = json.loads((sweep / "confusion_matrices.json").read_text())
+    assert set(confusion["extra"]["confusion"]) == {
+        "qelm",
+        "qelm_t0",
+        "elm",
+        "linear",
+        "pixels",
+    }
 
 
 def test_plot_helpers(tmp_path: Path) -> None:
     plot = _load(PLOT)
     script = _load(SCRIPT)
     for seed in (0, 1):
-        script.save(script.run(_cfg(f"seed={seed}")), tmp_path / f"N3_seed{seed}")
+        script.save(script.run(_cfg(f"seed={seed}")), tmp_path / f"N3_c35_seed{seed}")
     runs = plot.load_runs(tmp_path)
     alpha, mean, sem = plot.curve(runs, "qelm", "test_error", "mean")
     assert alpha.shape == mean.shape == sem.shape == (6,)
@@ -168,5 +214,24 @@ def test_plot_helpers(tmp_path: Path) -> None:
     assert axes[0, 0].get_yscale() == "log"
     _, _, single = plot.curve(runs[:1], "qelm", "test_mse", "median")
     assert np.all(np.isnan(single))
+    # Seeds whose ranks differ by one: the points are matched by index, at
+    # the mean ratio (a sweep of three digits hit this with the ELM).
+    shifted = [runs[0], {**runs[1], "arrays": dict(runs[1]["arrays"])}]
+    shifted[1]["arrays"]["elm_alpha"] = runs[1]["arrays"]["elm_alpha"] * 1.01
+    x, _, _ = plot.curve(shifted, "elm", "test_mse", "median")
+    np.testing.assert_allclose(x, runs[0]["arrays"]["elm_alpha"] * 1.005)
+    shifted[1]["arrays"]["elm_alpha"] = runs[1]["arrays"]["elm_alpha"][:-1]
+    with pytest.raises(ValueError, match="ratios"):
+        plot.curve(shifted, "elm", "test_mse", "median")
     with pytest.raises(FileNotFoundError):
-        plot.load_runs(tmp_path / "N3_seed0")
+        plot.load_runs(tmp_path / "N3_c35_seed0")
+    # One confusion panel per model and the pixel baseline, rows the true
+    # digit; the counts are summed over the seeds.
+    fig, axes = plot.draw_confusion(runs)
+    assert len(axes) == 5
+    assert [t.get_text() for t in axes[0].get_yticklabels()] == ["3", "5"]
+    summed = plot.confusion(runs, "qelm")
+    np.testing.assert_array_equal(
+        summed,
+        runs[0]["arrays"]["confusion_qelm"] + runs[1]["arrays"]["confusion_qelm"],
+    )

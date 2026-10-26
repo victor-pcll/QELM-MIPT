@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from QELM.datasets import AngleEncoder, images, load_digit_pair, read_idx
+from QELM.datasets import AngleEncoder, images, load_digit_classes, read_idx
 
 
 def _write_idx(path: Path, array: np.ndarray, compress: bool) -> None:
@@ -49,11 +49,16 @@ def test_load_mnist_reads_the_four_files_without_network(
     _write_idx(tmp_path / names[1], np.array([3, 5, 1, 3, 5, 5]), True)
     _write_idx(tmp_path / names[2], rng.integers(0, 256, (3, 28, 28)), True)
     _write_idx(tmp_path / names[3], np.array([5, 3, 0]), True)
-    pair = load_digit_pair("mnist", (3, 5), root=tmp_path, download=False)
+    pair = load_digit_classes("mnist", (3, 5), root=tmp_path, download=False)
     assert pair.x_train.shape == (5, 784)
-    np.testing.assert_array_equal(pair.y_train, [1, -1, 1, -1, -1])
-    np.testing.assert_array_equal(pair.y_test, [-1, 1])
+    # Class indices in the order of the digits given: 3 -> 0, 5 -> 1.
+    np.testing.assert_array_equal(pair.y_train, [0, 1, 0, 1, 1])
+    np.testing.assert_array_equal(pair.y_test, [1, 0])
     assert 0 <= pair.x_train.min() and pair.x_train.max() <= 1
+    three = load_digit_classes("mnist", (5, 1, 3), root=tmp_path, download=False)
+    assert three.n_classes == 3 and three.classes == (5, 1, 3)
+    np.testing.assert_array_equal(three.y_train, [2, 0, 1, 2, 0, 0])
+    np.testing.assert_array_equal(three.y_test, [0, 2])
     # A file with the wrong SHA-256 is fetched again from a mirror.
     calls: list[str] = []
 
@@ -73,23 +78,30 @@ def test_load_mnist_without_files(tmp_path: Path) -> None:
         images.load_mnist(tmp_path, download=False)
 
 
-def test_sklearn_digits_pair() -> None:
-    pair = load_digit_pair("digits", (3, 5), seed=0)
-    assert pair.dataset == "digits" and pair.digits == (3, 5)
+def test_sklearn_digits_classes() -> None:
+    pair = load_digit_classes("digits", (3, 5), seed=0)
+    assert pair.dataset == "digits" and pair.classes == (3, 5)
     assert pair.x_train.shape[1] == 64
     n = len(pair.y_train) + len(pair.y_test)
     assert n == 183 + 182  # 3s and 5s of scikit-learn's digits
-    assert set(np.unique(pair.y_train)) == {-1.0, 1.0}
+    assert set(np.unique(pair.y_train)) == {0, 1}
     assert 0 <= pair.x_train.min() and pair.x_train.max() <= 1
-    again = load_digit_pair("digits", (3, 5), seed=0)
+    again = load_digit_classes("digits", (3, 5), seed=0)
     np.testing.assert_array_equal(pair.x_test, again.x_test)
+    four = load_digit_classes("digits", (3, 5, 8, 9), seed=0)
+    assert set(np.unique(four.y_train)) == {0, 1, 2, 3}
+    assert len(four.y_train) + len(four.y_test) > n
 
 
-def test_pair_errors() -> None:
-    with pytest.raises(ValueError, match="differ"):
-        load_digit_pair("digits", (3, 3))
+def test_classes_errors() -> None:
+    with pytest.raises(ValueError, match="distinct"):
+        load_digit_classes("digits", (3, 3))
+    with pytest.raises(ValueError, match="distinct"):
+        load_digit_classes("digits", (3,))
+    with pytest.raises(ValueError, match="0 to 9"):
+        load_digit_classes("digits", (3, 12))
     with pytest.raises(ValueError, match="dataset"):
-        load_digit_pair("cifar")
+        load_digit_classes("cifar")
 
 
 def test_angle_encoder_maps_the_training_range_to_0_pi() -> None:

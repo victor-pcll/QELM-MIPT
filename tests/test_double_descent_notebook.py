@@ -31,6 +31,7 @@ def test_notebook_runs_the_sweep_and_plots(
         "DATASET": "digits",
         "N_POOL": "200",
         "N_REPEATS": "3",
+        "CLASSES": "3 5",
         "EXTRA_OVERRIDES": "double_descent.alpha_ratios=[0.5,1.0,2.0,4.0]",
         "OUT_ROOT": str(tmp_path),
         "RUN": "1",
@@ -52,8 +53,10 @@ def test_notebook_runs_the_sweep_and_plots(
     table = namespace["table"]
     assert table["models"]["qelm"]["peak_alpha_of_mean"] == 1.0
     assert namespace["axes"].shape == (2, 2)
-    assert len(shows) == 1
+    assert len(shows) == 2  # the double descent, then the confusion matrices
+    assert len(namespace["axes_confusion"]) == 5
     figure_path = namespace["figure_path"]
     assert figure_path.is_file()
     assert figure_path.parent.parent == tmp_path / "double_descent"  # #151
     assert (figure_path.parent / "summary.json").is_file()
+    assert (figure_path.parent / "confusion_matrices.png").is_file()
