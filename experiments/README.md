@@ -280,6 +280,76 @@ OMP_NUM_THREADS=1 N_VALUES="4 6 8" H_VALUES=1 FINAL_VALUES="false true" \
 uv run python experiments/QELM_Q/plot_knn.py outputs/exp_QELM_Q/<date_time>
 ```
 
+### Bayes ceilings of the accuracy on `<Z_k>` (issue #202)
+
+Every run of `exp_QELM_Q.py` also writes three ceilings of the ridge
+`accuracy`, on the same split and the same `<Z_k>`
+(`src/QELM/evaluation/bayes_optimal.py`): `bayes_estimate_qda`, a quadratic
+discriminant analysis written in NumPy (one Gaussian per charge sector,
+checked against scikit-learn in `tests/test_bayes_optimal.py`),
+`bayes_estimate_gmm`, the Bayes rule with a mixture of 3 Gaussians per
+sector (`GaussianMixtureBayes`, seeded with the seed of the run), and
+`bayes_estimate_knn`, `sqrt(train_size)` nearest neighbors weighted by
+distance. Where the ridge accuracy falls to 0.5, ceilings at 0.5 mean the
+two sectors overlap (decoherence), ceilings well above 0.5 mean the charge
+is still in `<Z_k>` but not linearly (learnability transition). At high `p`
+the measured qubits split a sector into several clusters, which one
+Gaussian blurs: there the QDA can fall below the ridge readout, and the
+mixture and the K-NN are the ceilings to read. After a sweep over `N` and
+`p`, with 500 samples per run so that these clusters are dense enough to
+see,
+
+```bash
+N_VALUES="4 6" H_VALUES=1 P_VALUES="0 0.5 1" L=500 ./experiments/QELM_Q/exp_QELM_Q.sh
+uv run python experiments/QELM_Q/plot_bayes_ceiling.py outputs/exp_QELM_Q/<date_time>
+```
+
+writes, each with its `.json`:
+
+- `bayes_ceiling.png`: the ridge accuracy against `p` per `N`, with the QDA
+  ceiling dashed, the GMM one dotted and the K-NN one dash-dotted in the
+  same color (`--no-ceilings` draws the ridge alone);
+- on the PCA plane of the test `<Z_k>`, one panel per `(N, p)`, the samples
+  colored by sector and: `qda_contours.png`, the 1 and 2 sigma ellipses of
+  the QDA Gaussians; `gmm_contours.png`, the contour lines of the mixture
+  density of each sector and the 1 sigma ellipse of each component;
+  `ridge_regions.png` and `knn_regions.png`, the decision regions of the
+  ridge readout and of the K-NN on the plane, with their misclassified test
+  samples crossed. The regions are the slice of a classifier of all `Ns`
+  coordinates by the plane through the mean of the samples, so a sample far
+  from the plane can lie in the region of the other class and still be
+  right; the crosses are the true mistakes.
+
+`--h`, `--t`, `--final` pick one setting of a sweep that holds several,
+`--p` the columns of the PCA figures.
+
+### The mixture ceiling over the (p, h) plane at N = 8 (issue #215)
+
+`bayes_estimate_gmm` fixes 3 Gaussians per sector. To check that it is a
+ceiling everywhere on the plane of the measurement probability `p` and the
+field `h`, `gmm_phase_diagram.py` refits every run of one size on its own
+split and seed (`src/QELM/evaluation/gmm_scan.py`): the mixture rule for
+`K = 1, 2, 3, 4, 6, 8` Gaussians per sector, the mixture whose `K` is chosen
+in each sector by BIC (`BICGaussianMixtureBayes`), and the K-NN. It stops if
+the refitted `K = 3` and K-NN do not give the logged ceilings.
+
+```bash
+N_VALUES=8 H_VALUES="0.5 1 2 5 10" P_VALUES="0 0.1 0.2 0.3 0.5 0.7 1" \
+    SEEDS="42 43 44" L=500 ./experiments/QELM_Q/exp_QELM_Q.sh
+uv run python experiments/QELM_Q/gmm_phase_diagram.py outputs/exp_QELM_Q/<date_time>
+```
+
+writes, averaged over the seeds and each with its `.json`:
+`gmm_heatmaps_p_h.png` (maps of the ridge, QDA, BIC mixture and K-NN
+accuracies, of the gap mixture minus ridge, the learnability wall, and of
+mixture minus K-NN, which should be about 0), `gmm_components_p_h.png` (the
+`K` that BIC selects in each sector: how many bundles of trajectories the
+data support), `gmm_vs_K.png` (the mixture accuracy against `K`, one panel
+per `h`: a ceiling must have saturated in `K`), `gmm_vs_p.png` (every
+accuracy against `p`, one panel per `h`) and the table
+`gmm_phase_diagram.json`. `--N`, `--t`, `--final` pick one setting of a
+sweep that holds several.
+
 ## Run the learnability zone of the unitary QELM along h (issue #194)
 
 ```bash
