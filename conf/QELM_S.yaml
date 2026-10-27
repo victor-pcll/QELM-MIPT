@@ -32,6 +32,7 @@ entropy_task:
   # Haar brickwork (von Neumann entropy, Zabalo et al. 2020); not known for
   # the TFIM reservoir, where the sweep itself has to locate it.
   p_c: null
-  # K-NN regression on the same features, the nonlinear ceiling of the
-  # readout (K = round(sqrt(n_train)), weighted by inverse distance).
+  # K-NN regression on the same features, for comparison (not a ceiling: it
+  # does worse than the ridge readout on these many sign features), K =
+  # round(sqrt(n_train)), weighted by inverse distance.
   knn: true

@@ -474,10 +474,15 @@ depends mostly on `p`, which can be read from `M`, so a pooled `R2` alone
 can mean that the readout only guessed `p`. Each set therefore also gets
 `r2_within_<set>`, the `R2` at fixed `p`: about 0 for the `p` baseline,
 positive only when the features carry the trajectory-to-trajectory
-fluctuations of the entanglement. `S` is even in the signs of the outcomes
+fluctuations of the entanglement. A readout without the indicators of `p`
+also pays there for its offset errors at each `p`, so the sets
+`p_n_meas`, `p_absM`, `p_M_Z` and `p_M_Z_even` put the indicators of `p`
+next to the features: their `r2_within` is what the features add to `p`. `S` is even in the signs of the outcomes
 and a linear readout of `M` is odd, so `M_Z_even` adds the squares (`|M|`,
 `<Z_k>**2`), and `absM` keeps only where the measurements happened. A K-NN
-regression on the same features gives a nonlinear ceiling (`r2_knn_<set>`).
+regression on the same features is reported too (`r2_knn_<set>`); with
+hundreds of features, most of them random signs, it does worse than the
+ridge readout, so it is not a ceiling here.
 With `entropy_task.p_c` set, a ridge classifier of the phase label (+1 below
 `p_c`, -1 above) is fitted too (`accuracy_phase_<set>`); the label is a
 function of `p`, so the `p` baseline reaches 1.

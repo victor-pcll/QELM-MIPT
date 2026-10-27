@@ -42,7 +42,12 @@ training share at each ``p`` (``samples.train_fraction``,
 - ``M_Z_even``: ``[M, Z]`` and their squares (``|M|``, ``<Z_k>**2``,
   :func:`~QELM.evaluation.entropy_regression.even_features`). ``S`` is even
   in the signs of the outcomes, a linear readout of ``M`` is odd: the squares
-  give it even features.
+  give it even features;
+- ``p_n_meas``, ``p_absM``, ``p_M_Z``, ``p_M_Z_even``: the indicators of
+  ``p`` next to the features of the set. A readout without them pays at
+  fixed ``p`` for every error of its offset at that ``p``, which a readout
+  of ``p`` alone never makes; with them, the ``R2`` at fixed ``p`` measures
+  only what the features add to ``p``.
 
 Each set ``<name>`` gets ``r2_<name>`` and ``nmse_<name>`` on the test set
 pooled over ``p``, and ``r2_within_<name>``, the ``R2`` at fixed ``p``
@@ -50,11 +55,13 @@ pooled over ``p``, and ``r2_within_<name>``, the ``R2`` at fixed ``p``
 spread of ``S`` between trajectories of the same ``p`` that the readout
 explains. The ``p`` baseline scores about 0 there; a readout that only
 learns ``p`` does too. A pooled ``r2`` well above the ``p`` baseline, or a
-positive ``r2_within``, is the evidence that the features encode the
-entanglement of the trajectory. With ``entropy_task.knn=true`` the same
-scores of a K-NN regression on the same features (``r2_knn_<name>``,
-``r2_within_knn_<name>``, ``K = round(sqrt(n_train))``, inverse-distance
-weights) give a nonlinear ceiling. When ``entropy_task.p_c`` is set, a ridge
+positive ``r2_within`` of a ``p_<set>`` readout, is the evidence that the
+features encode the entanglement of the trajectory. With
+``entropy_task.knn=true`` the same scores of a K-NN regression on the same
+features are reported (``r2_knn_<name>``, ``r2_within_knn_<name>``, ``K =
+round(sqrt(n_train))``, inverse-distance weights); with hundreds of
+features, most of them random signs, it does worse than the ridge readout,
+so it is not a ceiling here. When ``entropy_task.p_c`` is set, a ridge
 readout of the phase label (+1 for ``p < p_c``, volume law; -1 above, area
 law) is fitted on each set too, ``accuracy_phase_<name>``: the label is a
 function of ``p``, so the ``p`` baseline reaches 1 and this score mostly
@@ -121,11 +128,23 @@ FEATURE_SETS = (
     "M_Z",
     "M_Zshot",
     "M_Z_even",
+    "p_n_meas",
+    "p_absM",
+    "p_M_Z",
+    "p_M_Z_even",
 )
+# Sets with the indicators of p next to the features: their R2 at fixed p
+# measures what the features add to p (name -> set without p).
+WITH_P = {
+    "p_n_meas": "n_meas",
+    "p_absM": "absM",
+    "p_M_Z": "M_Z",
+    "p_M_Z_even": "M_Z_even",
+}
 # The set behind the unsuffixed nmse, r2 and y_pred.
 MAIN_SET = "M_Z"
 # Sets whose R2 at each p is written to metrics.json, for the plots.
-PER_P_SETS = ("p", "M", "Z", "M_Z", "M_Z_even")
+PER_P_SETS = ("p", "M_Z", "M_Z_even", "p_absM", "p_M_Z_even")
 # The R2 at one p, r2_within_<name>_p<p>, as written by _scores.
 PER_P_KEY = re.compile(r"r2_within_.+_p[0-9.e+-]+")
 # Random circuits that can replace the TFIM, by models value.
@@ -238,8 +257,9 @@ def feature_sets(
     L = M.shape[0]
     flat = M.reshape(L, -1)
     absM = np.abs(flat)
-    return {
-        "p": one_hot(p, levels),
+    indicators = one_hot(p, levels)
+    sets = {
+        "p": indicators,
         "n_meas": absM.sum(axis=1, keepdims=True),
         "absM": absM,
         "M": flat,
@@ -249,6 +269,9 @@ def feature_sets(
         "M_Zshot": np.hstack([flat, Zshot]),
         "M_Z_even": even_features(np.hstack([flat, Z])),
     }
+    for name, base in WITH_P.items():
+        sets[name] = np.hstack([indicators, sets[base]])
+    return sets
 
 
 def _with_bias(X: np.ndarray) -> np.ndarray:

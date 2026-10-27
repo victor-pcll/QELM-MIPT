@@ -142,9 +142,25 @@ def test_scores_of_every_feature_set() -> None:
     assert np.isnan(out["r2_within_p_p1"])
     # Per-p R2 only for the plotted sets.
     assert "r2_within_M_Z_p0.3" in out
+    assert "r2_within_p_M_Z_even_p0.3" in out
     assert "r2_within_absM_p0.3" not in out
     np.testing.assert_array_equal(out["y_pred"], out["y_pred_M_Z"])
     assert out["r2"] == out["r2_M_Z"]
+
+
+def test_sets_with_p_hold_the_indicators() -> None:
+    exp = _load(SCRIPT)
+    rng = np.random.default_rng(0)
+    p = np.repeat([0.0, 0.5], 3)
+    M = rng.choice([-1.0, 0.0, 1.0], size=(6, 2, 3))
+    Z = rng.uniform(-1, 1, size=(6, 3))
+    sets = exp.feature_sets(M, Z, np.sign(Z), p, np.array([0.0, 0.5]))
+    assert set(sets) == set(exp.FEATURE_SETS)
+    for name, base in exp.WITH_P.items():
+        np.testing.assert_array_equal(sets[name][:, :2], sets["p"])
+        np.testing.assert_array_equal(sets[name][:, 2:], sets[base])
+    np.testing.assert_array_equal(sets["absM"], np.abs(M.reshape(6, -1)))
+    np.testing.assert_array_equal(sets["n_meas"][:, 0], np.abs(M).sum(axis=(1, 2)))
 
 
 def test_without_p_c_or_knn() -> None:

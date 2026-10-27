@@ -51,15 +51,19 @@ SUMMARY_SETS = (
     "M_Z",
     "M_Zshot",
     "M_Z_even",
+    "p_n_meas",
+    "p_absM",
+    "p_M_Z",
+    "p_M_Z_even",
 )
 # Feature sets of r2_within_vs_p.png (the PER_P_SETS of exp_QELM_S.py).
-PER_P_SETS = ("p", "M", "Z", "M_Z", "M_Z_even")
+PER_P_SETS = ("p", "M_Z", "M_Z_even", "p_absM", "p_M_Z_even")
 # Readouts of predicted_vs_exact.png: (y_pred key of the .npz, title).
 SCATTER = (
     ("y_pred_p", "ridge on p (baseline)"),
     ("y_pred_M_Z", "ridge on [M, Z]"),
     ("y_pred_M_Z_even", "ridge on [M, Z] and squares"),
-    ("y_pred_knn_M_Z", "K-NN on [M, Z]"),
+    ("y_pred_p_M_Z_even", "ridge on p, [M, Z] and squares"),
 )
 
 
