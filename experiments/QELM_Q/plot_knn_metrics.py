@@ -6,7 +6,7 @@ Reads a sweep of ``exp_QELM_Q.sh`` (one ``N``, any ``h``, ``p``, seeds and
 as error bars, three accuracies on the same ``<Z_k>`` and split:
 
 - ``accuracy``: the ridge readout (solid line);
-- ``bayes_estimate_knn``: the Euclidean K-NN (dash-dotted);
+- ``bayes_estimate_knn_euclidean``: the Euclidean K-NN (dash-dotted);
 - ``bayes_estimate_knn_mahalanobis``: the Mahalanobis K-NN (dotted).
 
 The curves use the runs without a measurement after the last step
@@ -58,7 +58,7 @@ KEYS = (
 # (metrics.json key, legend label, line style).
 MODELS: tuple[tuple[str, str, str], ...] = (
     ("accuracy", "ridge", "-"),
-    ("bayes_estimate_knn", "K-NN, Euclidean", "-."),
+    ("bayes_estimate_knn_euclidean", "K-NN, Euclidean", "-."),
     ("bayes_estimate_knn_mahalanobis", "K-NN, Mahalanobis", ":"),
 )
 COND = "knn_covariance_cond"

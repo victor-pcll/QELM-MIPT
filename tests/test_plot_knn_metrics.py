@@ -32,7 +32,7 @@ def _write_run(root: Path, N: int, h: float, p: float, final: bool, seed: int) -
     )
     metrics = {
         "accuracy": 1.0 - 0.1 * p - 0.01 * seed,
-        "bayes_estimate_knn": 0.9 + 0.01 * seed,
+        "bayes_estimate_knn_euclidean": 0.9 + 0.01 * seed,
         "bayes_estimate_knn_mahalanobis": 0.8 + 0.1 * final,
         "knn_covariance_cond": 10.0 ** (1 + p + h),
     }
@@ -55,7 +55,7 @@ def test_summary_averages_the_seeds(sweep: Path) -> None:
     row = next(r for r in summary if r["h"] == 1.0 and r["p"] == 0.5 and not r["final"])
     assert row["n_runs"] == 2
     assert row["accuracy_mean"] == pytest.approx(1.0 - 0.05 - 0.01)
-    assert row["bayes_estimate_knn_mean"] == pytest.approx(0.91)
+    assert row["bayes_estimate_knn_euclidean_mean"] == pytest.approx(0.91)
     final = next(r for r in summary if r["h"] == 10.0 and r["final"])
     assert final["bayes_estimate_knn_mahalanobis_mean"] == pytest.approx(0.9)
     assert final["knn_covariance_cond_mean"] == pytest.approx(10.0**12)

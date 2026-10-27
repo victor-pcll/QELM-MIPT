@@ -347,6 +347,7 @@ def test_bash_sweep_writes_one_folder_per_run(tmp_path: Path) -> None:
         "accuracy_M_Z",
         "r2_M_XX",
         "bayes_estimate_knn",
+        "bayes_estimate_knn_euclidean",
         "bayes_estimate_knn_mahalanobis",
         "knn_covariance_cond",
     ):

@@ -217,7 +217,7 @@ def test_experiment_logs_both_knn(p: float) -> None:
     Z_k, Y = out["X"][:, :-1], out["Y"]
     euclid = CustomKNN().fit(Z_k[:train], Y[:train])
     maha = CustomKNN(metric="mahalanobis").fit(Z_k[:train], Y[:train])
-    assert out["bayes_estimate_knn"] == euclid.score(Z_k[train:], Y[train:])
+    assert out["bayes_estimate_knn_euclidean"] == euclid.score(Z_k[train:], Y[train:])
     assert out["bayes_estimate_knn_mahalanobis"] == maha.score(Z_k[train:], Y[train:])
     assert out["knn_covariance_rank"] == maha.rank_ == Z_k.shape[1]
     eig = np.linalg.eigvalsh(np.cov(Z_k[:train], rowvar=False))
