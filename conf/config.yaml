@@ -24,7 +24,7 @@ seed: 42
 Nr: 1
 Ns: ${int:${sub:${N},${Nr}}}
 
-# Initial state of the reservoir (QELM.embedding), on all N qubits.
+# Initial state of the reservoir (QELM.encoding), on all N qubits.
 ancilla_charge_sector:
   N: ${N}
 

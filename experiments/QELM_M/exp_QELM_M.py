@@ -4,7 +4,7 @@
 For each sample ``i`` (``samples.L`` in total):
 
 1. Draw a new TFIM (new disorder ``J_ij``) on the ``Ns = N - 1`` system
-   qubits and start from the state of :class:`AncillaChargeSectorEmbedding`:
+   qubits and start from the state of :class:`AncillaChargeSectorEncoding`:
    the ancilla ``R`` (qubit 0) entangled with the charge of the system.
    ``R`` is a reference qubit, as in Barratt et al. (2022) and Agrawal et
    al. (2024): the TFIM acts on the system only, ``U = 1_R (x) U_S``
@@ -27,9 +27,7 @@ For each sample ``i`` (``samples.L`` in total):
    (+1 for ``Ns // 2``, -1 for ``Ns // 2 - 1``), a label fixed before any
    measurement of the system, +1 or -1 with probability 1/2 whatever ``p``.
    The readout learns that hidden charge from the record, the learnability
-   task of Barratt et al. ``Z0[i] = <Z_0>`` on the final state, before ``R``
-   is measured, is kept too: ``(1 + Z0[i]) / 2`` is the probability that
-   ``Y[i] = +1`` given the record and the Hamiltonian.
+   task of Barratt et al.
 
    Before issue #104 the target was ``<Z_0>`` itself and ``R`` evolved with
    the TFIM. The TFIM conserves the parity of the total charge, so at
@@ -96,11 +94,14 @@ and a readout that learns nothing, as at ``p = 0`` where every feature is
 scores go with it: ``accuracy_baseline``, the accuracy of always predicting
 the majority sign of the training targets (the chance level of
 ``accuracy``), and ``balanced_accuracy``, the mean over the two signs of the
-share recovered, which is 0.5 for a readout that ignores the features. The
-ceiling is ``accuracy_optimal``, the accuracy on the test samples of the
-Bayes classifier ``sign(Z0)``, which also knows the Hamiltonian of each
-sample: the mean of ``(1 + |Z0|) / 2``. It is 0.5 at ``p = 0`` (the record
-holds nothing, ``Z0 = 0``) and 1 when the record fixes the charge.
+share recovered, which is 0.5 for a readout that ignores the features.
+
+No Bayes ceiling is reported (issue #195). The former ``accuracy_optimal``,
+the mean of ``(1 + |<Z_0>|) / 2`` over the test samples, used the exact
+reduced state of ``R``, that is ``P(Y | rho_R)``, which also knows the
+Hamiltonian of each sample. The readout only sees the record ``M``, so a
+Bayes ceiling for it would need ``P(Y | M)``; the two are not on the same
+variables, and comparing them misread the performance plots.
 
 Run from the repository root:
 
@@ -110,13 +111,12 @@ Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
 
 - ``exp_QELM_M.npz``: ``M`` (measurement record), ``X`` (features, bias
-  column included), ``Y``, ``Z0``,
+  column included), ``Y``,
   ``y_test``, ``y_pred``, the weights ``W`` and the entropies ``S_vN``,
   ``S_renyi_1``, ``S_vN_sys``, ``S_renyi_2_sys``, ``S_vN_1q``,
   ``S_renyi_2_1q`` and ``S_half`` of shape ``(L,)``;
 - ``metrics.json``: ``nmse``, ``nmse_err``, ``r2``, ``accuracy``,
-  ``accuracy_baseline``, ``balanced_accuracy``, ``accuracy_optimal``, the
-  shapes used and the
+  ``accuracy_baseline``, ``balanced_accuracy``, the shapes used and the
   sample mean ``<name>_mean`` of each entropy;
 - ``.hydra/config.yaml``: the full composed config, to reproduce the run.
 - ``resolved_config.json``: the same config with every ``${...}`` evaluated,
@@ -136,7 +136,7 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
-from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.evaluation import (
     mean_single_qubit_entropy,
     renyi_entropy,
@@ -153,7 +153,6 @@ from QELM.evaluation.metrics import (
 from QELM.models.circuits.base import BrickworkCircuit
 from QELM.models.circuits.clifford import CliffordBrickworkCircuit
 from QELM.models.circuits.haar import HaarBrickworkCircuit
-from QELM.physics import Z, local_expectation
 from QELM.training import ProjectiveMeasurement, RidgeReadout
 from QELM.training.measurements.projective import measure_projective_rho
 from QELM.utils import save_config, save_results
@@ -173,7 +172,6 @@ EXTRA_METRICS = (
     "accuracy",
     "accuracy_baseline",
     "balanced_accuracy",
-    "accuracy_optimal",
     *(f"{name}_mean" for name in ENTROPIES),
 )
 # The ancilla R, qubit 0, is the subsystem A of the entropies.
@@ -260,25 +258,24 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Args:
         cfg: Composed config (``load_config`` or Hydra). Reads
             ``models``, ``samples.L``, ``samples.train_size``, the model
-            block (TFIM with ``evolution.t``, or a circuit), the embedding,
+            block (TFIM with ``evolution.t``, or a circuit), the encoding,
             measurement and training blocks, and the optional
             ``projective_measurement.nbr_time_evolution`` (default 5).
 
     Returns:
         The arrays and metrics of the run: ``M`` (record of shape
         ``(L, nbr_time_evolution, Ns)``, ``NaN`` for an unmeasured qubit), ``X`` (with
-        the bias column), ``Y`` (the measured label of ``R``, +-1), ``Z0``
-        (``<Z_0>`` before that measurement), ``y_test``, ``y_pred``, ``W``,
-        ``nmse``, ``nmse_err``, ``r2``, ``accuracy``, ``accuracy_baseline``,
-        ``balanced_accuracy``, ``accuracy_optimal``,
+        the bias column), ``Y`` (the measured label of ``R``, +-1),
+        ``y_test``, ``y_pred``, ``W``, ``nmse``, ``nmse_err``, ``r2``,
+        ``accuracy``, ``accuracy_baseline``, ``balanced_accuracy``,
         the entropies of :data:`ENTROPIES` (bits, one
         per sample) and their means ``<name>_mean``.
     """
     set_seed(cfg)
 
-    sector = AncillaChargeSectorEmbedding.from_config(cfg)
+    sector = AncillaChargeSectorEncoding.from_config(cfg)
     solver = RidgeReadout.from_config(cfg)
-    # Qubit counts from the config, not from the model or the embedding
+    # Qubit counts from the config, not from the model or the encoding
     # (issue #88): N in total, Ns system qubits, Nr ancillas.
     N, Ns, Nr = check_qubit_counts(cfg)
     # The number of time-evolution steps is its own parameter, not tied to
@@ -305,7 +302,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     else:
         known = ", ".join([TransverseFieldIsingModel.name, *CIRCUITS])
         raise ValueError(f"models={model_name} is not supported here. Known: {known}.")
-    # Every sample starts from the embedded state, not from the collapsed
+    # Every sample starts from the encoded state, not from the collapsed
     # state of the previous sample (issue #101).
     rho0 = sector.rho()
     P = ProjectiveMeasurement.from_config(cfg)
@@ -313,7 +310,6 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     L = int(cfg.samples.L)
     M = np.zeros((L, nbr_time_evolution, Ns))
     Y = np.zeros(L)
-    Z0 = np.zeros(L)
     S = {name: np.zeros(L) for name in ENTROPIES}
     # The system sector: every qubit but the Nr ancillas.
     system = list(range(Nr, N))
@@ -329,8 +325,6 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             measure = P.measure(rho)
             rho = measure.rho
             M[i, j] = measure.outcomes
-        # <Z_0> on the ancilla from its 2 x 2 reduced state (issue #95).
-        Z0[i] = local_expectation(rho, Z, 0)
         S["S_vN"][i] = von_neumann_entropy(rho, SECTOR_A)
         S["S_renyi_1"][i] = renyi_entropy(rho, 1, SECTOR_A)
         S["S_vN_sys"][i] = von_neumann_entropy(rho, system)
@@ -358,7 +352,6 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "M": M,
         "X": X,
         "Y": Y,
-        "Z0": Z0,
         "y_test": y_test,
         "y_pred": y_pred,
         "W": solver.W,
@@ -368,7 +361,6 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "accuracy": accuracy(y_test, y_pred),
         "accuracy_baseline": majority_accuracy(y_train, y_test),
         "balanced_accuracy": balanced_accuracy(y_test, y_pred),
-        "accuracy_optimal": float(np.mean((1 + np.abs(Z0[train:])) / 2)),
         **S,
         **{f"{name}_mean": float(np.mean(values)) for name, values in S.items()},
     }
@@ -391,7 +383,6 @@ def main(cfg: DictConfig) -> None:
     print(f"accuracy: {results['accuracy']:.6g}")
     print(f"accuracy baseline (majority sign): {results['accuracy_baseline']:.6g}")
     print(f"balanced accuracy: {results['balanced_accuracy']:.6g}")
-    print(f"optimal accuracy (Bayes, sign Z0): {results['accuracy_optimal']:.6g}")
     for name in ENTROPIES:
         print(f"{name} (mean, bits): {results[f'{name}_mean']:.6g}")
     print(f"Saved to {out_dir}")

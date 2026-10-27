@@ -7,7 +7,7 @@ entanglement of the reservoir, and the readout has to recover the charge from
 the final state alone. For each sample ``i`` (``samples.L`` in total):
 
 1. Draw a new TFIM (new disorder ``J_ij``) on the ``Ns = N - 1`` system
-   qubits and start from the state of :class:`AncillaChargeSectorEmbedding`,
+   qubits and start from the state of :class:`AncillaChargeSectorEncoding`,
    ``(|0>_R |Q1>_S + |1>_R |Q2>_S) / sqrt(2)`` with ``Q1 = Ns // 2`` and
    ``Q2 = Ns // 2 - 1``. The ancilla ``R`` is measured in Z first, with the
    Born rule: the outcome fixes the charge sector of the system, the label
@@ -133,7 +133,7 @@ from scipy.sparse.linalg import expm_multiply
 from tqdm import tqdm
 
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
-from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.evaluation import von_neumann_entropy
 from QELM.evaluation.metrics import (
     NMSE,
@@ -287,7 +287,9 @@ def parity_step(
     so do the Z measurements, so the system never leaves the sector. The
     step evolves only the ``2**(Ns - 1)`` amplitudes of the sector, with
     ``expm_multiply`` on the sector block of the sparse ``H_S``: half the
-    dimension of the full system (issue #201).
+    dimension of the full system (issue #201). With ``TFIM.basis=Z`` the
+    Hamiltonian conserves the X parity instead, so the whole space of the
+    system is evolved.
 
     Args:
         model: The TFIM of the system, on ``Ns`` qubits.
@@ -306,9 +308,14 @@ def parity_step(
     """
     row = 0 if r == 1 else 2**Nr - 1
     system = psi.reshape(2**Nr, 2**Ns)[row]
-    popcount = np.array([bin(b).count("1") for b in range(2**Ns)])
-    parity = popcount[int(np.argmax(np.abs(system)))] % 2
-    sector = np.flatnonzero(popcount % 2 == parity)
+    if model.basis == "X":
+        popcount = np.array([bin(b).count("1") for b in range(2**Ns)])
+        parity = popcount[int(np.argmax(np.abs(system)))] % 2
+        sector = np.flatnonzero(popcount % 2 == parity)
+    else:
+        # TFIM.basis=Z conserves the X parity, not the Z one: the whole
+        # space of the system is evolved.
+        sector = np.arange(2**Ns)
     outside = np.delete(system, sector)
     if not np.allclose(outside, 0.0, atol=1e-12):
         raise ValueError("The system state is not in one parity sector.")
@@ -366,7 +373,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Args:
         cfg: Composed config (``load_config`` or Hydra). Reads
             ``evolution.t``, ``samples.L``, ``samples.train_size``, ``seed``,
-            the TFIM, embedding, measurement and training blocks, and
+            the TFIM, encoding, measurement and training blocks, and
             ``projective_measurement.nbr_time_evolution`` (default 5) and
             ``projective_measurement.final_measurement`` (default ``False``)
             ``state_representation`` (default ``"density"``) and
@@ -389,7 +396,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     set_seed(cfg)
     rng = np.random.default_rng([int(cfg.seed), MEASUREMENT_STREAM])
 
-    sector = AncillaChargeSectorEmbedding.from_config(cfg)
+    sector = AncillaChargeSectorEncoding.from_config(cfg)
     solver = RidgeReadout.from_config(cfg)
     N, Ns, Nr = check_qubit_counts(cfg)
     nbr_time_evolution = int(OmegaConf.select(cfg, NBR_TIME_EVOLUTION, default=5))

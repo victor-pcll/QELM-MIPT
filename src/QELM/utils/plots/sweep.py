@@ -172,8 +172,7 @@ def draw_companion(
     """Overlay a second metric of the same sweep on a panel, dashed.
 
     For a reference level read from the sweep itself, e.g. the chance level
-    of the accuracy on the accuracy panel (issue #130), or the accuracy of
-    the readout on the panel of its Bayes ceiling (issue #104). The curve is
+    of the accuracy on the accuracy panel (issue #130). The curve is
     drawn with :func:`draw_curve`, so it keeps its error bars and
     :func:`~QELM.utils.plots.save_figure` saves them.
 

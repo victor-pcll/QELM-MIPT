@@ -65,9 +65,9 @@ def check_qubit_counts(cfg: DictConfig) -> tuple[int, int, int]:
     The convention (issue #88): ``N`` is the total number of qubits, ``Nr``
     the number of ancilla qubits and ``Ns = N - Nr`` the number of system
     qubits, all three at the top level of the config. The selected model
-    block (``cfg[cfg.models].N``), the embedding and the readouts copy
+    block (``cfg[cfg.models].N``), the encoding and the readouts copy
     ``N``, and the projective measurement copies ``Nr``. Scripts read the
-    counts from here, not from a model or an embedding.
+    counts from here, not from a model or an encoding.
 
     Args:
         cfg: Composed config.

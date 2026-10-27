@@ -1,4 +1,4 @@
-"""Tests des embeddings d'état et de la classe Embedding commune."""
+"""Tests des encodings d'état et de la classe Encoding commune."""
 
 from __future__ import annotations
 
@@ -10,12 +10,12 @@ import scipy.sparse as sp
 from omegaconf import OmegaConf
 from scipy.sparse.linalg import norm as sparse_norm
 
-from QELM.embedding import (
-    AncillaChargeSectorEmbedding,
-    Embedding,
+from QELM.encoding import (
+    AncillaChargeSectorEncoding,
+    Encoding,
     charge_sector_indices,
     charge_sector_state,
-    get_embedding,
+    get_encoding,
 )
 from QELM.models import TransverseFieldIsingModel
 
@@ -60,7 +60,7 @@ def test_charge_sector_state_normalized(N: int) -> None:
 
 @pytest.mark.parametrize("N", NS_TOTAL)
 def test_ancilla_state_physical(N: int) -> None:
-    emb = AncillaChargeSectorEmbedding({"N": N})
+    emb = AncillaChargeSectorEncoding({"N": N})
     psi = emb.state()
     rho = emb.density_matrix()
     assert emb.Ns == N - 1
@@ -77,7 +77,7 @@ def test_ancilla_state_physical(N: int) -> None:
 @pytest.mark.parametrize("N", NS_TOTAL)
 def test_ancilla_components_in_right_sector(N: int) -> None:
     Ns = N - 1
-    psi = AncillaChargeSectorEmbedding({"N": N}).state()
+    psi = AncillaChargeSectorEncoding({"N": N}).state()
     nonzero = np.flatnonzero(np.abs(psi) > 1e-12)
     for i in nonzero:
         ancilla, system = divmod(int(i), 2**Ns)
@@ -92,7 +92,7 @@ def test_ancilla_components_in_right_sector(N: int) -> None:
 @pytest.mark.parametrize("N", NS_TOTAL)
 def test_ancilla_reduced_states(N: int) -> None:
     Ns = N - 1
-    rho = AncillaChargeSectorEmbedding({"N": N}).density_matrix()
+    rho = AncillaChargeSectorEncoding({"N": N}).density_matrix()
     assert np.allclose(_rho_R(rho, Ns), np.eye(2) / 2)
     q1 = charge_sector_state(Ns, Ns // 2)
     q2 = charge_sector_state(Ns, Ns // 2 - 1)
@@ -103,7 +103,7 @@ def test_ancilla_reduced_states(N: int) -> None:
 def test_ancilla_known_values_N3() -> None:
     # N = 3 : ancilla + 2 qubits de système.
     # (|0>(|01> + |10>)/sqrt(2) + |1>|00>) / sqrt(2)
-    psi = AncillaChargeSectorEmbedding({"N": 3}).state()
+    psi = AncillaChargeSectorEncoding({"N": 3}).state()
     expected = np.zeros(8, dtype=complex)
     expected[[0b001, 0b010]] = 0.5
     expected[0b100] = 1 / np.sqrt(2)
@@ -112,43 +112,43 @@ def test_ancilla_known_values_N3() -> None:
 
 def test_ancilla_odd_system_charges() -> None:
     # N = 6 : Ns = 5, charges 2 et 1.
-    emb = AncillaChargeSectorEmbedding({"N": 6})
+    emb = AncillaChargeSectorEncoding({"N": 6})
     assert (emb.Ns, emb.Q1, emb.Q2) == (5, 2, 1)
 
 
 @pytest.mark.parametrize("N", [0, 1, 2])
 def test_ancilla_rejects_small_N(N: int) -> None:
     with pytest.raises(ValueError):
-        AncillaChargeSectorEmbedding({"N": N})
+        AncillaChargeSectorEncoding({"N": N})
 
 
 def test_ancilla_deterministic() -> None:
-    emb = AncillaChargeSectorEmbedding({"N": 4})
+    emb = AncillaChargeSectorEncoding({"N": 4})
     assert np.array_equal(emb.state(), emb.state())
 
 
 def test_from_config_and_registry() -> None:
     cfg = OmegaConf.create({"ancilla_charge_sector": {"N": 4}})
-    cls = get_embedding("ancilla_charge_sector")
-    assert cls is AncillaChargeSectorEmbedding
+    cls = get_encoding("ancilla_charge_sector")
+    assert cls is AncillaChargeSectorEncoding
     emb = cls.from_config(cfg)
-    assert isinstance(emb, Embedding)
+    assert isinstance(emb, Encoding)
     assert (emb.N, emb.Ns, emb.dim) == (4, 3, 16)
 
 
 def test_from_config_rejects_scalar() -> None:
     cfg = OmegaConf.create({"ancilla_charge_sector": 3})
     with pytest.raises(TypeError):
-        AncillaChargeSectorEmbedding.from_config(cfg)
+        AncillaChargeSectorEncoding.from_config(cfg)
 
 
-def test_unknown_embedding() -> None:
+def test_unknown_encoding() -> None:
     with pytest.raises(KeyError, match="Known"):
-        get_embedding("nope")
+        get_encoding("nope")
 
 
 def test_base_without_ancilla() -> None:
-    emb = Embedding({"N": 2})
+    emb = Encoding({"N": 2})
     assert (emb.N, emb.Ns, emb.dim) == (2, 2, 4)
     with pytest.raises(NotImplementedError):
         emb.state()
@@ -157,7 +157,7 @@ def test_base_without_ancilla() -> None:
 def test_same_dimension_as_model() -> None:
     # Le même N dans la config donne la même dimension que le modèle.
     model = TransverseFieldIsingModel({"N": 4, "J": 1.0, "h": 0.5})
-    emb = AncillaChargeSectorEmbedding({"N": model.N})
+    emb = AncillaChargeSectorEncoding({"N": model.N})
     assert emb.dim == model.dim
     assert model.hamiltonian().shape == emb.density_matrix().shape
 
@@ -180,7 +180,7 @@ def test_from_full_config_follows_the_model() -> None:
         (["models=kitaev"], 4),
     ):
         cfg = load_config(overrides)
-        emb = AncillaChargeSectorEmbedding.from_config(cfg)
+        emb = AncillaChargeSectorEncoding.from_config(cfg)
         assert emb.N == N
         assert emb.state().shape == (2**N,)
 
@@ -190,13 +190,13 @@ def test_from_config_missing_block_is_explicit() -> None:
     cfg = OmegaConf.create({"seed": 0})
     OmegaConf.set_struct(cfg, True)
     with pytest.raises(ValueError, match="no 'ancilla_charge_sector' block"):
-        AncillaChargeSectorEmbedding.from_config(cfg)
+        AncillaChargeSectorEncoding.from_config(cfg)
 
 
 @pytest.mark.parametrize("N", [3, 4, 5, 6])
 def test_sparse_state_matches_dense(N: int) -> None:
     """state(sparse=True) est une colonne CSR (2**N, 1) égale à state()."""
-    emb = AncillaChargeSectorEmbedding({"N": N})
+    emb = AncillaChargeSectorEncoding({"N": N})
     psi = emb.state()
     psi_sp = emb.state(sparse=True)
     assert isinstance(psi_sp, sp.csr_matrix)
@@ -223,7 +223,7 @@ def test_sparse_charge_sector_state_matches_dense(N: int, Q: int) -> None:
 @pytest.mark.parametrize("N", [3, 4, 5])
 def test_sparse_density_matrix_matches_dense(N: int) -> None:
     """density_matrix(sparse=True) est la CSR de density_matrix()."""
-    emb = AncillaChargeSectorEmbedding({"N": N})
+    emb = AncillaChargeSectorEncoding({"N": N})
     rho = emb.density_matrix()
     rho_sp = emb.density_matrix(sparse=True)
     assert isinstance(rho, np.ndarray) and rho.shape == (2**N, 2**N)
@@ -234,7 +234,32 @@ def test_sparse_density_matrix_matches_dense(N: int) -> None:
 
 def test_dense_is_the_default_state() -> None:
     """Sans argument, state() et density_matrix() sont des tableaux numpy."""
-    emb = AncillaChargeSectorEmbedding({"N": 3})
+    emb = AncillaChargeSectorEncoding({"N": 3})
     assert isinstance(emb.state(), np.ndarray)
     assert isinstance(emb.density_matrix(), np.ndarray)
     assert isinstance(charge_sector_state(3, 1), np.ndarray)
+
+
+def test_encoding_replaces_embedding() -> None:
+    """Issue #197: the initial states live in ``QELM.encoding`` and every name
+    says encoding; the old ``QELM.embedding`` package and names are gone."""
+    import importlib
+
+    encoding = importlib.import_module("QELM.encoding")
+    assert encoding.AncillaChargeSectorEncoding.__module__ == (
+        "QELM.encoding.charge_sector"
+    )
+    assert encoding.RotationEncoding.__module__ == "QELM.encoding.rotation"
+    assert encoding.get_encoding("rotation_encoding") is encoding.RotationEncoding
+    assert issubclass(encoding.AncillaChargeSectorEncoding, encoding.Encoding)
+    for old in (
+        "Embedding",
+        "AncillaChargeSectorEmbedding",
+        "RotationEmbedding",
+        "get_embedding",
+    ):
+        assert not hasattr(encoding, old), old
+    with pytest.raises(KeyError):
+        encoding.get_encoding("rotation_embedding")
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("QELM." + "embedding")

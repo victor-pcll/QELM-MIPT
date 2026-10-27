@@ -235,6 +235,7 @@ def test_evolve_with_measurements_no_round_after_the_last_step() -> None:
             "projective_measurement.final_measurement=true",
         ),
         ("projective_measurement.p=0.3", "N=5", "TFIM.h=1"),
+        ("projective_measurement.p=0.5", "TFIM.h=1", "TFIM.basis=Z"),
     ],
 )
 def test_state_vector_matches_the_density_matrix(extra: tuple[str, ...]) -> None:
