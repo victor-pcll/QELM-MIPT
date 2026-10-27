@@ -9,7 +9,6 @@ import numpy as np
 import scipy.sparse as sp
 
 from QELM.models.base import HamiltonianModel
-from QELM.physics.operators import X, Z, get_site_operator
 
 
 class TransverseFieldIsingModel(HamiltonianModel):
@@ -67,27 +66,54 @@ class TransverseFieldIsingModel(HamiltonianModel):
         per row, so ``H`` has at most ``2**N * (1 + N(N-1)/2)`` non-zero
         entries instead of ``4**N``. Use ``H.toarray()`` for a dense copy.
 
+        The entries are written directly from the bits of the basis states
+        (issue #201), without the Kronecker products of
+        :func:`QELM.physics.operators.get_site_operator`. With ``z_i = +1``
+        when bit ``i`` of ``|b>`` is 0 and ``-1`` when it is 1 (site 0 the
+        most significant bit): ``Z_i`` and ``Z_i Z_j`` are diagonal, ``z_i``
+        and ``z_i z_j``; ``X_i`` maps ``|b>`` to ``|b XOR m_i>`` and
+        ``X_i X_j`` to ``|b XOR m_ij>``, with ``m`` the mask of the flipped
+        bits. Distinct sites and pairs give distinct masks, so no two terms
+        share an off-diagonal entry.
+
         Returns:
             Complex Hermitian CSR matrix of shape ``(2**N, 2**N)``. It is
             also stored in ``self._H``.
         """
-        # basis "X": field on Z, couplings on X X, signs +.
-        # basis "Z": field on X, couplings on Z Z, signs -.
+        basis = np.arange(self.dim)
+        shifts = self.N - 1 - np.arange(self.N)
+        z = 1 - 2 * ((basis[:, None] >> shifts[None, :]) & 1)  # (dim, N)
+        pairs = [(i, j) for i in range(self.N) for j in range(i + 1, self.N)]
+
+        rows: list[np.ndarray] = []
+        cols: list[np.ndarray] = []
+        values: list[np.ndarray] = []
+
+        def flip(mask: int, value: float) -> None:
+            rows.append(basis)
+            cols.append(basis ^ mask)
+            values.append(np.full(self.dim, value, dtype=complex))
+
         if self.basis == "X":
-            field_op, coupling_op, sign = Z, X, 1.0
+            # h sum_i Z_i + sum_{i<j} J_ij X_i X_j
+            diagonal = self.h * np.sum(z, axis=1).astype(float)
+            for i, j in pairs:
+                flip((1 << int(shifts[i])) | (1 << int(shifts[j])), self.J_matrix[i, j])
         else:
-            field_op, coupling_op, sign = X, Z, -1.0
+            # -h sum_i X_i - sum_{i<j} J_ij Z_i Z_j
+            diagonal = np.zeros(self.dim)
+            for i, j in pairs:
+                diagonal -= self.J_matrix[i, j] * z[:, i] * z[:, j]
+            for i in range(self.N):
+                flip(1 << int(shifts[i]), -self.h)
+        rows.append(basis)
+        cols.append(basis)
+        values.append(diagonal.astype(complex))
 
-        H: sp.csr_matrix = sp.csr_matrix((self.dim, self.dim), dtype=np.complex128)
-
-        for i in range(self.N):
-            H = H + sign * self.h * get_site_operator(field_op, i, self.N, sparse=True)
-
-        for i in range(self.N):
-            Ci = get_site_operator(coupling_op, i, self.N, sparse=True)
-            for j in range(i + 1, self.N):
-                Cj = get_site_operator(coupling_op, j, self.N, sparse=True)
-                H = H + sign * self.J_matrix[i, j] * (Ci @ Cj)
-
-        self._H = H.tocsr()
-        return H.tocsr()
+        H = sp.csr_matrix(
+            (np.concatenate(values), (np.concatenate(rows), np.concatenate(cols))),
+            shape=(self.dim, self.dim),
+            dtype=np.complex128,
+        )
+        self._H = H
+        return H

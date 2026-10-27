@@ -9,7 +9,7 @@ leftmost factor of the tensor product, as in
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from numbers import Real
 from typing import Any
 
@@ -87,6 +87,72 @@ def measure_projective_rho(
     return rho_collapsed, mi
 
 
+def measure_projective_psi(
+    psi: np.ndarray,
+    qubit_idx: int,
+    N: int | None = None,
+    rng: np.random.Generator | None = None,
+) -> tuple[np.ndarray, int]:
+    """Measure qubit ``qubit_idx`` of a pure state ``psi`` in Z (issue #183).
+
+    The state-vector counterpart of :func:`measure_projective_rho`: the same
+    Born probability ``p0 = sum |psi_b|**2`` over the basis states ``b``
+    with the qubit at 0, one uniform number from the same generator, the
+    same outcome rule, and the collapse ``P_m psi / sqrt(p_m)``. For
+    ``rho = |psi><psi|`` both functions draw the same outcome and return
+    ``|psi_m><psi_m| = rho_m``, at ``O(2**N)`` cost instead of
+    ``O(4**N)``.
+
+    Args:
+        psi: State vector of shape ``(2**N,)``.
+        qubit_idx: Measured qubit, from 0 to ``N - 1``.
+        N: Number of qubits. ``None`` reads it from the shape of ``psi``.
+        rng: Random generator for the outcome. ``None`` uses the global
+            ``numpy.random`` state seeded by :func:`QELM.seed.set_seed`.
+
+    Returns:
+        ``(psi_collapsed, mi)``: the normalized post-measurement state and
+        the Z eigenvalue of the outcome, ``+1`` for ``|0>``, ``-1`` for
+        ``|1>``.
+
+    Raises:
+        ValueError: If ``psi`` is not a qubit state vector, ``N`` does not
+            match it, or ``qubit_idx`` is out of range.
+    """
+    n = _vector_qubits(psi)
+    if N is not None and N != n:
+        raise ValueError(f"N={N} does not match psi of shape {psi.shape}.")
+    if not 0 <= qubit_idx < n:
+        raise ValueError(f"qubit_idx must be in [0, {n - 1}], got {qubit_idx}.")
+
+    bits = (np.arange(2**n) >> (n - 1 - qubit_idx)) & 1
+    mask_0 = bits == 0
+    weights = np.abs(psi) ** 2
+    p0 = float(np.clip(np.sum(weights[mask_0]), 0.0, 1.0))
+    p1 = 1.0 - p0
+
+    u = rng.random() if rng is not None else np.random.random()
+    outcome = 0 if u < p0 else 1
+
+    psi_collapsed = np.zeros_like(psi)
+    if outcome == 0:
+        psi_collapsed[mask_0] = psi[mask_0] / np.sqrt(p0)
+        mi = 1
+    else:
+        psi_collapsed[~mask_0] = psi[~mask_0] / np.sqrt(p1)
+        mi = -1
+    return psi_collapsed, mi
+
+
+def _vector_qubits(psi: np.ndarray) -> int:
+    """Return ``N`` for a state vector of shape ``(2**N,)``."""
+    dim = psi.shape[0] if psi.ndim == 1 else 0
+    n = dim.bit_length() - 1
+    if dim < 2 or 2**n != dim:
+        raise ValueError(f"psi must have shape (2**N,), got {psi.shape}.")
+    return n
+
+
 class ProjectiveMeasurement(Readout):
     """Measure qubits one after another, collapsing ``rho`` each time.
 
@@ -144,7 +210,10 @@ class ProjectiveMeasurement(Readout):
         if it is) draws the outcome.
 
         Args:
-            rho: Density matrix of shape ``(2**N, 2**N)``.
+            rho: Density matrix of shape ``(2**N, 2**N)``, or a pure state
+                vector of shape ``(2**N,)``, measured with
+                :func:`measure_projective_psi` and the same random draws
+                (issue #183).
             p: Probability of measuring each target qubit, in ``[0, 1]``.
                 ``None`` uses ``self.p`` from the config, or 1.0 if the
                 config has no ``p``. A value passed here wins over both.
@@ -155,7 +224,7 @@ class ProjectiveMeasurement(Readout):
             Outcomes of shape ``(n_targets,)`` as ``float64``: the Z
             eigenvalue ``mi`` in ``{-1, +1}`` for a measured qubit and
             ``np.nan`` for an unmeasured one; and the state after every
-            collapse.
+            collapse, of the shape of ``rho``.
 
         Raises:
             ValueError: If ``p`` is not a number in ``[0, 1]``, or if ``rho``
@@ -164,7 +233,19 @@ class ProjectiveMeasurement(Readout):
         if p is None:
             p = 1.0 if self.p is None else self.p
         p = _check_p(p)
-        N, _, _ = qubit_counts(rho, self.Nr)
+        rho = np.asarray(rho)
+        collapse: Callable[..., tuple[np.ndarray, int]]
+        if rho.ndim == 1:
+            N = _vector_qubits(rho)
+            if N < self.Nr:
+                raise ValueError(
+                    f"Total qubits ({N}) cannot be less than ancilla qubits "
+                    f"({self.Nr})."
+                )
+            collapse = measure_projective_psi
+        else:
+            N, _, _ = qubit_counts(rho, self.Nr)
+            collapse = measure_projective_rho
         qubits = list(range(self.Nr, N)) if self.qubits is None else self.qubits
         outcomes = np.full(len(qubits), np.nan, dtype=np.float64)
         for k, q in enumerate(qubits):
@@ -172,5 +253,5 @@ class ProjectiveMeasurement(Readout):
                 u = rng.random() if rng is not None else np.random.random()
                 if u >= p:
                     continue
-            rho, outcomes[k] = measure_projective_rho(rho, q, N, rng)
+            rho, outcomes[k] = collapse(rho, q, N, rng)
         return ReadoutResult(outcomes=outcomes, rho=rho)

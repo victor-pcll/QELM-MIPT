@@ -238,3 +238,27 @@ def test_tfim_yaml_basis_default_and_override():
         GlobalHydra.instance().clear()
         model = get_model(str(cfg.models)).from_config(cfg)
         assert model.basis == basis
+
+
+@pytest.mark.parametrize("N", [1, 2, 3, 5])
+@pytest.mark.parametrize("h", [0.0, 0.37, 2.0])
+def test_hamiltonian_matches_the_kronecker_products(N: int, h: float) -> None:
+    """The bitwise H of both bases equals the Kronecker products (issue #201)."""
+    from QELM.physics.operators import X, Z, get_site_operator
+
+    np.random.seed(7)
+    model = TransverseFieldIsingModel({"N": N, "J": 1.0, "h": h})
+    expected = sum(h * get_site_operator(Z, i, N) for i in range(N)) + sum(
+        model.J_matrix[i, j] * get_site_operator(X, i, N) @ get_site_operator(X, j, N)
+        for i in range(N)
+        for j in range(i + 1, N)
+    )
+    np.testing.assert_allclose(model.hamiltonian().toarray(), expected, atol=1e-12)
+    np.random.seed(7)
+    model_z = TransverseFieldIsingModel({"N": N, "J": 1.0, "h": h, "basis": "Z"})
+    expected_z = -sum(h * get_site_operator(X, i, N) for i in range(N)) - sum(
+        model_z.J_matrix[i, j] * get_site_operator(Z, i, N) @ get_site_operator(Z, j, N)
+        for i in range(N)
+        for j in range(i + 1, N)
+    )
+    np.testing.assert_allclose(model_z.hamiltonian().toarray(), expected_z, atol=1e-12)
