@@ -261,6 +261,25 @@ empirical laws (Kolmogorov-Smirnov distance to the largest dataset) and
 their shape. `H` conserves the parity of the system and each sector has a
 definite parity, so `<X_k>` and `<Y_k>` are exactly 0.
 
+`experiments/QELM_Q/plot_knn.py` (issue #214) fits K-NN classifiers of `Q`
+on the `<Z_k>` of every run of a sweep, with the split of the ridge readout,
+and writes two figures in the sweep folder: `knn_parity_vs_p.png`, the
+accuracy of scikit-learn's `KNeighborsClassifier(round(sqrt(n_train)),
+weights="distance")` and of the NumPy `CustomKNN` against `p`, with the
+fraction of test points they classify the same way and the fraction with a
+tie at the `K`-th neighbor; and `knn_K_vs_p.png`, the accuracy of `CustomKNN`
+for several `K` (`--K`, default `1 5 sqrt 3sqrt`) with the ridge readout.
+The accuracies of every run go to `knn_runs.json`; the sweep must hold a
+single field `TFIM.h`. The figures of the PR come from:
+
+```bash
+OMP_NUM_THREADS=1 N_VALUES="4 6 8" H_VALUES=1 FINAL_VALUES="false true" \
+  SEEDS="42 43 44" L=500 \
+  P_VALUES="0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0" \
+  ./experiments/QELM_Q/exp_QELM_Q.sh
+uv run python experiments/QELM_Q/plot_knn.py outputs/exp_QELM_Q/<date_time>
+```
+
 ## Run the double-descent experiment on MNIST (issue #181)
 
 ```bash
