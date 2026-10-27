@@ -11,11 +11,16 @@ linear readout of local observables.
    digits make the task harder), image of digit ``classes[k]`` labelled
    ``k``. Draw a training pool of ``n_pool`` images and a test set of
    ``n_test`` images.
-2. Reduce each image to ``N`` principal components, fitted on the training
-   images of those digits, and map each to an angle in ``[0, pi]``
-   (:class:`QELM.datasets.AngleEncoder`).
-3. Encode the angles in a product state, qubit ``i`` in
-   ``R_y(theta_i)|0>`` (:class:`QELM.encoding.RotationEncoding`), and
+2. Reduce each image to ``M`` principal components, fitted on the training
+   images of those digits, and map each linearly onto the interval its
+   encoding expects (:class:`QELM.datasets.AngleEncoder`, then
+   :func:`encoding_inputs`): ``M = N`` angles in ``[0, pi]`` for the
+   default angle encoding, ``M = 2 N`` features for the encodings that put
+   two features on each qubit (issue #196).
+3. Encode the features in a product state (``double_descent.encoding``, by
+   default ``rotation_encoding``: qubit ``i`` in ``R_y(theta_i)|0>``,
+   :class:`QELM.encoding.RotationEncoding`; the other choices are the
+   encodings of issue #196, :class:`QELM.encoding.ProductEncoding`), and
    apply one fixed quench ``U = exp(-i H t)``: a single TFIM, drawn once
    for the seed and shared by every image. Measure the one-site observables
    ``<P_i>`` and the correlators ``<A_i B_j>`` of the final state: the
@@ -54,7 +59,8 @@ Everything is written to the Hydra run directory, by default
   ``(n_ratios, n_repeats)``; ``confusion_<m>``, the ``(K, K)`` confusion
   matrix on the test set of the readout fitted on the whole pool (entry
   ``[i, j]``: images of ``classes[i]`` predicted as ``classes[j]``);
-  ``classes``, the angles ``theta_pool``, ``theta_test``, the class indices
+  ``classes``, the encoded features ``theta_pool``, ``theta_test``
+  (``M`` per image), the class indices
   ``y_pool``, ``y_test`` and the QELM features ``features_qelm_pool``;
 - ``metrics.json``: per model the rank ``n_features_<m>``, the number of
   columns ``n_columns_<m>``, the test accuracy of the readout fitted on the
@@ -78,7 +84,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
 from QELM.datasets import AngleEncoder, load_digit_classes
-from QELM.encoding import RotationEncoding
+from QELM.encoding import ProductEncoding, RotationEncoding, get_encoding
 from QELM.evaluation.double_descent import (
     SWEEP_STATISTICS,
     add_bias,
@@ -93,6 +99,60 @@ from QELM.training import RidgeReadout
 from QELM.utils import save_config
 
 MODELS = ("qelm", "qelm_t0", "elm", "linear")
+
+# The state encodings the experiment accepts: one rotation per angle, or one
+# of the tensor-product encodings of issue #196.
+ENCODINGS = (
+    "rotation_encoding",
+    "angle_encoding",
+    "dense_angle_encoding",
+    "uniform_bloch_encoding",
+    "general_encoding",
+)
+
+
+def build_encoding(cfg: DictConfig) -> RotationEncoding | ProductEncoding:
+    """Return the encoding named by ``double_descent.encoding``.
+
+    Args:
+        cfg: Composed config, with the block of that encoding.
+
+    Returns:
+        The encoding, built from its config block.
+
+    Raises:
+        ValueError: If the name is not one of :data:`ENCODINGS`.
+    """
+    name = str(OmegaConf.select(cfg, "double_descent.encoding", default=ENCODINGS[0]))
+    if name not in ENCODINGS:
+        raise ValueError(f"Unknown encoding {name!r}. Known: {', '.join(ENCODINGS)}.")
+    encoding = get_encoding(name).from_config(cfg)
+    assert isinstance(encoding, (RotationEncoding, ProductEncoding))
+    return encoding
+
+
+def input_bounds(encoding: RotationEncoding | ProductEncoding) -> np.ndarray:
+    """Return the interval of each input feature, of shape ``(M, 2)``.
+
+    ``M = N`` angles in ``[0, pi]`` for :class:`RotationEncoding`, the
+    bounds of the encoding for a :class:`ProductEncoding`.
+    """
+    if isinstance(encoding, ProductEncoding):
+        return encoding.feature_bounds()
+    return np.tile([0.0, np.pi], (encoding.N, 1))
+
+
+def encoding_inputs(u: np.ndarray, bounds: np.ndarray) -> np.ndarray:
+    """Map features ``u`` in ``[0, 1]`` linearly onto ``bounds``.
+
+    Args:
+        u: Features of shape ``(n_samples, M)``, each in ``[0, 1]``.
+        bounds: ``(M, 2)`` intervals, from :func:`input_bounds`.
+
+    Returns:
+        ``low + (high - low) * u``, of shape ``(n_samples, M)``.
+    """
+    return bounds[:, 0] + (bounds[:, 1] - bounds[:, 0]) * u
 
 
 def _draw(n_available: int, n: int | None, rng: np.random.Generator) -> np.ndarray:
@@ -109,16 +169,16 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     Args:
         cfg: Composed config (``load_config(config_name="double_descent")``
-            or Hydra). Reads ``N``, ``TFIM``, ``evolution.t``,
-            ``rotation_encoding``, ``training.alpha`` and the
-            ``double_descent`` block.
+            or Hydra). Reads ``N``, ``TFIM``, ``evolution.t``, the block of
+            the encoding named by ``double_descent.encoding``,
+            ``training.alpha`` and the ``double_descent`` block.
 
     Returns:
         The arrays of the ``.npz`` and the scalars of ``metrics.json``.
 
     Raises:
-        ValueError: If a model is unknown, the config has an ancilla, or
-            the pool is too small for the largest ratio.
+        ValueError: If a model or the encoding is unknown, the config has
+            an ancilla, or the pool is too small for the largest ratio.
     """
     seed = set_seed(cfg)
     rng = np.random.default_rng(seed)
@@ -133,8 +193,14 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     single = [str(label) for label in dd.single]
     pairs = [[str(a), str(b)] for a, b in dd.pairs]
     ridge_alpha = RidgeReadout.from_config(cfg).config_alpha
+    encoding = build_encoding(cfg)
+    if encoding.N != N:
+        raise ValueError(f"The encoding has N={encoding.N}, the config N={N}.")
+    bounds = input_bounds(encoding)
 
-    # 1-2. The task, the pool, the test set and the angles.
+    # 1-2. The task, the pool, the test set and the encoded features: M
+    # principal components, each in [0, 1] over the training images, then
+    # mapped onto the interval of the encoding.
     data = load_digit_classes(
         dataset=str(dd.dataset),
         classes=[int(d) for d in dd.classes],
@@ -145,13 +211,12 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     pool = _draw(len(data.y_train), int(dd.n_pool), rng)
     test_n = OmegaConf.select(cfg, "double_descent.n_test")
     test = _draw(len(data.y_test), None if test_n is None else int(test_n), rng)
-    encoder = AngleEncoder(N).fit(data.x_train)
-    theta_pool = encoder.transform(data.x_train[pool])
-    theta_test = encoder.transform(data.x_test[test])
+    encoder = AngleEncoder(len(bounds), angle_range=1.0).fit(data.x_train)
+    theta_pool = encoding_inputs(encoder.transform(data.x_train[pool]), bounds)
+    theta_test = encoding_inputs(encoder.transform(data.x_test[test]), bounds)
     y_pool, y_test = data.y_train[pool], data.y_test[test]
 
     # 3. The encoded states and the quench: one TFIM for every image.
-    encoding = RotationEncoding.from_config(cfg)
     names, ops = observable_operators(N, single, pairs)
     psi_pool, psi_test = encoding.states(theta_pool), encoding.states(theta_test)
     features: dict[str, tuple[np.ndarray, np.ndarray]] = {}
@@ -206,6 +271,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "n_pool": len(pool),
         "n_test": len(test),
         "models": models,
+        "encoding": encoding.name,
+        "n_inputs": len(bounds),
     }
     sweep_rng = np.random.default_rng([seed, 1])
     for name in models:
@@ -264,6 +331,7 @@ def save(results: dict[str, Any], out_dir: Path) -> None:
         if isinstance(value, (bool, int, float, np.integer, np.floating)):
             metrics[key] = value.item() if isinstance(value, np.generic) else value
     metrics["models"] = list(results["models"])
+    metrics["encoding"] = str(results["encoding"])
     metrics["classes"] = [int(d) for d in results["classes"]]
     metrics["ridge_alpha"] = float(results["ridge_alpha"])
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
@@ -283,6 +351,7 @@ def main(cfg: DictConfig) -> None:
     save_config(cfg, out_dir)
     classes = [int(d) for d in results["classes"]]
     print(f"classes: {classes}  ridge alpha: {results['ridge_alpha']}")
+    print(f"encoding: {results['encoding']}  inputs: {results['n_inputs']}")
     print(f"pool: {results['n_pool']}  test: {results['n_test']}")
     print(f"t = 0 features vs closed form: {results['t0_max_deviation']:.2e}")
     for name in results["models"]:

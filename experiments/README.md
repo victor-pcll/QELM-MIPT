@@ -227,6 +227,25 @@ the input: `M` alone, and `phi = [M, X]` with `X` the `<Z_k>` (`M_Z`) or the
 sample. Each run lands in
 `outputs/exp_QELM_Q/<date_time>/N<N>_h<h>_t<t>_final<final>_seed<seed>_p<p>/`.
 
+Every run also logs two K-NN accuracies on the same `<Z_k>` and split
+(issue #213): `bayes_estimate_knn_euclidean` (Euclidean, with `CustomKNN`;
+the `bayes_estimate_knn` ceiling below is the same rule from scikit-learn) and
+`bayes_estimate_knn_mahalanobis` (the metric is the pseudo-inverse of the
+covariance `Sigma` of the training `<Z_k>`), with `knn_covariance_rank` and
+`knn_covariance_cond` (largest / smallest kept eigenvalue of `Sigma`).
+`experiments/QELM_Q/plot_knn_metrics.py` compares them with the ridge readout
+on a sweep of one `N`, against `p` (one panel per `h`) and against `h` (one
+panel per `p`), and plots `knn_covariance_cond`; the runs with
+`final_measurement=true` are open squares:
+
+```bash
+OUT_DIR=outputs/QELM_Q_knn N_VALUES=8 H_VALUES="0.5 1 2 5 10" SEEDS="42 43" \
+    P_VALUES="0.0 0.2 0.4 0.6 0.8 1.0" L=300 ./experiments/QELM_Q/exp_QELM_Q.sh
+OUT_DIR=outputs/QELM_Q_knn N_VALUES=8 H_VALUES="0.5 1 2 5 10" SEEDS="42 43" \
+    P_VALUES=1.0 FINAL_VALUES=true L=300 ./experiments/QELM_Q/exp_QELM_Q.sh
+uv run python experiments/QELM_Q/plot_knn_metrics.py outputs/QELM_Q_knn
+```
+
 `notebooks/results/04_QELM_Q_measurements.ipynb` checks the `p = 0` baseline,
 runs the sweep in `outputs/QELM_Q/<date_time>/` and plots the accuracy, R2
 and `S_half` against `p` for each `N` and `h`, one row of panels without and
@@ -459,6 +478,23 @@ test error and train error against `alpha` (`double_descent.png` and
 sweep folder. `notebooks/results/07_double_descent_mnist.ipynb` runs the
 sweep in `outputs/double_descent/<date_time>/`, prints the checks and shows
 both figures. Three seeds take about 40 s.
+
+The state encoding is `double_descent.encoding` (`ENCODING` for the
+launcher, issue #196): `rotation_encoding` by default, or one of the
+tensor-product encodings of the same paper, `angle_encoding`,
+`dense_angle_encoding`, `uniform_bloch_encoding` and `general_encoding`
+(`QELM.encoding.ProductEncoding`). The last three put two features on each
+qubit, so the image is reduced to `2 N` principal components, each mapped
+onto the interval its encoding expects (`[0, pi]` for an angle or a phase,
+`[0, 1]` for a population or an amplitude). The notebook runs one sweep
+per encoding in `outputs/double_descent_encodings/<date_time>/<encoding>/`,
+and `plot_double_descent.py --encodings <that folder>` draws the test MSE
+and test error of the QELM against `alpha`, one curve per encoding
+(`encodings.png`, `.json` and `encodings_summary.json`):
+
+```bash
+ENCODING=dense_angle_encoding ./experiments/double_descent/double_descent.sh
+```
 
 ## Run the charge-sharpening benchmark (issue #137)
 

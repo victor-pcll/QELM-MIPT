@@ -24,6 +24,15 @@ off-diagonal entries name the digits it confuses.
 
     uv run python experiments/double_descent/plot_double_descent.py \
         outputs/double_descent/<date_time>
+
+The comparison of the state encodings (issue #196) reads a folder that
+holds one such sweep per encoding, ``<root>/<encoding>/``, and draws the
+test MSE and the test error of one model against ``alpha``, one curve per
+encoding (:func:`plot_encodings`): ``encodings.png`` with its
+``encodings.json``, and ``encodings_summary.json``, in ``<root>``.
+
+    uv run python experiments/double_descent/plot_double_descent.py \
+        --encodings outputs/double_descent_encodings/<date_time>
 """
 
 from __future__ import annotations
@@ -254,11 +263,112 @@ def plot_sweep(sweep_dir: str | Path) -> dict[str, Any]:
     return table
 
 
+def load_encodings(root: str | Path) -> dict[str, list[dict[str, Any]]]:
+    """Return the runs of each encoding of a comparison, by encoding name.
+
+    Each direct subfolder of ``root`` that holds runs is one sweep; its
+    encoding is the one saved in the runs' ``metrics.json``.
+
+    Raises:
+        FileNotFoundError: If ``root`` holds no sweep.
+        ValueError: If the runs of one sweep do not share their encoding.
+    """
+    out: dict[str, list[dict[str, Any]]] = {}
+    for folder in sorted(p for p in Path(root).iterdir() if p.is_dir()):
+        try:
+            runs = load_runs(folder)
+        except FileNotFoundError:
+            continue
+        names = {str(run.get("encoding", "rotation_encoding")) for run in runs}
+        if len(names) != 1:
+            raise ValueError(f"{folder} mixes the encodings {sorted(names)}.")
+        out[names.pop()] = runs
+    if not out:
+        raise FileNotFoundError(f"No encoding sweep in {root}.")
+    return out
+
+
+def encoding_summary(
+    by_encoding: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    """The :func:`summary` of each encoding, with its number of inputs."""
+    return {
+        name: {"n_inputs": runs[0].get("n_inputs"), **summary(runs)}
+        for name, runs in by_encoding.items()
+    }
+
+
+def draw_encodings(
+    by_encoding: dict[str, list[dict[str, Any]]], model: str = "qelm"
+) -> tuple[Figure, Any]:
+    """Draw the test MSE and test error of ``model``, one curve per encoding.
+
+    Returns:
+        ``(figure, axes)``, two axes.
+    """
+    names = list(by_encoding)
+    colors = color_map(names)
+    fig, axes = subplots(1, 2, figsize=(12, 4.8))
+    for ax, (statistic, reduce, title, log) in zip(
+        axes, (PANELS[0], PANELS[2]), strict=True
+    ):
+        for name in names:
+            alpha, mean, sem = curve(by_encoding[name], model, statistic, reduce)
+            ax.errorbar(
+                alpha,
+                mean,
+                yerr=None if np.all(np.isnan(sem)) else sem,
+                marker="o",
+                markersize=4,
+                capsize=2,
+                color=colors[name],
+                label=name.removesuffix("_encoding").replace("_", " "),
+            )
+        ax.axvline(1.0, color="k", linestyle="--", linewidth=1)
+        ax.set_xscale("log")
+        if log:
+            ax.set_yscale("log")
+        ax.set_xlabel(r"$\alpha = N_{train} / N_{features}$")
+        ax.set_title(title)
+    axes[0].legend()
+    n_runs = len(next(iter(by_encoding.values())))
+    fig.suptitle(
+        f"{LABELS.get(model, model)}: the state encodings compared ({n_runs} seeds)"
+    )
+    return fig, axes
+
+
+def plot_encodings(root: str | Path, model: str = "qelm") -> dict[str, Any]:
+    """Draw and save the comparison of the encodings; return its summary."""
+    root = Path(root)
+    by_encoding = load_encodings(root)
+    table = encoding_summary(by_encoding)
+    fig, _ = draw_encodings(by_encoding, model)
+    save_figure(fig, root, "encodings", data={"model": model, "summary": table})
+    plt.close(fig)
+    (root / "encodings_summary.json").write_text(json.dumps(table, indent=2) + "\n")
+    return table
+
+
 def main(argv: Sequence[str] | None = None) -> None:
-    """Command line: ``plot_double_descent.py <sweep_dir>``."""
+    """Command line: ``plot_double_descent.py [--encodings] <sweep_dir>``."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("sweep_dir", type=Path)
+    parser.add_argument(
+        "--encodings",
+        action="store_true",
+        help="sweep_dir holds one sweep per encoding: compare them",
+    )
     args = parser.parse_args(argv)
+    if args.encodings:
+        for name, row in plot_encodings(args.sweep_dir).items():
+            qelm = row["models"]["qelm"]
+            print(
+                f"{name}: {row['n_inputs']} inputs, QELM accuracy "
+                f"{qelm['accuracy_mean']:.4f}"
+            )
+        print(f"Saved encodings.png and encodings_summary.json to {args.sweep_dir}")
+        return
     table = plot_sweep(args.sweep_dir)
     for model, row in table["models"].items():
         print(
