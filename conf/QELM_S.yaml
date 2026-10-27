@@ -1,0 +1,37 @@
+# Prediction of the half-chain entanglement entropy from local features
+# (issue #230). Primary config of experiments/QELM_S/exp_QELM_S.py: the main
+# config, with the block below.
+#
+#   uv run python experiments/QELM_S/exp_QELM_S.py models=haar_circuit N=8
+defaults:
+  - config
+  - _self_
+
+# No ancilla: the chain starts in a product state and every qubit is a system
+# qubit, measured and in the bipartition. N follows the model file unless set
+# here or on the command line.
+Nr: 0
+N: 8
+
+entropy_task:
+  # Measurement probabilities of one run, pooled into one dataset that
+  # crosses the transition. Each gets samples_per_p trajectories, split into
+  # training and test sets with the same share (samples.train_fraction).
+  # samples.L is not read: L = len(p_values) * samples_per_p.
+  p_values: [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6]
+  samples_per_p: 200
+  # Rounds of (unitary step, measurement of every qubit with probability p).
+  # null: 2 * N, long enough for the half-chain entropy of a brickwork
+  # circuit to saturate. A circuit applies <model>.layers_per_step brickwork
+  # layers per round.
+  n_rounds: null
+  # TFIM only: time of one unitary step, in units of 1 / TFIM.J.
+  dt: 1.0
+  # Phase boundary of the derived classification (+1 below p_c, volume law;
+  # -1 above, area law). null skips the classification. About 0.17 for the
+  # Haar brickwork (von Neumann entropy, Zabalo et al. 2020); not known for
+  # the TFIM reservoir, where the sweep itself has to locate it.
+  p_c: null
+  # K-NN regression on the same features, the nonlinear ceiling of the
+  # readout (K = round(sqrt(n_train)), weighted by inverse distance).
+  knn: true
