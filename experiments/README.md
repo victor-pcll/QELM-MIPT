@@ -366,6 +366,23 @@ sweep folder. `notebooks/results/07_double_descent_mnist.ipynb` runs the
 sweep in `outputs/double_descent/<date_time>/`, prints the checks and shows
 both figures. Three seeds take about 40 s.
 
+The state encoding is `double_descent.encoding` (`ENCODING` for the
+launcher, issue #196): `rotation_encoding` by default, or one of the
+tensor-product encodings of the same paper, `angle_encoding`,
+`dense_angle_encoding`, `uniform_bloch_encoding` and `general_encoding`
+(`QELM.encoding.ProductEncoding`). The last three put two features on each
+qubit, so the image is reduced to `2 N` principal components, each mapped
+onto the interval its encoding expects (`[0, pi]` for an angle or a phase,
+`[0, 1]` for a population or an amplitude). The notebook runs one sweep
+per encoding in `outputs/double_descent_encodings/<date_time>/<encoding>/`,
+and `plot_double_descent.py --encodings <that folder>` draws the test MSE
+and test error of the QELM against `alpha`, one curve per encoding
+(`encodings.png`, `.json` and `encodings_summary.json`):
+
+```bash
+ENCODING=dense_angle_encoding ./experiments/double_descent/double_descent.sh
+```
+
 ## Run the charge-sharpening benchmark (issue #137)
 
 ```bash

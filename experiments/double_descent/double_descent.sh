@@ -27,6 +27,10 @@
 #     N_POOL=2000                 training pool
 #     N_TEST=null                 test images (null: the whole test split)
 #     N_REPEATS=20                training sets per ratio
+#     ENCODING=rotation_encoding  state encoding of the images (issue #196):
+#                                 rotation_encoding, angle_encoding,
+#                                 dense_angle_encoding, uniform_bloch_encoding
+#                                 or general_encoding
 #     EXTRA_OVERRIDES="..."       Hydra overrides added to every run
 
 # Stop at the first failing command, unset variable or failing pipe.
@@ -55,6 +59,7 @@ DATASET="${DATASET:-mnist}"
 N_POOL="${N_POOL:-2000}"
 N_TEST="${N_TEST:-null}"
 N_REPEATS="${N_REPEATS:-20}"
+ENCODING="${ENCODING:-rotation_encoding}"
 read -r -a EXTRA <<< "${EXTRA_OVERRIDES:-}"
 # -----------------------------------------------------------------------------
 
@@ -72,7 +77,7 @@ CLASS_TAG="$(IFS=; echo "${CLASSES[*]}")"
 
 for SEED in "${SEEDS[@]}"; do
   RUN_DIR="$OUT_DIR/N${N}_c${CLASS_TAG}_seed${SEED}"
-  echo "--- N=$N seed=$SEED classes=$CLASS_TAG dataset=$DATASET"
+  echo "--- N=$N seed=$SEED classes=$CLASS_TAG dataset=$DATASET encoding=$ENCODING"
   uv run python experiments/double_descent/double_descent.py \
     "N=$N" \
     "seed=$SEED" \
@@ -82,6 +87,7 @@ for SEED in "${SEEDS[@]}"; do
     "double_descent.n_pool=$N_POOL" \
     "double_descent.n_test=$N_TEST" \
     "double_descent.n_repeats=$N_REPEATS" \
+    "double_descent.encoding=$ENCODING" \
     ${EXTRA[@]+"${EXTRA[@]}"} \
     "hydra.run.dir=$RUN_DIR"
 done

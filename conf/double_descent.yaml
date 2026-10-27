@@ -37,12 +37,34 @@ rotation_encoding:
   N: ${N}
   axis: y
 
+# The tensor-product encodings of issue #196 (QELM.encoding.ProductEncoding),
+# chosen with double_descent.encoding. angle_encoding puts one feature in
+# [0, pi] on each qubit (the state of rotation_encoding with axis y); the
+# three others put two on each qubit, so the image is reduced to n_features =
+# 2 N principal components (the default):
+#   dense_angle_encoding    cos(x1/2)|0> + e^{i x2} sin(x1/2)|1>, x1, x2 in [0, pi]
+#   uniform_bloch_encoding  sqrt(x1)|0> + e^{i x2} sqrt(1 - x1)|1>,
+#                           x1 in [0, 1], x2 in [0, pi]
+#   general_encoding        (x1|0> + x2|1>) / sqrt(x1^2 + x2^2), x1, x2 in [0, 1]
+angle_encoding:
+  N: ${N}
+dense_angle_encoding:
+  N: ${N}
+uniform_bloch_encoding:
+  N: ${N}
+general_encoding:
+  N: ${N}
+
 double_descent:
   # mnist (downloaded once to data_dir, gitignored) or digits (the 8x8 digits
   # bundled with scikit-learn, no download).
   dataset: mnist
   data_dir: data/mnist
   download: true
+  # The state encoding of the images, the name of one of the blocks above:
+  # rotation_encoding (default), angle_encoding, dense_angle_encoding,
+  # uniform_bloch_encoding or general_encoding.
+  encoding: rotation_encoding
   # The digits to tell apart, two or more: [3, 5] is the binary task of the
   # issue, [3, 5, 8] or more make it harder. Image of digit classes[k] gets
   # the label k, and the readout learns its one-hot target (K outputs for K
@@ -74,7 +96,8 @@ double_descent:
   #            no dynamics, so fixed functions of the encoding (check 2);
   #   elm      classical ELM, a fixed random ReLU layer with as many neurons
   #            as qelm has observables (check 1, random kitchen sinks);
-  #   linear   linear regression on the N angles.
+  #   linear   linear regression on the M encoded features (the N angles
+  #            of the default encoding).
   models: [qelm, qelm_t0, elm, linear]
   elm_activation: relu
   # Also fit a linear readout on every pixel, on all the training images of
