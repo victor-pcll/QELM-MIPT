@@ -129,7 +129,19 @@ def test_notebook_runs_the_sweep_and_plots(
     res_path = namespace["figure_res"]
     assert res_path == namespace["fss_dir"] / "residuals_vs_p_N.png"
     assert res_path.with_suffix(".json").is_file()
-    assert len(shows) == 8
+    # The Binder ratio of the prediction, refitted from the saved features.
+    binder_table = namespace["binder_table"]
+    assert len(binder_table) == 12
+    assert all("binder_M_Z_mean" in r for r in binder_table)
+    axes_binder = namespace["axes_binder"]
+    assert axes_binder.shape == (2, 1)
+    for ax in axes_binder.flat:
+        assert len(ax.containers) == 2
+        assert "Binder ratio" in ax.get_title()
+    binder_path = namespace["figure_binder"]
+    assert binder_path == namespace["fss_dir"] / "binder_vs_p_N.png"
+    assert binder_path.with_suffix(".json").is_file()
+    assert len(shows) == 9
     # Every figure in this notebook's own folder (#151), with its data.
     for name in (
         "figure_p",
