@@ -289,6 +289,33 @@ writes, each with its `.json`:
 `--h`, `--t`, `--final` pick one setting of a sweep that holds several,
 `--p` the columns of the PCA figures.
 
+### The mixture ceiling over the (p, h) plane at N = 8 (issue #215)
+
+`bayes_estimate_gmm` fixes 3 Gaussians per sector. To check that it is a
+ceiling everywhere on the plane of the measurement probability `p` and the
+field `h`, `gmm_phase_diagram.py` refits every run of one size on its own
+split and seed (`src/QELM/evaluation/gmm_scan.py`): the mixture rule for
+`K = 1, 2, 3, 4, 6, 8` Gaussians per sector, the mixture whose `K` is chosen
+in each sector by BIC (`BICGaussianMixtureBayes`), and the K-NN. It stops if
+the refitted `K = 3` and K-NN do not give the logged ceilings.
+
+```bash
+N_VALUES=8 H_VALUES="0.5 1 2 5 10" P_VALUES="0 0.1 0.2 0.3 0.5 0.7 1" \
+    SEEDS="42 43 44" L=500 ./experiments/QELM_Q/exp_QELM_Q.sh
+uv run python experiments/QELM_Q/gmm_phase_diagram.py outputs/exp_QELM_Q/<date_time>
+```
+
+writes, averaged over the seeds and each with its `.json`:
+`gmm_heatmaps_p_h.png` (maps of the ridge, QDA, BIC mixture and K-NN
+accuracies, of the gap mixture minus ridge, the learnability wall, and of
+mixture minus K-NN, which should be about 0), `gmm_components_p_h.png` (the
+`K` that BIC selects in each sector: how many bundles of trajectories the
+data support), `gmm_vs_K.png` (the mixture accuracy against `K`, one panel
+per `h`: a ceiling must have saturated in `K`), `gmm_vs_p.png` (every
+accuracy against `p`, one panel per `h`) and the table
+`gmm_phase_diagram.json`. `--N`, `--t`, `--final` pick one setting of a
+sweep that holds several.
+
 ## Run the double-descent experiment on MNIST (issue #181)
 
 ```bash
