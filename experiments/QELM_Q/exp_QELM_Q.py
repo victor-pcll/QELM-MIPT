@@ -86,6 +86,17 @@ when it falls on the side of ``(Q1 + Q2) / 2`` of the true charge. With it,
 chance level) and ``balanced_accuracy`` (0.5 for a readout that ignores the
 features), as in ``experiments/QELM_M/exp_QELM_M.py`` (issue #130).
 
+Two K-NN classifiers (:class:`QELM.evaluation.knn.CustomKNN`, ``K =
+round(sqrt(train_size))``, inverse-distance votes) estimate how much of ``Q``
+a nonlinear rule can read from the same ``<Z_k>`` (bias column dropped) on the
+same split (issue #213): ``bayes_estimate_knn`` with the Euclidean distance
+and ``bayes_estimate_knn_mahalanobis`` with the Mahalanobis distance, whose
+metric is the pseudo-inverse of the covariance ``Sigma`` of the training
+``<Z_k>``. ``knn_covariance_rank`` is the number of eigenvalues of ``Sigma``
+the pseudo-inverse keeps and ``knn_covariance_cond`` the ratio of the largest
+to the smallest kept one: a large ratio means that the Mahalanobis metric
+amplifies directions of tiny spread.
+
 Run from the repository root:
 
     uv run python experiments/QELM_Q/exp_QELM_Q.py N=4 samples.L=500 \
@@ -101,7 +112,8 @@ Everything is written to the Hydra run directory, by default
   ``n_measured`` (number of collapses per sample), of shape ``(L,)``;
 - ``metrics.json``: ``nmse``, ``nmse_err``, ``r2``, ``accuracy``,
   ``accuracy_baseline``, ``balanced_accuracy``, ``S_half_mean``,
-  ``n_measured_mean``, the scores of each feature set and the shapes used;
+  ``n_measured_mean``, the two K-NN accuracies and ``knn_covariance_rank``,
+  ``knn_covariance_cond``, the scores of each feature set and the shapes used;
 - ``.hydra/config.yaml`` and ``resolved_config.json``: the config of the run.
 """
 
@@ -119,6 +131,7 @@ from tqdm import tqdm
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
 from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.evaluation import von_neumann_entropy
+from QELM.evaluation.knn import CustomKNN
 from QELM.evaluation.metrics import (
     NMSE,
     R2,
@@ -149,6 +162,10 @@ EXTRA_METRICS = (
     "balanced_accuracy",
     "S_half_mean",
     "n_measured_mean",
+    "bayes_estimate_knn",
+    "bayes_estimate_knn_mahalanobis",
+    "knn_covariance_rank",
+    "knn_covariance_cond",
     *(
         f"{score}_{name}"
         for name in (*FEATURE_SETS, *RECORD_SETS)
@@ -254,7 +271,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         ``y_test``, ``y_pred``, ``W``, ``S_half``,
         ``n_measured``, ``nmse``, ``nmse_err``, ``r2``, ``accuracy``,
         ``accuracy_baseline``, ``balanced_accuracy``, ``S_half_mean``,
-        ``n_measured_mean`` and, for each set ``<name>`` of
+        ``n_measured_mean``, ``bayes_estimate_knn``,
+        ``bayes_estimate_knn_mahalanobis``, ``knn_covariance_rank``,
+        ``knn_covariance_cond`` and, for each set ``<name>`` of
         :data:`FEATURE_SETS` and :data:`RECORD_SETS`, ``features_<name>``
         (with the bias column),
         ``accuracy_<name>``, ``balanced_accuracy_<name>`` and ``r2_<name>``.
@@ -340,6 +359,18 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     solver.fit(X[:train], y_train)
     y_pred = solver.predict(X[train:])
 
+    # The K-NN ceilings on the same <Z_k> and split, no bias column (#213).
+    Z_k = observed["Z"]
+    knn = CustomKNN().fit(Z_k[:train], y_train)
+    knn_m = CustomKNN(metric="mahalanobis").fit(Z_k[:train], y_train)
+    kept = np.linalg.eigvalsh(knn_m.covariance_)[::-1][: knn_m.rank_]
+    knn_metrics = {
+        "bayes_estimate_knn": knn.score(Z_k[train:], y_test),
+        "bayes_estimate_knn_mahalanobis": knn_m.score(Z_k[train:], y_test),
+        "knn_covariance_rank": knn_m.rank_,
+        "knn_covariance_cond": float(kept[0] / kept[-1]) if kept.size else np.nan,
+    }
+
     return {
         "X": X,
         "Y": Y,
@@ -357,6 +388,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "balanced_accuracy": balanced_accuracy(y_test, y_pred, threshold),
         "S_half_mean": float(np.mean(S_half)),
         "n_measured_mean": float(np.mean(n_measured)),
+        **knn_metrics,
         **sets,
     }
 
@@ -379,6 +411,13 @@ def main(cfg: DictConfig) -> None:
     print(f"accuracy baseline (majority charge): {results['accuracy_baseline']:.6g}")
     print(f"balanced accuracy: {results['balanced_accuracy']:.6g}")
     print(f"S_half (mean, bits): {results['S_half_mean']:.6g}")
+    print(f"K-NN accuracy (Euclidean): {results['bayes_estimate_knn']:.6g}")
+    print(
+        "K-NN accuracy (Mahalanobis): "
+        f"{results['bayes_estimate_knn_mahalanobis']:.6g}"
+        f" (rank {results['knn_covariance_rank']},"
+        f" cond {results['knn_covariance_cond']:.3g})"
+    )
     for name in (*FEATURE_SETS, *RECORD_SETS):
         print(f"accuracy on <{name}>: {results[f'accuracy_{name}']:.6g}")
     print(f"Saved to {out_dir}")
