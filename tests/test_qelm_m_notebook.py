@@ -65,7 +65,6 @@ def test_notebook_runs_the_sweep_and_plots(
     assert keys == [
         "accuracy",
         "accuracy_baseline",
-        "accuracy_optimal",
         "balanced_accuracy",
         "r2",
         "nmse",
@@ -95,24 +94,17 @@ def test_notebook_runs_the_sweep_and_plots(
         "Half-system entropy",
         "Mean single-qubit entropy",
     ]
-    # The accuracy panel carries the chance level, dashed, and the Bayes
-    # ceiling, dotted, in the color of the same N, with their own error bars.
+    # The accuracy panel carries the chance level, dashed, in the color of
+    # the same N, with its own error bars. No Bayes ceiling (#195).
     containers = {c.get_label(): c for c in perf[0].containers}
-    assert set(containers) == {
-        "N = 3",
-        "N = 3, chance (majority sign)",
-        "N = 3, Bayes ceiling",
-    }
+    assert set(containers) == {"N = 3", "N = 3, chance (majority sign)"}
     color = containers["N = 3"].lines[0].get_color()
-    for label, style in (
-        ("N = 3, chance (majority sign)", "--"),
-        ("N = 3, Bayes ceiling", ":"),
-    ):
-        assert containers[label].lines[0].get_linestyle() == style
-        assert containers[label].lines[0].get_color() == color
+    chance = containers["N = 3, chance (majority sign)"].lines[0]
+    assert chance.get_linestyle() == "--"
+    assert chance.get_color() == color
     np.testing.assert_allclose(
-        containers["N = 3, Bayes ceiling"].lines[0].get_ydata(),
-        [r["accuracy_optimal_mean"] for r in namespace["table"]],
+        chance.get_ydata(),
+        [r["accuracy_baseline_mean"] for r in namespace["table"]],
     )
     # The ancilla panel: S_vN, its Rényi-2 dashed, and the 1 bit bound.
     labels = [c.get_label() for c in ent[0].containers]

@@ -7,7 +7,7 @@ entanglement of the reservoir, and the readout has to recover the charge from
 the final state alone. For each sample ``i`` (``samples.L`` in total):
 
 1. Draw a new TFIM (new disorder ``J_ij``) on the ``Ns = N - 1`` system
-   qubits and start from the state of :class:`AncillaChargeSectorEmbedding`,
+   qubits and start from the state of :class:`AncillaChargeSectorEncoding`,
    ``(|0>_R |Q1>_S + |1>_R |Q2>_S) / sqrt(2)`` with ``Q1 = Ns // 2`` and
    ``Q2 = Ns // 2 - 1``. The ancilla ``R`` is measured in Z first, with the
    Born rule: the outcome fixes the charge sector of the system, the label
@@ -73,6 +73,20 @@ is only read by these readouts: it never changes the state, the other
 feature sets or the unsuffixed scores. At ``p = 0`` it is all zeros, so
 ``M`` alone is at chance and ``M_Z``, ``M_XX`` are ``Z``, ``XX``.
 
+The state is simulated as a density matrix by default
+(``state_representation=density``). It stays pure all along: ``R`` is
+measured first, the evolution is unitary and a projective measurement maps
+a pure state to a pure state. ``state_representation=vector`` follows the
+state vector instead (issue #183): ``O(2**N)`` memory instead of
+``O(4**N)``, the evolution through ``exp(-i H dt) psi`` from the sparse
+``H`` (``expm_multiply``) without forming the dense propagator, within the
+parity sector of the charge (:func:`parity_step`), and the measurements through
+:func:`QELM.training.measurements.projective.measure_projective_psi`. Both
+draw the same disorder, the same labels and the same measurement choices
+and outcomes from the same generators, so for a given seed they give the
+same features up to rounding (``tests/test_exp_QELM_Q.py``). The vector
+path is what makes ``N = 12`` affordable.
+
 The half-system entanglement entropy of the final state, ``S_half[i]``
 (von Neumann, in bits, of the first ``Ns // 2`` system qubits; the state of
 ``S`` is pure once ``R`` is measured), tracks how much the measurements
@@ -107,6 +121,7 @@ Everything is written to the Hydra run directory, by default
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -114,10 +129,11 @@ import hydra
 import numpy as np
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
+from scipy.sparse.linalg import expm_multiply
 from tqdm import tqdm
 
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
-from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.evaluation import von_neumann_entropy
 from QELM.evaluation.metrics import (
     NMSE,
@@ -131,7 +147,10 @@ from QELM.physics import X as PAULI_X
 from QELM.physics import Y as PAULI_Y
 from QELM.physics import Z, local_expectation, partial_trace
 from QELM.training import ProjectiveMeasurement, RidgeReadout
-from QELM.training.measurements.projective import measure_projective_rho
+from QELM.training.measurements.projective import (
+    measure_projective_psi,
+    measure_projective_rho,
+)
 from QELM.utils import save_config, save_results
 
 # Feature sets, each fitted with its own readout: one-site expectation values
@@ -161,11 +180,16 @@ NBR_TIME_EVOLUTION = "projective_measurement.nbr_time_evolution"
 FINAL_MEASUREMENT = "projective_measurement.final_measurement"
 # Second word of the seed of the measurement generator: the issue number.
 MEASUREMENT_STREAM = 163
+# Ratio of samples to qubits: L = int(delta * N) when set (issue #201).
+SAMPLE_RATIO = "samples.delta"
+# Simulated object: "density" (rho) or "vector" (psi), issue #183.
+STATE_REPRESENTATION = "state_representation"
+STATE_REPRESENTATIONS = ("density", "vector")
 
 
 def evolve_with_measurements(
     rho: np.ndarray,
-    U: np.ndarray,
+    U: np.ndarray | Callable[[np.ndarray], np.ndarray],
     n_steps: int,
     P: ProjectiveMeasurement,
     rng: np.random.Generator,
@@ -175,8 +199,12 @@ def evolve_with_measurements(
     """Apply ``n_steps`` steps ``U``, with a measurement round between two.
 
     Args:
-        rho: Initial density matrix of shape ``(2**N, 2**N)``.
-        U: One step of the evolution, same shape.
+        rho: Initial density matrix of shape ``(2**N, 2**N)``, or state
+            vector of shape ``(2**N,)``.
+        U: One step of the evolution: a unitary matrix of shape
+            ``(2**N, 2**N)``, applied as ``U rho U^dagger``, or a function
+            that returns the evolved state, e.g. ``psi -> U psi`` for a
+            state vector (issue #183).
         n_steps: Number of steps, ``>= 1``.
         P: Measurement of the system qubits, each with its probability ``p``.
         rng: Generator of the measurement choices and outcomes.
@@ -189,10 +217,17 @@ def evolve_with_measurements(
         The final state, after the last step (and its round when ``final``),
         and the number of qubits measured on the way.
     """
-    U_dag = U.conj().T
+    if callable(U):
+        step = U
+    else:
+        U_dag = U.conj().T
+
+        def step(state: np.ndarray) -> np.ndarray:
+            return U @ state @ U_dag
+
     n_measured = 0
     for j in range(n_steps):
-        rho = U @ rho @ U_dag
+        rho = step(rho)
         if final or j < n_steps - 1:
             measure = P.measure(rho, rng=rng)
             rho = measure.rho
@@ -202,11 +237,106 @@ def evolve_with_measurements(
     return rho, n_measured
 
 
+def sample_ratio(cfg: DictConfig, N: int) -> float | None:
+    """Apply ``samples.delta``: set ``samples.L = int(delta * N)`` in ``cfg``.
+
+    The readout has a number of features that grows with ``N``; a fixed
+    ``L`` starves it at large ``N``. A fixed ratio ``delta = L / N`` keeps
+    the amount of data per qubit the same at every size (issue #201).
+    ``samples.train_size`` interpolates ``samples.L``, so it follows.
+
+    Args:
+        cfg: Composed config, changed in place when ``samples.delta`` is
+            set.
+        N: Total number of qubits.
+
+    Returns:
+        ``delta`` as a float, or ``None`` when it is not set (``L`` is then
+        left as it is).
+
+    Raises:
+        ValueError: If ``delta`` is not positive or gives fewer than 2
+            samples.
+    """
+    raw = OmegaConf.select(cfg, SAMPLE_RATIO)
+    if raw is None:
+        return None
+    delta = float(raw)
+    L = int(delta * N)
+    if delta <= 0 or L < 2:
+        raise ValueError(
+            f"{SAMPLE_RATIO} must give at least 2 samples, got {raw!r} for N={N}."
+        )
+    cfg.samples.L = L
+    return delta
+
+
+def parity_step(
+    model: TransverseFieldIsingModel,
+    psi: np.ndarray,
+    r: int,
+    Nr: int,
+    Ns: int,
+    dt: float,
+) -> Callable[[np.ndarray], np.ndarray]:
+    """Return ``psi -> (1_R (x) exp(-i H_S dt)) psi`` within one parity sector.
+
+    After ``R`` is measured with outcome ``r``, the system holds one charge
+    ``Q``, so its state lies in the sector of parity ``Q mod 2``. The TFIM
+    keeps that parity (``Z_i`` is diagonal, ``X_i X_j`` flips two bits) and
+    so do the Z measurements, so the system never leaves the sector. The
+    step evolves only the ``2**(Ns - 1)`` amplitudes of the sector, with
+    ``expm_multiply`` on the sector block of the sparse ``H_S``: half the
+    dimension of the full system (issue #201). With ``TFIM.basis=Z`` the
+    Hamiltonian conserves the X parity instead, so the whole space of the
+    system is evolved.
+
+    Args:
+        model: The TFIM of the system, on ``Ns`` qubits.
+        psi: State of ``R + S`` right after ``R`` is measured, ``(2**N,)``.
+        r: Outcome of ``R``, ``+1`` (``|0>_R``) or ``-1`` (``|1>_R``).
+        Nr: Number of ancilla qubits, the first sites.
+        Ns: Number of system qubits.
+        dt: Duration of one step.
+
+    Returns:
+        The step, a function of a state vector of shape ``(2**N,)``.
+
+    Raises:
+        ValueError: If the system state of ``psi`` is not in one parity
+            sector.
+    """
+    row = 0 if r == 1 else 2**Nr - 1
+    system = psi.reshape(2**Nr, 2**Ns)[row]
+    if model.basis == "X":
+        popcount = np.array([bin(b).count("1") for b in range(2**Ns)])
+        parity = popcount[int(np.argmax(np.abs(system)))] % 2
+        sector = np.flatnonzero(popcount % 2 == parity)
+    else:
+        # TFIM.basis=Z conserves the X parity, not the Z one: the whole
+        # space of the system is evolved.
+        sector = np.arange(2**Ns)
+    outside = np.delete(system, sector)
+    if not np.allclose(outside, 0.0, atol=1e-12):
+        raise ValueError("The system state is not in one parity sector.")
+    H = model.hamiltonian()
+    A = (-1j * dt) * H[sector][:, sector]
+
+    def step(state: np.ndarray) -> np.ndarray:
+        out = np.zeros_like(state)
+        amplitudes = state.reshape(2**Nr, 2**Ns)[row, sector]
+        out.reshape(2**Nr, 2**Ns)[row, sector] = expm_multiply(A, amplitudes)
+        return out
+
+    return step
+
+
 def observable_features(rho: np.ndarray, system: list[int], name: str) -> np.ndarray:
     """Return the features of one set of :data:`FEATURE_SETS` for ``rho``.
 
     Args:
-        rho: Density matrix of shape ``(2**N, 2**N)``.
+        rho: Density matrix of shape ``(2**N, 2**N)`` or state vector of
+            shape ``(2**N,)``.
         system: The system qubits.
         name: ``"X"``, ``"Y"`` or ``"Z"`` for ``<P_k>`` on each qubit of
             ``system``; ``"XX"``, ``"YY"`` or ``"ZZ"`` for ``<P_i P_j>`` on
@@ -243,9 +373,13 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Args:
         cfg: Composed config (``load_config`` or Hydra). Reads
             ``evolution.t``, ``samples.L``, ``samples.train_size``, ``seed``,
-            the TFIM, embedding, measurement and training blocks, and
+            the TFIM, encoding, measurement and training blocks, and
             ``projective_measurement.nbr_time_evolution`` (default 5) and
-            ``projective_measurement.final_measurement`` (default ``False``).
+            ``projective_measurement.final_measurement`` (default ``False``)
+            ``state_representation`` (default ``"density"``) and
+            ``samples.delta`` (default ``None``): when set, ``samples.L`` is
+            replaced in ``cfg`` by ``int(delta * N)``, and
+            ``samples.train_size`` follows (issue #201).
 
     Returns:
         The arrays and metrics of the run: ``X`` (with the bias column),
@@ -262,7 +396,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     set_seed(cfg)
     rng = np.random.default_rng([int(cfg.seed), MEASUREMENT_STREAM])
 
-    sector = AncillaChargeSectorEmbedding.from_config(cfg)
+    sector = AncillaChargeSectorEncoding.from_config(cfg)
     solver = RidgeReadout.from_config(cfg)
     N, Ns, Nr = check_qubit_counts(cfg)
     nbr_time_evolution = int(OmegaConf.select(cfg, NBR_TIME_EVOLUTION, default=5))
@@ -272,8 +406,16 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         )
     dt = float(cfg.evolution.t) / nbr_time_evolution
     final = bool(OmegaConf.select(cfg, FINAL_MEASUREMENT, default=False))
+    representation = str(OmegaConf.select(cfg, STATE_REPRESENTATION, default="density"))
+    if representation not in STATE_REPRESENTATIONS:
+        raise ValueError(
+            f"{STATE_REPRESENTATION} must be one of {STATE_REPRESENTATIONS}, "
+            f"got {representation!r}."
+        )
+    vector = representation == "vector"
     n_rounds = nbr_time_evolution if final else nbr_time_evolution - 1
-    rho0 = sector.rho()
+    state0 = sector.state() if vector else sector.rho()
+    delta = sample_ratio(cfg, N)
     P = ProjectiveMeasurement.from_config(cfg)
     Q1, Q2 = sector.Q1, sector.Q2
 
@@ -294,9 +436,14 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     for i in tqdm(range(L)):
         model = TransverseFieldIsingModel(tfim_params)
-        U = np.kron(identity_R, model.propagator(dt=dt))
-        # The label first: R measured in Z fixes the charge sector of S.
-        rho, r = measure_projective_rho(rho0, 0, N)
+        U: np.ndarray | Callable[[np.ndarray], np.ndarray]
+        if vector:
+            # The label first: R measured in Z fixes the charge sector of S.
+            rho, r = measure_projective_psi(state0, 0, N)
+            U = parity_step(model, rho, r, Nr, Ns, dt)
+        else:
+            U = np.kron(identity_R, model.propagator(dt=dt))
+            rho, r = measure_projective_rho(state0, 0, N)
         Y[i] = Q1 if r == 1 else Q2
         rounds: list[np.ndarray] = []
         rho, n_measured[i] = evolve_with_measurements(
@@ -356,6 +503,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "accuracy_baseline": majority_accuracy(y_train, y_test, threshold),
         "balanced_accuracy": balanced_accuracy(y_test, y_pred, threshold),
         "S_half_mean": float(np.mean(S_half)),
+        "delta": delta,
         "n_measured_mean": float(np.mean(n_measured)),
         **sets,
     }
@@ -370,7 +518,9 @@ def main(cfg: DictConfig) -> None:
     """
     results = run(cfg)
     out_dir = Path(HydraConfig.get().runtime.output_dir)
-    save_results(results, out_dir, Path(__file__).stem, extra_metrics=EXTRA_METRICS)
+    # delta, when set, goes to metrics.json next to n_samples = L (#201).
+    extra = (*EXTRA_METRICS, "delta") if results["delta"] is not None else EXTRA_METRICS
+    save_results(results, out_dir, Path(__file__).stem, extra_metrics=extra)
     save_config(cfg, out_dir)
     print(f"X: {results['X'].shape}  Y: {results['Y'].shape}")
     print(f"NMSE: {results['nmse']:.6g} +- {results['nmse_err']:.2g}")

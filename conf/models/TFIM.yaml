@@ -1,7 +1,9 @@
 # @package _global_
 
-# Transverse-field Ising model: H = h * sum_i Z_i + sum_{i<j} J_ij X_i X_j,
-# with J_ij uniform in [-J/2, J/2]. Add another file in this directory to add a model.
+# Transverse-field Ising model, with J_ij uniform in [-J/2, J/2]:
+#   basis X (default): H = h * sum_i Z_i + sum_{i<j} J_ij X_i X_j
+#   basis Z:           H = -h * sum_i X_i - sum_{i<j} J_ij Z_i Z_j
+# Add another file in this directory to add a model.
 # ${mul:...}, ${div:...} and ${int:...} are defined in src/QELM/resolvers.py.
 # Derived values follow their source (TFIM.J=2 rescales h, t and dt) and can
 # still be overridden directly (TFIM.h=5).
@@ -16,6 +18,7 @@ TFIM:
   N: ${N} # number of qubits, always the top-level N
   J: 1.0 # coupling scale Js, the energy unit
   h: ${mul:10.0,${TFIM.J}} # transverse field, h = 10 Js
+  basis: X # X: quantum information convention, Z: condensed matter (TFIM.basis=Z)
   RUNS: 10 # number of random Hamiltonians (disorder realisations)
 
 # Unitary evolution step and step count, recorded by the pipeline (evolution_request).

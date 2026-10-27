@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from QELM.embedding import RotationEmbedding
+from QELM.encoding import RotationEncoding
 from QELM.evaluation.double_descent import (
     add_bias,
     classification_error,
@@ -53,7 +53,7 @@ def test_t0_features_are_the_product_state_closed_form(axis: str) -> None:
     """Check 2 of the issue: no dynamics, the features are fixed functions."""
     rng = np.random.default_rng(1)
     theta = rng.uniform(0, np.pi, size=(10, 4))
-    emb = RotationEmbedding({"N": 4, "axis": axis})
+    emb = RotationEncoding({"N": 4, "axis": axis})
     single, pairs = ["X", "Y", "Z"], [["X", "X"], ["Y", "Y"], ["Z", "Z"], ["X", "Z"]]
     _, ops = observable_operators(4, single, pairs)
     simulated = expectations(emb.states(theta), ops)
@@ -65,7 +65,7 @@ def test_t0_rank_drops_with_the_vanishing_observables() -> None:
     """R_y gives a real state: <Y_i> = <Y_i Y_j> = 0, so the rank is lower."""
     rng = np.random.default_rng(2)
     theta = rng.uniform(0, np.pi, size=(400, 4))
-    emb = RotationEmbedding({"N": 4})
+    emb = RotationEncoding({"N": 4})
     single, pairs = ["X", "Y", "Z"], [["X", "X"], ["Y", "Y"], ["Z", "Z"]]
     _, ops = observable_operators(4, single, pairs)
     t0 = add_bias(expectations(emb.states(theta), ops))

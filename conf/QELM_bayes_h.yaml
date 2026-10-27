@@ -15,7 +15,7 @@ N: 4
 samples:
   L: 2000
 
-# Initial state (QELM.embedding.AncillaChargeSectorEmbedding): uniform for the
+# Initial state (QELM.encoding.AncillaChargeSectorEncoding): uniform for the
 # uniform superposition of each charge sector, product for the alternating
 # product states of Agrawal et al. (2024).
 ancilla_charge_sector:

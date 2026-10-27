@@ -9,6 +9,7 @@ from __future__ import annotations
 from QELM.training.measurements.base import Readout, ReadoutResult
 from QELM.training.measurements.projective import (
     ProjectiveMeasurement,
+    measure_projective_psi,
     measure_projective_rho,
 )
 from QELM.training.measurements.weak import WeakMeasurement, measure_weak, weak_kraus
@@ -18,6 +19,7 @@ __all__ = [
     "Readout",
     "ReadoutResult",
     "WeakMeasurement",
+    "measure_projective_psi",
     "measure_projective_rho",
     "measure_weak",
     "weak_kraus",

@@ -9,7 +9,7 @@ linear Ridge readout gets. For each sample ``i`` (``samples.L`` in total):
 1. Draw a new TFIM (new disorder ``J_ij``) on the ``Ns = N - 1`` system
    qubits, ``H = h sum_i Z_i + sum_{i<j} J_ij X_i X_j``
    (:class:`QELM.TransverseFieldIsingModel`), and start from the state of
-   :class:`AncillaChargeSectorEmbedding`,
+   :class:`AncillaChargeSectorEncoding`,
    ``(|0>_R |Q1>_S + |1>_R |Q2>_S) / sqrt(2)``, ``Q1 = Ns // 2``,
    ``Q2 = Ns // 2 - 1``, the sectors uniform or product states
    (``ancilla_charge_sector.initial``).
@@ -77,7 +77,7 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
-from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.evaluation.bayes import (
     correct_probability,
     posterior_scores,
@@ -109,15 +109,15 @@ EXTRA_METRICS = (
 )
 
 
-def sector_states(sector: AncillaChargeSectorEmbedding) -> tuple[np.ndarray, ...]:
-    """Return the system states ``|Q1>_S`` and ``|Q2>_S`` of the embedding.
+def sector_states(sector: AncillaChargeSectorEncoding) -> tuple[np.ndarray, ...]:
+    """Return the system states ``|Q1>_S`` and ``|Q2>_S`` of the encoding.
 
     ``R`` is site 0, the most significant bit, so the first ``2**Ns``
     amplitudes of the embedded state are the branch ``|0>_R |Q1>_S`` and the
     last ``2**Ns`` the branch ``|1>_R |Q2>_S``, each of norm ``1 / sqrt(2)``.
 
     Args:
-        sector: The embedding, one ancilla.
+        sector: The encoding, one ancilla.
 
     Returns:
         The two normalized state vectors of shape ``(2**Ns,)``.
@@ -133,7 +133,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Args:
         cfg: Composed config (``load_config(config_name="QELM_bayes_h")`` or
             Hydra). Reads ``evolution.t``, ``samples.L``,
-            ``samples.train_size``, ``seed``, the TFIM, embedding and
+            ``samples.train_size``, ``seed``, the TFIM, encoding and
             training blocks and ``bayes.reg_param``, ``bayes.tol`` and
             ``bayes.entropy_base``.
 
@@ -144,7 +144,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         :data:`EXTRA_METRICS`.
     """
     set_seed(cfg)
-    sector = AncillaChargeSectorEmbedding.from_config(cfg)
+    sector = AncillaChargeSectorEncoding.from_config(cfg)
     N, Ns, Nr = check_qubit_counts(cfg)
     if Nr != 1:
         raise ValueError(f"The experiment needs one ancilla, got Nr={Nr}.")

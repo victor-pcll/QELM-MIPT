@@ -5,11 +5,11 @@ Reproduces the simulation of Fig. 7 of Agrawal et al., "Observing quantum
 measurement collapse as a learnability phase transition", PRX 14, 041012
 (2024) (appendix on charge sharpening, issue #137), at one measurement
 strength ``gamma``. It is a test of the library on a published result: the
-embedding, the partial trace and the entropies are the ones of the QELM
+encoding, the partial trace and the entropies are the ones of the QELM
 experiments; only the circuit and the measurement are new.
 
 1. Prepare Eq. (B1), ``(|0>_R |Q0>_S + |1>_R |Q1>_S) / sqrt(2)``, with
-   :class:`AncillaChargeSectorEmbedding` (``initial: product``): the ancilla
+   :class:`AncillaChargeSectorEncoding` (``initial: product``): the ancilla
    ``R`` (qubit 0) entangled with the charge ``Q0 = Ns // 2`` or
    ``Q1 = Ns // 2 - 1`` of the ``Ns`` system qubits.
 2. Draw a :class:`U1BrickworkCircuit` and scramble the state with its
@@ -94,14 +94,14 @@ from omegaconf import DictConfig
 from tqdm import tqdm
 
 from QELM import check_qubit_counts, set_seed
-from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.evaluation import (
     bootstrap_errors,
     charge_filter,
     sharpening_statistics,
     von_neumann_entropy,
 )
-from QELM.models.circuits import U1BrickworkCircuit
+from QELM.models.circuits.haar import U1BrickworkCircuit
 from QELM.physics import charge_leakage, sharp_charge
 from QELM.training import WeakMeasurement
 from QELM.utils import save_config
@@ -149,7 +149,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     N, Ns, Nr = check_qubit_counts(cfg)
     base = float(cfg.charge_sharpening.entropy_base)
 
-    sector = AncillaChargeSectorEmbedding.from_config(cfg)
+    sector = AncillaChargeSectorEncoding.from_config(cfg)
     measurement = WeakMeasurement.from_config(cfg)
     gamma = measurement.gamma
     # Drawn first, from the seeded state: with a fixed instance, every gamma

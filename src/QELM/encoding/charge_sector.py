@@ -4,7 +4,7 @@ The charge of a computational basis state ``|b_0 ... b_{N-1}>`` is its
 number of 1 bits, ``Q = sum_i b_i``. The charge sector ``Q`` is spanned by
 the ``binom(N, Q)`` basis states with that charge.
 
-:class:`AncillaChargeSectorEmbedding` prepares, on an ancilla ``R`` and the
+:class:`AncillaChargeSectorEncoding` prepares, on an ancilla ``R`` and the
 system ``S``::
 
     |psi> = ( |0>_R |Q1>_S + |1>_R |Q2>_S ) / sqrt(2)
@@ -20,7 +20,7 @@ Agrawal et al., PRX 14, 041012 (2024), Eq. (B1) (issue #137): the system
 qubits alternate ``|0>, |1>, |0>, |1>, ...`` (charge ``Ns // 2``), and the
 last ``|1>`` is flipped to ``|0>`` for the charge ``Ns // 2 - 1``. For
 ``Ns = 6``: ``|010101>`` and ``|010100>``. The paper then scrambles the
-charge with random U(1) gates (:class:`QELM.models.circuits.U1BrickworkCircuit`).
+charge with random U(1) gates (:class:`QELM.models.circuits.haar.U1BrickworkCircuit`).
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from typing import Any, Literal, overload
 import numpy as np
 import scipy.sparse as sp
 
-from QELM.embedding.base import Embedding
+from QELM.encoding.base import Encoding
 
 
 def charge_sector_indices(N: int, Q: int) -> np.ndarray:
@@ -114,7 +114,7 @@ def _sparse_column(rows: np.ndarray, values: np.ndarray, dim: int) -> sp.csr_mat
     return sp.csr_matrix((values, (rows, cols)), shape=(dim, 1), dtype=complex)
 
 
-class AncillaChargeSectorEmbedding(Embedding):
+class AncillaChargeSectorEncoding(Encoding):
     """``( |0>_R |Ns//2>_S + |1>_R |Ns//2 - 1>_S ) / sqrt(2)`` on ``N`` qubits.
 
     The ancilla ``R`` is site 0 (most significant bit), as in

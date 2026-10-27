@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from QELM import load_config
-from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEncoding
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FOLDER = REPO_ROOT / "experiments" / "QELM_bayes_h"
@@ -50,7 +50,7 @@ def test_config_composes() -> None:
 
 
 def test_sector_states_are_the_two_branches() -> None:
-    sector = AncillaChargeSectorEmbedding({"N": 5})
+    sector = AncillaChargeSectorEncoding({"N": 5})
     psi1, psi2 = _load(SCRIPT).sector_states(sector)
     assert psi1.shape == psi2.shape == (16,)
     for psi, Q in ((psi1, sector.Q1), (psi2, sector.Q2)):
