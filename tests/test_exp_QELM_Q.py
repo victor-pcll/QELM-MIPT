@@ -523,3 +523,114 @@ def test_bash_sweep_writes_failures_to_failed_log(tmp_path: Path) -> None:
     assert result.returncode == 1
     assert log.read_text() == "exit 137: 3 10 10 false 42 0.5\n"
     assert not (tmp_path / "sweep" / "failed_runs.txt").exists()
+
+
+BAYES_RIDGE_RUN = (
+    "projective_measurement.final_measurement=true",
+    "samples.balanced=true",
+)
+
+
+def test_balanced_labels_alternate_the_two_charges() -> None:
+    """samples.balanced=true: Q1, Q2, Q1, ..., exactly L / 2 each (#233)."""
+    out = _run("projective_measurement.p=0.5", *BAYES_RIDGE_RUN)
+    Ns = N - 1
+    np.testing.assert_array_equal(out["Y"][0::2], Ns // 2)
+    np.testing.assert_array_equal(out["Y"][1::2], Ns // 2 - 1)
+    # Charge sectors are told apart by <Z_k> as with the Born draw.
+    assert out["accuracy"] > 0.5
+
+
+def test_balanced_labels_by_default_are_drawn() -> None:
+    out = _run("projective_measurement.p=0.5")
+    assert not np.array_equal(out["Y"][0::2], np.full(L // 2, (N - 1) // 2))
+
+
+@pytest.mark.parametrize("r", [1, -1])
+def test_project_ancilla_is_the_measured_branch(r: int) -> None:
+    """The imposed outcome leaves the state that measuring R returns for it."""
+    from QELM.encoding import AncillaChargeSectorEncoding
+    from QELM.training.measurements.projective import measure_projective_psi
+
+    module = _load_script()
+    sector = AncillaChargeSectorEncoding(
+        {"N": N, "Q1": None, "Q2": None, "initial": "uniform"}
+    )
+    psi = sector.state()
+    for seed in range(20):
+        measured, outcome = measure_projective_psi(
+            psi, 0, N, rng=np.random.default_rng(seed)
+        )
+        if outcome == r:
+            break
+    np.testing.assert_allclose(module.project_ancilla(psi, r, N), measured)
+    rho = np.outer(psi, psi.conj())
+    np.testing.assert_allclose(
+        module.project_ancilla(rho, r, N), np.outer(measured, measured.conj())
+    )
+    with pytest.raises(ValueError, match="r must be"):
+        module.project_ancilla(psi, 0, N)
+
+
+def test_bayes_ridge_readout_of_the_record() -> None:
+    """The log-likelihoods of M and the scores of the pipeline (#233)."""
+    from QELM.evaluation.bayes_ridge import log_likelihood_features
+
+    out = _run("projective_measurement.p=1.0", *BAYES_RIDGE_RUN)
+    Ns = N - 1
+    assert out["log_likelihood_M"].shape == (L, 2)
+    np.testing.assert_allclose(
+        out["log_likelihood_M"],
+        log_likelihood_features(out["M"].astype(int), (Ns // 2, Ns // 2 - 1)),
+    )
+    # p = 1 with a final round: every qubit measured after every step; the
+    # TFIM at h = 10 J almost conserves Q, so the record shows it.
+    assert np.all(out["M"] != 0)
+    assert out["accuracy_M_bayes"] > 0.9
+    assert out["accuracy_M_bayes_ridge"] > 0.9
+    for key in ("balanced_accuracy_M_bayes_ridge", "r2_M_bayes_ridge"):
+        assert np.isfinite(out[key])
+
+
+def test_bayes_ridge_at_p_zero_is_chance() -> None:
+    """No measurement, an empty record: both readouts of M guess blindly."""
+    out = _run("projective_measurement.p=0.0", *BAYES_RIDGE_RUN)
+    assert out["accuracy_M_bayes"] == 0.5
+    np.testing.assert_allclose(out["log_likelihood_M"], 0.0, atol=1e-12)
+    assert out["balanced_accuracy_M_bayes_ridge"] == 0.5
+
+
+def test_bayes_ridge_scores_go_to_metrics_json(tmp_path: Path) -> None:
+    from QELM.utils import save_results
+
+    module = _load_script()
+    out = _run("projective_measurement.p=0.5", *BAYES_RIDGE_RUN)
+    save_results(out, tmp_path, "exp_QELM_Q", extra_metrics=module.EXTRA_METRICS)
+    metrics = json.loads((tmp_path / "metrics.json").read_text())
+    for key in ("accuracy_M_bayes_ridge", "accuracy_M_bayes"):
+        assert metrics[key] == out[key]
+    assert np.load(tmp_path / "exp_QELM_Q.npz")["log_likelihood_M"].shape == (L, 2)
+
+
+def test_bash_sweep_passes_balanced(tmp_path: Path) -> None:
+    """BALANCED=true reaches samples.balanced; the labels alternate (#233)."""
+    env = {
+        **os.environ,
+        "OUT_DIR": str(tmp_path),
+        "N_VALUES": "4",
+        "SEEDS": "42",
+        "P_VALUES": "0.5",
+        "FINAL_VALUES": "true",
+        "L": "10",
+        "BALANCED": "true",
+        "TQDM_DISABLE": "1",
+    }
+    subprocess.run(["bash", str(BASH_SCRIPT)], check=True, env=env, cwd=tmp_path)
+    (run,) = tmp_path.glob("*/metrics.json")
+    config = json.loads((run.parent / "resolved_config.json").read_text())
+    assert config["samples"]["balanced"] is True
+    np.testing.assert_array_equal(
+        np.load(run.parent / "exp_QELM_Q.npz")["Y"], [1, 0] * 5
+    )
+    metrics = json.loads(run.read_text())
+    assert "accuracy_M_bayes_ridge" in metrics and "accuracy_M_bayes" in metrics
