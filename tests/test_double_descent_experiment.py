@@ -140,6 +140,54 @@ def test_run_errors() -> None:
         run(_cfg("Nr=1"))
     with pytest.raises(ValueError, match="exceeds the pool"):
         run(_cfg("double_descent.alpha_ratios=[20.0]"))
+    with pytest.raises(ValueError, match="Unknown encoding"):
+        run(_cfg("double_descent.encoding=amplitude_encoding"))
+
+
+@pytest.mark.parametrize(
+    ("encoding", "n_inputs", "rank_t0"),
+    [
+        ("angle_encoding", 3, 13),  # real state: <Y_i> = <Y_i Y_j> = 0
+        ("dense_angle_encoding", 6, 19),
+        ("uniform_bloch_encoding", 6, 19),
+        ("general_encoding", 6, 13),  # real state
+    ],
+)
+def test_run_with_each_encoding(encoding: str, n_inputs: int, rank_t0: int) -> None:
+    """Issue #196: the same reservoir and observables, another input state."""
+    results = _load(SCRIPT).run(_cfg(f"double_descent.encoding={encoding}"))
+    assert results["encoding"] == encoding
+    assert results["n_inputs"] == n_inputs
+    assert results["theta_pool"].shape == (200, n_inputs)
+    assert results["t0_max_deviation"] < 1e-12
+    assert results["n_columns_qelm"] == 19  # N = 3 qubits in every case
+    assert results["n_features_qelm_t0"] == rank_t0
+    assert results["n_features_linear"] == n_inputs + 1
+    assert results["accuracy_qelm"] > 0.9
+    assert results["peak_alpha_qelm"] == 1.0
+
+
+def test_encoding_inputs_follow_the_bounds() -> None:
+    script = _load(SCRIPT)
+    cfg = _cfg("double_descent.encoding=uniform_bloch_encoding")
+    bounds = script.input_bounds(script.build_encoding(cfg))
+    np.testing.assert_allclose(bounds, [[0, 1], [0, np.pi]] * 3)
+    u = np.array([[0.0] * 6, [0.5] * 6, [1.0] * 6])
+    np.testing.assert_allclose(
+        script.encoding_inputs(u, bounds),
+        [[0] * 6, [0.5, np.pi / 2] * 3, [1, np.pi] * 3],
+    )
+    # The default encoding keeps the angles of issue #181, in [0, pi].
+    default = script.build_encoding(_cfg())
+    assert default.name == "rotation_encoding"
+    np.testing.assert_array_equal(script.input_bounds(default), [[0, np.pi]] * 3)
+    # rotation_encoding and angle_encoding give the same features.
+    run = script.run
+    rotation, angle = run(_cfg()), run(_cfg("double_descent.encoding=angle_encoding"))
+    np.testing.assert_array_equal(rotation["theta_pool"], angle["theta_pool"])
+    np.testing.assert_allclose(
+        rotation["features_qelm_pool"], angle["features_qelm_pool"], atol=1e-12
+    )
 
 
 def test_launcher_runs_the_seeds_and_plots(tmp_path: Path) -> None:
@@ -235,3 +283,42 @@ def test_plot_helpers(tmp_path: Path) -> None:
         summed,
         runs[0]["arrays"]["confusion_qelm"] + runs[1]["arrays"]["confusion_qelm"],
     )
+
+
+def test_plot_encodings(tmp_path: Path) -> None:
+    """Issue #196: one sweep per encoding, compared on one figure."""
+    plot = _load(PLOT)
+    script = _load(SCRIPT)
+    for encoding in ("angle_encoding", "dense_angle_encoding"):
+        for seed in (0, 1):
+            cfg = _cfg(f"seed={seed}", f"double_descent.encoding={encoding}")
+            script.save(script.run(cfg), tmp_path / encoding / f"N3_c35_seed{seed}")
+    (tmp_path / "empty").mkdir()  # a folder without runs is skipped
+    by_encoding = plot.load_encodings(tmp_path)
+    assert list(by_encoding) == ["angle_encoding", "dense_angle_encoding"]
+    table = plot.plot_encodings(tmp_path)
+    assert table["dense_angle_encoding"]["n_inputs"] == 6
+    assert table["angle_encoding"]["models"]["qelm"]["peak_alpha_of_mean"] == 1.0
+    assert (tmp_path / "encodings.png").is_file()
+    data = json.loads((tmp_path / "encodings.json").read_text())
+    assert data["extra"]["model"] == "qelm"
+    saved = json.loads((tmp_path / "encodings_summary.json").read_text())
+    assert set(saved) == {"angle_encoding", "dense_angle_encoding"}
+    fig, axes = plot.draw_encodings(by_encoding)
+    assert len(axes) == 2
+    assert [t.get_text() for t in axes[0].get_legend().get_texts()] == [
+        "angle",
+        "dense angle",
+    ]
+    plot.main(["--encodings", str(tmp_path)])  # the command line
+    # Two seeds of one sweep with different encodings cannot be compared.
+    mixed = tmp_path / "mixed"
+    for name in ("angle_encoding", "dense_angle_encoding"):
+        for run in (tmp_path / name).iterdir():
+            (mixed / f"{name}_{run.name}").mkdir(parents=True)
+            for f in run.iterdir():
+                (mixed / f"{name}_{run.name}" / f.name).write_bytes(f.read_bytes())
+    with pytest.raises(ValueError, match="mixes"):
+        plot.load_encodings(tmp_path)
+    with pytest.raises(FileNotFoundError):
+        plot.load_encodings(tmp_path / "empty")

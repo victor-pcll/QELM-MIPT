@@ -1,19 +1,32 @@
-"""State encodings: how the input is encoded into the reservoir state (issue #197)."""
+"""State encodings: how the input is encoded into the reservoir state (issue #197).
+
+The tensor-product encodings of issue #196 (:class:`ProductEncoding`):
+:class:`AngleEncoding`, :class:`DenseAngleEncoding`,
+:class:`UniformBlochEncoding` and :class:`GeneralEncoding`.
+"""
 
 from __future__ import annotations
 
-from QELM.encoding.base import Encoding
+from QELM.encoding.angle import AngleEncoding
+from QELM.encoding.base import Encoding, OutOfBoundsError, ProductEncoding
 from QELM.encoding.charge_sector import (
     AncillaChargeSectorEncoding,
     charge_sector_indices,
     charge_sector_state,
     product_charge_index,
 )
+from QELM.encoding.dense_angle import DenseAngleEncoding
+from QELM.encoding.general import GeneralEncoding
 from QELM.encoding.rotation import RotationEncoding
+from QELM.encoding.uniform_bloch import UniformBlochEncoding
 
 _ENCODINGS: dict[str, type[Encoding]] = {
     AncillaChargeSectorEncoding.name: AncillaChargeSectorEncoding,
     RotationEncoding.name: RotationEncoding,
+    AngleEncoding.name: AngleEncoding,
+    DenseAngleEncoding.name: DenseAngleEncoding,
+    UniformBlochEncoding.name: UniformBlochEncoding,
+    GeneralEncoding.name: GeneralEncoding,
 }
 
 
@@ -38,8 +51,14 @@ def get_encoding(name: str) -> type[Encoding]:
 
 __all__ = [
     "AncillaChargeSectorEncoding",
+    "AngleEncoding",
+    "DenseAngleEncoding",
     "Encoding",
+    "GeneralEncoding",
+    "OutOfBoundsError",
+    "ProductEncoding",
     "RotationEncoding",
+    "UniformBlochEncoding",
     "charge_sector_indices",
     "charge_sector_state",
     "get_encoding",
