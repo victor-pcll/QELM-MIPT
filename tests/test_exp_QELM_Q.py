@@ -523,3 +523,81 @@ def test_bash_sweep_writes_failures_to_failed_log(tmp_path: Path) -> None:
     assert result.returncode == 1
     assert log.read_text() == "exit 137: 3 10 10 false 42 0.5\n"
     assert not (tmp_path / "sweep" / "failed_runs.txt").exists()
+
+
+def test_pair_products() -> None:
+    """v_a v_b over a < b, or a <= b with the squares (#229)."""
+    module = _load_script()
+    v = np.array([[1.0, 2.0, 3.0], [-1.0, 0.0, 2.0]])
+    np.testing.assert_array_equal(
+        module.pair_products(v), [[2.0, 3.0, 6.0], [0.0, -2.0, 0.0]]
+    )
+    np.testing.assert_array_equal(
+        module.pair_products(v, diagonal=True),
+        [[1.0, 2.0, 3.0, 4.0, 6.0, 9.0], [1.0, 0.0, -2.0, 0.0, 0.0, 4.0]],
+    )
+
+
+def test_one_trajectory_moments_are_the_raw_features() -> None:
+    """With K = 1, E[m|x] is m, E[.. m_a m_b|x] is M2 and E[<Z_k>|x] is Z (#229)."""
+    out = _run("projective_measurement.p=0.5")
+    Ns, entries = N - 1, 4 * (N - 1)
+    record = out["M"].reshape(L, -1)
+    a, b = np.triu_indices(entries, k=1)
+    np.testing.assert_array_equal(
+        out["features_M2"],
+        np.hstack([record, record[:, a] * record[:, b], np.ones((L, 1))]),
+    )
+    np.testing.assert_array_equal(out["features_EM"], out["features_M"])
+    np.testing.assert_allclose(out["features_EM2"], out["features_M2"], atol=1e-12)
+    np.testing.assert_allclose(out["features_EZ"], out["features_Z"], atol=1e-12)
+    z = out["X"][:, :-1]
+    k, j = np.triu_indices(Ns)
+    np.testing.assert_allclose(
+        out["features_EZ2"][:, :-1], np.hstack([z, z[:, k] * z[:, j]]), atol=1e-12
+    )
+    for name in ("M2", "EM", "EM2", "EZ", "EZ2", "M_ZZ"):
+        for score in ("accuracy", "balanced_accuracy", "r2"):
+            assert np.isfinite(out[f"{score}_{name}"])
+
+
+def test_trajectories_do_not_change_the_other_features() -> None:
+    """The K - 1 extra trajectories have their own generator (#229)."""
+    one = _run("projective_measurement.p=0.5")
+    many = _run(
+        "projective_measurement.p=0.5", "projective_measurement.n_trajectories=8"
+    )
+    for key in ("X", "Y", "M", "features_XX", "features_M2", "S_half"):
+        np.testing.assert_array_equal(many[key], one[key])
+    # The averages differ from one trajectory and stay in their range.
+    assert not np.allclose(many["features_EM"], one["features_EM"])
+    assert np.all(np.abs(many["features_EM"][:, :-1]) <= 1 + 1e-12)
+    assert np.all(np.abs(many["features_EZ2"][:, :-1]) <= 1 + 1e-12)
+
+
+def test_moments_at_p_one_and_p_zero() -> None:
+    """p = 0: no record, E[<Z_k>|x] is the unitary <Z_k>. p = 1 with a final
+    round: the last outcomes are the final <Z_k>, so the two averages agree."""
+    at_p0 = _run(
+        "projective_measurement.p=0.0", "projective_measurement.n_trajectories=3"
+    )
+    np.testing.assert_array_equal(at_p0["features_EM2"][:, :-1], 0.0)
+    np.testing.assert_allclose(at_p0["features_EZ"], at_p0["X"], atol=1e-10)
+    at_p1 = _run(
+        "projective_measurement.p=1.0",
+        "projective_measurement.final_measurement=true",
+        "projective_measurement.n_trajectories=4",
+    )
+    Ns = N - 1
+    last = at_p1["features_EM"][:, 4 * Ns : 5 * Ns]
+    np.testing.assert_allclose(last, at_p1["features_EZ"][:, :-1], atol=1e-12)
+    # A trajectory state read right after a full round is a product of Z
+    # eigenstates: <Z_k>^2 = 1.
+    k, j = np.triu_indices(Ns)
+    squares = at_p1["features_EZ2"][:, Ns:-1][:, k == j]
+    np.testing.assert_allclose(squares, 1.0, atol=1e-12)
+
+
+def test_rejects_zero_trajectories() -> None:
+    with pytest.raises(ValueError, match="n_trajectories"):
+        _run("projective_measurement.n_trajectories=0")

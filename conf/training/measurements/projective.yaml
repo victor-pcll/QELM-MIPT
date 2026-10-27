@@ -20,3 +20,10 @@ nbr_time_evolution: 5
 #   measurements are intermediate and the features are read after a last
 #   unitary step. Override with projective_measurement.final_measurement=true.
 final_measurement: false
+# n_trajectories: number of trajectories K of each input x (same TFIM, same
+#   initial state), over which experiments/QELM_Q/exp_QELM_Q.py averages the
+#   conditional moments E[m | x], E[m_a m_b | x], E[<Z_k> | x] and
+#   E[<Z_k> <Z_l> | x] (issue #229). The simulation costs K times more. 1:
+#   one trajectory, the moments are the raw features. Override with
+#   projective_measurement.n_trajectories=50.
+n_trajectories: 1

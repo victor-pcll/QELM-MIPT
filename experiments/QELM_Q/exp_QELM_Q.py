@@ -72,6 +72,42 @@ measurement rounds. The sets of :data:`RECORD_SETS` are ``M`` alone, and
 is only read by these readouts: it never changes the state, the other
 feature sets or the unsuffixed scores. At ``p = 0`` it is all zeros, so
 ``M`` alone is at chance and ``M_Z``, ``M_XX`` are ``Z``, ``XX``.
+``M_ZZ`` is ``[M, <Z_i Z_j>]`` (issue #229).
+
+Explicit nonlinear features, each read by the same linear ridge (issue
+#229): the nonlinearity is in the features, never in the readout. They are
+the sets of :data:`MOMENT_SETS`:
+
+- ``M2``, ``[m, m_a m_b]``: the record of one trajectory and the products of
+  its entries over the pairs ``a < b`` of (round, qubit) entries
+  (:func:`pair_products`);
+- ``EM``, ``E[m | x]``, and ``EM2``, ``[E[m | x], E[m_a m_b | x]]``: the same
+  features averaged over ``K = projective_measurement.n_trajectories``
+  trajectories of the same input ``x``, that is the same TFIM and the same
+  state after ``R`` is measured. Only the measurement choices and outcomes
+  change from one trajectory to the next. Grouping by the charge ``Q`` alone
+  would leak the label into the features;
+- ``EZ``, ``E[<Z_k> | x]``, and ``EZ2``, ``[E[<Z_k> | x], E[<Z_k> <Z_l> | x]]``
+  over ``k <= l``: the same averages of the final ``<Z_k>`` of each
+  trajectory.
+
+Trajectory 0 is the one of every other feature set, drawn as before; the
+``K - 1`` others come from their own generator, seeded with ``(seed, 229)``,
+so the other features do not depend on ``K``. With ``K = 1`` (the default),
+``EM`` is ``M``, ``EM2`` is ``M2`` and ``EZ`` is ``Z``.
+
+The physical caveat of these averages. For a fixed ``x``, the law of the
+record is the Born rule ``P(m | x) = Tr(K_m rho_0(x) K_m^dagger)``, linear in
+``rho_0(x)``. So every ``E[f(m) | x]``, ``E[m | x]`` and ``E[m_a m_b | x]``
+among them, is linear in the quantum state, however nonlinear ``f`` is; and
+``E[<Z_k> | x] = Tr(Z_k rho_bar)`` depends only on the averaged state
+``rho_bar``, the output of the averaged (dephasing) channel. The
+measurement-induced transition only shows in quantities nonlinear in the
+state ``rho_m`` of a trajectory: entanglement entropy, purity or ``E[<Z_k>
+<Z_l> | x]`` (Edwards-Anderson-like). ``EM``, ``EM2`` and ``EZ`` are expected
+to change smoothly with ``p`` (a dephasing crossover): a gain of accuracy
+from them is the averaging out of the projection noise, not a nonlinearity
+of the reservoir. ``EZ2`` is the control that can carry the transition.
 
 Three ceilings of the accuracy on ``<Z_k>`` come with it (issue #202),
 from the same split and the same ``<Z_k>`` without the bias column
@@ -195,7 +231,15 @@ PAULIS = {"X": PAULI_X, "Y": PAULI_Y, "Z": Z}
 FEATURE_SETS = ("X", "Y", "Z", "XX", "YY", "ZZ", "XY")
 # Readouts on the measurement record M, alone or next to the observables of
 # a feature set, phi = [M, X] (issue #179): name -> sets of FEATURE_SETS.
-RECORD_SETS: dict[str, tuple[str, ...]] = {"M": (), "M_Z": ("Z",), "M_XX": ("XX",)}
+RECORD_SETS: dict[str, tuple[str, ...]] = {
+    "M": (),
+    "M_Z": ("Z",),
+    "M_XX": ("XX",),
+    "M_ZZ": ("ZZ",),
+}
+# Explicit nonlinear features and conditional moments over the trajectories
+# of one input x, each read by its own linear readout (issue #229).
+MOMENT_SETS = ("M2", "EM", "EM2", "EZ", "EZ2")
 # Scalars written to metrics.json besides nmse, nmse_err and r2.
 EXTRA_METRICS = (
     "accuracy",
@@ -212,7 +256,7 @@ EXTRA_METRICS = (
     "knn_covariance_cond",
     *(
         f"{score}_{name}"
-        for name in (*FEATURE_SETS, *RECORD_SETS)
+        for name in (*FEATURE_SETS, *RECORD_SETS, *MOMENT_SETS)
         for score in ("accuracy", "balanced_accuracy", "r2")
     ),
 )
@@ -227,6 +271,26 @@ SAMPLE_RATIO = "samples.delta"
 # Simulated object: "density" (rho) or "vector" (psi), issue #183.
 STATE_REPRESENTATION = "state_representation"
 STATE_REPRESENTATIONS = ("density", "vector")
+# Trajectories per input x for the conditional moments E[. | x] (issue #229).
+N_TRAJECTORIES = "projective_measurement.n_trajectories"
+# Second word of the seed of the trajectories k >= 1: the issue number.
+TRAJECTORY_STREAM = 229
+
+
+def pair_products(values: np.ndarray, diagonal: bool = False) -> np.ndarray:
+    """Return the products ``v_a v_b`` over the pairs of the last axis.
+
+    Args:
+        values: Array of shape ``(..., n)``.
+        diagonal: Also keep the squares, the pairs ``a <= b`` instead of
+            ``a < b``.
+
+    Returns:
+        Array of shape ``(..., n (n - 1) / 2)``, or ``(..., n (n + 1) / 2)``
+        with ``diagonal``, the pairs in row-major order of ``(a, b)``.
+    """
+    a, b = np.triu_indices(values.shape[-1], k=0 if diagonal else 1)
+    return values[..., a] * values[..., b]
 
 
 def evolve_with_measurements(
@@ -421,7 +485,10 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             ``state_representation`` (default ``"density"``) and
             ``samples.delta`` (default ``None``): when set, ``samples.L`` is
             replaced in ``cfg`` by ``int(delta * N)``, and
-            ``samples.train_size`` follows (issue #201).
+            ``samples.train_size`` follows (issue #201);
+            ``projective_measurement.n_trajectories`` (default 1), the
+            number of trajectories per input of the conditional moments
+            (issue #229).
 
     Returns:
         The arrays and metrics of the run: ``X`` (with the bias column),
@@ -434,7 +501,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         ``bayes_estimate_knn`` (issue #202), ``bayes_estimate_knn_euclidean``,
         ``bayes_estimate_knn_mahalanobis``, ``knn_covariance_rank``,
         ``knn_covariance_cond`` (issue #213) and, for each set ``<name>`` of
-        :data:`FEATURE_SETS` and :data:`RECORD_SETS`, ``features_<name>``
+        :data:`FEATURE_SETS`, :data:`RECORD_SETS` and :data:`MOMENT_SETS`,
+        ``features_<name>``
         (with the bias column),
         ``accuracy_<name>``, ``balanced_accuracy_<name>`` and ``r2_<name>``.
     """
@@ -458,6 +526,10 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             f"got {representation!r}."
         )
     vector = representation == "vector"
+    n_trajectories = int(OmegaConf.select(cfg, N_TRAJECTORIES, default=1))
+    if n_trajectories < 1:
+        raise ValueError(f"{N_TRAJECTORIES} must be >= 1, got {n_trajectories}.")
+    rng_trajectories = np.random.default_rng([int(cfg.seed), TRAJECTORY_STREAM])
     n_rounds = nbr_time_evolution if final else nbr_time_evolution - 1
     state0 = sector.state() if vector else sector.rho()
     delta = sample_ratio(cfg, N)
@@ -470,6 +542,11 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     S_half = np.zeros(L)
     n_measured = np.zeros(L)
     M = np.zeros((L, n_rounds, Ns))
+    # Conditional moments over the trajectories of each input (issue #229).
+    EM = np.zeros((L, n_rounds * Ns))
+    EM_pairs = np.zeros((L, n_rounds * Ns * (n_rounds * Ns - 1) // 2))
+    EZ = np.zeros((L, Ns))
+    EZ_pairs = np.zeros((L, Ns * (Ns + 1) // 2))
     system = list(range(Nr, N))
     half = system[: Ns // 2]
 
@@ -490,16 +567,33 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             U = np.kron(identity_R, model.propagator(dt=dt))
             rho, r = measure_projective_rho(state0, 0, N)
         Y[i] = Q1 if r == 1 else Q2
-        rounds: list[np.ndarray] = []
-        rho, n_measured[i] = evolve_with_measurements(
-            rho, U, nbr_time_evolution, P, rng, final, record=rounds
-        )
-        # An unmeasured qubit counts as 0, as in exp_QELM_M (issue #91).
-        if rounds:
-            M[i] = np.nan_to_num(np.array(rounds), nan=0.0)
-        for name in FEATURE_SETS:
-            features[name].append(observable_features(rho, system, name))
-        S_half[i] = von_neumann_entropy(rho, half)
+        rho0 = rho
+        for k in range(n_trajectories):
+            rounds: list[np.ndarray] = []
+            rho, measured = evolve_with_measurements(
+                rho0,
+                U,
+                nbr_time_evolution,
+                P,
+                rng if k == 0 else rng_trajectories,
+                final,
+                record=rounds,
+            )
+            # An unmeasured qubit counts as 0, as in exp_QELM_M (issue #91).
+            m = np.zeros((n_rounds, Ns))
+            if rounds:
+                m = np.nan_to_num(np.array(rounds), nan=0.0)
+            z = observable_features(rho, system, "Z")
+            EM[i] += m.ravel() / n_trajectories
+            EM_pairs[i] += pair_products(m.ravel()) / n_trajectories
+            EZ[i] += z / n_trajectories
+            EZ_pairs[i] += pair_products(z, diagonal=True) / n_trajectories
+            if k == 0:
+                # Trajectory 0 gives every other feature, as with K = 1.
+                M[i], n_measured[i] = m, measured
+                for name in FEATURE_SETS:
+                    features[name].append(observable_features(rho, system, name))
+                S_half[i] = von_neumann_entropy(rho, half)
 
     train = int(cfg.samples.train_size)
     y_train, y_test = Y[:train], Y[train:]
@@ -516,6 +610,12 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             name: np.hstack([M.reshape(L, -1), *(observed[s] for s in obs)])
             for name, obs in RECORD_SETS.items()
         },
+        # Explicit nonlinear features and conditional moments (issue #229).
+        "M2": np.hstack([M.reshape(L, -1), pair_products(M.reshape(L, -1))]),
+        "EM": EM,
+        "EM2": np.hstack([EM, EM_pairs]),
+        "EZ": EZ,
+        "EZ2": np.hstack([EZ, EZ_pairs]),
     }
     sets: dict[str, Any] = {}
     for name, values in inputs.items():
@@ -608,7 +708,7 @@ def main(cfg: DictConfig) -> None:
         f" (rank {results['knn_covariance_rank']},"
         f" cond {results['knn_covariance_cond']:.3g})"
     )
-    for name in (*FEATURE_SETS, *RECORD_SETS):
+    for name in (*FEATURE_SETS, *RECORD_SETS, *MOMENT_SETS):
         print(f"accuracy on <{name}>: {results[f'accuracy_{name}']:.6g}")
     print(f"Saved to {out_dir}")
 
