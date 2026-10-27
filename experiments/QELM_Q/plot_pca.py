@@ -51,8 +51,11 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
+from omegaconf import OmegaConf
 
+from QELM.evaluation.metrics import accuracy
 from QELM.evaluation.pca import TrainPCA, fit_pca
+from QELM.training import RidgeReadout
 from QELM.utils import latest_sweep, load_sweep
 from QELM.utils.plots import COLORS, save_figure, subplots
 
@@ -74,6 +77,10 @@ SPACES = {
 }
 NPZ = "exp_QELM_Q.npz"
 FIGURE = "pca_feature_spaces"
+SUM_FIGURE = "record_sum_direction"
+RIDGE_FIGURE = "ridge_outputs"
+# Feature spaces that hold the record, first in the features (issue #179).
+RECORD_SPACES = ("M", "M_Z")
 
 
 def select_runs(
@@ -260,6 +267,239 @@ def draw_grid(
     return fig, extra
 
 
+def sum_direction(n_features: int, n_record: int) -> np.ndarray:
+    """Return the unit vector that sums the record entries of a feature vector.
+
+    The record ``M`` comes first in ``features_M`` and ``features_M_Z``, so
+    ``x @ u`` is ``sum(M) / sqrt(n_record)``: the sum of the outcomes over
+    every round and every qubit. At ``p = 1`` every qubit is measured in every
+    round, and the outcomes of a round sum to ``Ns - 2 Q`` whatever the
+    disorder: ``x @ u`` then takes one value per charge sector.
+
+    Args:
+        n_features: Length of a feature vector, bias column excluded.
+        n_record: Number of record entries, ``n_rounds * Ns``.
+
+    Returns:
+        ``u``, shape ``(n_features,)``, ``1 / sqrt(n_record)`` on the record
+        entries and 0 elsewhere.
+    """
+    if not 0 < n_record <= n_features:
+        raise ValueError(f"Need 0 < n_record <= {n_features}, got {n_record}.")
+    u = np.zeros(n_features)
+    u[:n_record] = 1.0 / np.sqrt(n_record)
+    return u
+
+
+def refit_ridge(run_dir: Path, space: str) -> dict[str, Any]:
+    """Refit the ridge readout of one feature set of a run on its split.
+
+    ``exp_QELM_Q.npz`` keeps the weights of the ``<Z_k>`` readout only; the
+    readouts of the other sets are refitted here, with the ``alpha`` of the
+    run's config, the same way ``exp_QELM_Q.run`` fits them.
+
+    Args:
+        run_dir: Folder of one run, holding :data:`NPZ` and
+            ``.hydra/config.yaml``.
+        space: A key of :data:`SPACES`.
+
+    Returns:
+        ``W`` (bias last), the training and test features ``X_train``,
+        ``X_test`` (bias dropped), the charges ``y_train``, ``y_test``, the
+        test outputs ``output = phi @ W``, the ``threshold`` (midpoint of the
+        two charges), the test ``accuracy`` and ``n_record`` (entries of the
+        record ``M``, 0 for ``Z``).
+    """
+    cfg = OmegaConf.load(run_dir / ".hydra" / "config.yaml")
+    with np.load(run_dir / NPZ) as data:
+        phi, Y = data[f"features_{space}"], data["Y"]
+        n_test = len(data["y_test"])
+        n_record = int(np.prod(data["M"].shape[1:])) if space != "Z" else 0
+    train = len(Y) - n_test
+    readout = RidgeReadout.from_config(cfg)  # type: ignore[arg-type]
+    readout.fit(phi[:train], Y[:train])
+    assert readout.W is not None
+    output = phi[train:] @ readout.W
+    threshold = float(np.mean(np.unique(Y)))
+    return {
+        "W": np.asarray(readout.W),
+        "X_train": phi[:train, :-1],
+        "X_test": phi[train:, :-1],
+        "y_train": Y[:train],
+        "y_test": Y[train:],
+        "output": output,
+        "threshold": threshold,
+        "accuracy": accuracy(Y[train:], output, threshold),
+        "n_record": n_record,
+    }
+
+
+def _runs_by_p(
+    rows: Sequence[dict[str, Any]], p_values: Sequence[float] | None
+) -> list[tuple[float, dict[str, Any] | None]]:
+    """Return, for each ``p``, the run of smallest seed (``None`` if none)."""
+    ps = sorted({float(r["p"]) for r in rows} if p_values is None else p_values)
+    out = []
+    for p in ps:
+        runs = sorted(
+            (r for r in rows if np.isclose(r["p"], p)), key=lambda r: r["seed"]
+        )
+        out.append((p, runs[0] if runs else None))
+    return out
+
+
+def draw_sum_direction(
+    sweep_dir: Path,
+    rows: Sequence[dict[str, Any]],
+    values: dict[str, Any],
+    p_values: Sequence[float] | None = None,
+) -> tuple[Figure, dict[str, Any]]:
+    """Draw the test samples on the plane (sum of the record, PC 1).
+
+    One row per feature set of :data:`RECORD_SPACES`, one column per ``p``.
+    The horizontal axis is the projection on :func:`sum_direction`, centered
+    on the training mean; the vertical axis is the first principal component
+    of the training samples once their part along ``u`` is removed. Each
+    panel gives the share of the training variance along ``u`` (small: the
+    PCA does not see it), the cosine between ``u`` and the ridge weights
+    (bias dropped), and the ridge accuracy.
+
+    Returns:
+        The open figure and, per panel ``"<space>_p<p>"``, those numbers and
+        the coordinates of each sector.
+    """
+    by_p = _runs_by_p(rows, p_values)
+    fig, axes = subplots(
+        len(RECORD_SPACES),
+        len(by_p),
+        figsize=(4.2 * len(by_p), 3.8 * len(RECORD_SPACES)),
+        squeeze=False,
+    )
+    extra: dict[str, Any] = {}
+    for i, space in enumerate(RECORD_SPACES):
+        for j, (p, run) in enumerate(by_p):
+            ax = axes[i, j]
+            if run is None:
+                ax.set_axis_off()
+                continue
+            fit = refit_ridge(sweep_dir / run["run"], space)
+            X_train, X_test = fit["X_train"], fit["X_test"]
+            u = sum_direction(X_train.shape[1], fit["n_record"])
+            center = X_train.mean(axis=0)
+            along = (X_test - center) @ u
+            # PC 1 of what is left once the part along u is removed.
+            rest = fit_pca((X_train - center) - np.outer((X_train - center) @ u, u), 1)
+            across = rest.transform((X_test - center) - np.outer(along, u))
+            total = float(np.sum(np.var(X_train, axis=0)))
+            share = float(np.var(X_train @ u)) / total if total > 0 else 0.0
+            w = fit["W"][:-1]
+            norm = float(np.linalg.norm(w))
+            cosine = float(w @ u) / norm if norm > 0 else 0.0
+            sectors = {}
+            for k, charge in enumerate(np.unique(fit["y_test"])):
+                mask = fit["y_test"] == charge
+                ax.plot(
+                    along[mask],
+                    across[mask, 0],
+                    ls="none",
+                    marker=".",
+                    ms=4,
+                    alpha=0.5,
+                    color=COLORS[k % len(COLORS)],
+                    label=f"Q = {charge:g}",
+                )
+                sectors[f"Q{charge:g}"] = np.column_stack(
+                    [along[mask], across[mask, 0]]
+                ).tolist()
+            ax.set_xlabel(rf"record sum $u$ ({100 * share:.1f} % of var.)")
+            ax.set_ylabel(_axis_label(rest, 0).replace("PC 1", r"PC 1 $\perp u$"))
+            label = SPACES[space][0]
+            ax.set_title(
+                f"{label}, p = {p:g}\nridge accuracy {fit['accuracy']:.2f}, "
+                f"cos(W, u) = {cosine:.2f}",
+                fontsize=10,
+            )
+            extra[f"{space}_p{p:g}"] = {
+                "run": run["run"],
+                "accuracy": fit["accuracy"],
+                "variance_share_u": share,
+                "cos_W_u": cosine,
+                "sectors": sectors,
+            }
+    axes[0, -1].legend(fontsize=8)
+    fig.suptitle(
+        "Test samples along the sum of the measurement record, "
+        f"N = {values['N']}, h = {values['h']:g} J, t = {values['t']:g} / J"
+    )
+    return fig, extra
+
+
+def draw_ridge_outputs(
+    sweep_dir: Path,
+    rows: Sequence[dict[str, Any]],
+    values: dict[str, Any],
+    p_values: Sequence[float] | None = None,
+    bins: int = 40,
+) -> tuple[Figure, dict[str, Any]]:
+    """Draw the histogram of the ridge output on the test samples, by sector.
+
+    One row per feature space of :data:`SPACES`, one column per ``p``. The
+    readout predicts the larger charge at or above the threshold (dashed):
+    the accuracy is the share of each sector on its side of it, so two
+    histograms on both sides of the line are what a ridge accuracy of 1
+    means, whatever the PCA plane shows.
+
+    Returns:
+        The open figure and, per panel ``"<space>_p<p>"``, the threshold, the
+        accuracy and the outputs of each sector.
+    """
+    by_p = _runs_by_p(rows, p_values)
+    fig, axes = subplots(
+        len(SPACES),
+        len(by_p),
+        figsize=(4.2 * len(by_p), 3.4 * len(SPACES)),
+        squeeze=False,
+    )
+    extra: dict[str, Any] = {}
+    for i, (space, (label, _)) in enumerate(SPACES.items()):
+        for j, (p, run) in enumerate(by_p):
+            ax = axes[i, j]
+            if run is None:
+                ax.set_axis_off()
+                continue
+            fit = refit_ridge(sweep_dir / run["run"], space)
+            output, y = fit["output"], fit["y_test"]
+            edges = np.histogram_bin_edges(output, bins=bins)
+            outputs = {}
+            for k, charge in enumerate(np.unique(y)):
+                ax.hist(
+                    output[y == charge],
+                    bins=edges,
+                    alpha=0.6,
+                    color=COLORS[k % len(COLORS)],
+                    label=f"Q = {charge:g}",
+                )
+                outputs[f"Q{charge:g}"] = output[y == charge].tolist()
+            ax.axvline(fit["threshold"], color="gray", ls="--", lw=1.5)
+            ax.set(xlabel=r"ridge output $\phi \cdot W$", ylabel="test samples")
+            ax.set_title(
+                f"{label}, p = {p:g}, ridge accuracy {fit['accuracy']:.2f}",
+                fontsize=10,
+            )
+            extra[f"{space}_p{p:g}"] = {
+                "run": run["run"],
+                "threshold": fit["threshold"],
+                "accuracy": fit["accuracy"],
+                "outputs": outputs,
+            }
+    axes[0, -1].legend(fontsize=8)
+    fig.suptitle(
+        "Ridge output on the test samples (dashed: decision threshold), "
+        f"N = {values['N']}, h = {values['h']:g} J, t = {values['t']:g} / J"
+    )
+    return fig, extra
+
+
 def plot_sweep(
     sweep_dir: Path,
     N: int = 8,
@@ -267,8 +507,8 @@ def plot_sweep(
     n_components: int = 2,
     samples: str = "test",
     **fixed: Any,
-) -> Path:
-    """Write :data:`FIGURE` (``.png`` and ``.json``) in the sweep folder.
+) -> dict[str, Path]:
+    """Write the figures of the sweep (``.png`` and ``.json``) in its folder.
 
     Args:
         sweep_dir: Folder of the sweep.
@@ -277,13 +517,24 @@ def plot_sweep(
         fixed: ``h``, ``t``, ``final`` to keep, as in :func:`select_runs`.
 
     Returns:
-        The path of the PNG file.
+        The path of each PNG file: ``"pca"`` (:data:`FIGURE`, ``_3d`` with
+        three components), ``"sum"`` (:data:`SUM_FIGURE`,
+        :func:`draw_sum_direction`) and ``"ridge"`` (:data:`RIDGE_FIGURE`,
+        :func:`draw_ridge_outputs`).
     """
     rows, values = select_runs(load_sweep(sweep_dir, keys=KEYS), N, **fixed)
+    out = {}
     fig, extra = draw_grid(sweep_dir, rows, values, p_values, n_components, samples)
     name = FIGURE if n_components < 3 else f"{FIGURE}_3d"
-    out = save_figure(fig, sweep_dir, name, data={**values, "panels": extra})
+    out["pca"] = save_figure(fig, sweep_dir, name, data={**values, "panels": extra})
     plt.close(fig)
+    for key, draw, name in (
+        ("sum", draw_sum_direction, SUM_FIGURE),
+        ("ridge", draw_ridge_outputs, RIDGE_FIGURE),
+    ):
+        fig, extra = draw(sweep_dir, rows, values, p_values)
+        out[key] = save_figure(fig, sweep_dir, name, data={**values, "panels": extra})
+        plt.close(fig)
     return out
 
 
@@ -325,7 +576,7 @@ def main() -> None:
     args = parser.parse_args()
     sweep_dir = args.sweep_dir or latest_sweep(Path("outputs") / "exp_QELM_Q")
     final = None if args.final is None else args.final == "true"
-    png = plot_sweep(
+    pngs = plot_sweep(
         sweep_dir,
         N=args.N,
         p_values=args.p,
@@ -335,7 +586,8 @@ def main() -> None:
         t=args.t,
         final=final,
     )
-    print(f"Figure: {png}")
+    for png in pngs.values():
+        print(f"Figure: {png}")
 
 
 if __name__ == "__main__":

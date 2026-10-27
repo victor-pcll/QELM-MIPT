@@ -427,6 +427,37 @@ linearly separable (ridge accuracy 1) along a direction of small variance
 that the plane does not show, which is what `[M]` does at `p = 1`, where
 the charge is the sum of the outcomes of a round.
 
+Two more figures, from the same command, show where a ridge accuracy of 1
+comes from when the PCA plane is a blur. `record_sum_direction.png` draws
+`[M]` and `[M, Z]` against the unit vector `u` that sums the record
+(`sum_direction`), with the share of the training variance along `u` and
+the cosine between `u` and the ridge weights: at `p = 1` every qubit is
+measured in every round, each round sums to `Ns - 2 Q`, and the sectors fall
+on two vertical lines of a direction holding about 2 % of the variance.
+`ridge_outputs.png` draws the histogram of the ridge output `phi . W` on the
+test samples, by sector, with the decision threshold: an accuracy of 1 is
+two histograms on both sides of the line. The readouts of `[M]` and
+`[M, Z]` are refitted from the `.npz` with the `alpha` of the run
+(`refit_ridge`), and give the accuracies logged by the run.
+
+### Heatmaps of the ridge accuracy over `(p, h)` (issue #225)
+
+`experiments/QELM_Q/plot_ridge_heatmap.py` draws the test accuracy of the
+ridge readout of `Q` over `(p, h)` for one size, one panel per feature space
+(`accuracy_M`, `accuracy_M_Z`, `accuracy`), averaged over the seeds, with
+the value of each cell and contour lines at 0.6, 0.75 and 0.9. It maps the
+wall of the linear readout only, not the Bayes ceilings.
+
+```bash
+N_VALUES=8 H_VALUES="0.3 0.5 0.7 1 1.5 2 3 5 7 10" \
+    P_VALUES="0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0" \
+    DELTA=200 STATE=vector MAX_JOBS=4 ./experiments/QELM_Q/exp_QELM_Q.sh
+uv run python experiments/QELM_Q/plot_ridge_heatmap.py outputs/exp_QELM_Q/<date_time>
+```
+
+writes `ridge_heatmap_p_h.png` and its `.json` (`--no-values` leaves the
+numbers out of the cells).
+
 `--h`, `--t`, `--final` pick one setting of a sweep that holds several,
 `--p` the columns of the PCA figures.
 

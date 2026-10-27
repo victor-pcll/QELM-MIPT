@@ -91,8 +91,12 @@ def test_record_at_p0_is_degenerate(sweep: Path) -> None:
 
 def test_plot_writes_the_grid(sweep: Path) -> None:
     plot = _load("plot_pca")
-    png = plot.plot_sweep(sweep, N=N)
-    assert png.name == "pca_feature_spaces.png" and png.is_file()
+    pngs = plot.plot_sweep(sweep, N=N)
+    assert set(pngs) == {"pca", "sum", "ridge"}
+    for path in pngs.values():
+        assert path.is_file() and path.with_suffix(".json").is_file()
+    png = pngs["pca"]
+    assert png.name == "pca_feature_spaces.png"
     data = json.loads(png.with_suffix(".json").read_text())
     # Rows: feature spaces, columns: p.
     assert len(data["panels"]) == 9
@@ -109,7 +113,7 @@ def test_plot_writes_the_grid(sweep: Path) -> None:
 
 def test_plot_in_3d_and_with_a_choice_of_p(sweep: Path) -> None:
     plot = _load("plot_pca")
-    png = plot.plot_sweep(sweep, N=N, p_values=[1.0], n_components=3)
+    png = plot.plot_sweep(sweep, N=N, p_values=[1.0], n_components=3)["pca"]
     assert png.name == "pca_feature_spaces_3d.png" and png.is_file()
     data = json.loads(png.with_suffix(".json").read_text())
     assert set(data["extra"]["panels"]) == {"M_p1", "M_Z_p1", "Z_p1"}
@@ -130,3 +134,60 @@ def test_select_runs_needs_one_field_and_the_size() -> None:
     assert kept == [rows[1]] and values == {"N": 8, "h": 2.0, "t": 10.0, "final": False}
     with pytest.raises(ValueError, match="No run"):
         plot.select_runs(rows, 4)
+
+
+def test_sum_direction() -> None:
+    plot = _load("plot_pca")
+    u = plot.sum_direction(5, 3)
+    np.testing.assert_allclose(u, [1, 1, 1, 0, 0] / np.sqrt(3.0))
+    assert np.linalg.norm(u) == pytest.approx(1.0)
+    with pytest.raises(ValueError):
+        plot.sum_direction(2, 3)
+    with pytest.raises(ValueError):
+        plot.sum_direction(2, 0)
+
+
+@pytest.mark.parametrize("space", ["M", "M_Z", "Z"])
+def test_refit_ridge_gives_the_logged_accuracy(sweep: Path, space: str) -> None:
+    """The refitted readout is the one of the run (same split, same alpha)."""
+    plot = _load("plot_pca")
+    for p in (0.0, 0.5, 1.0):
+        run_dir = sweep / f"N{N}_p{p}"
+        fit = plot.refit_ridge(run_dir, space)
+        metrics = json.loads((run_dir / "metrics.json").read_text())
+        assert fit["accuracy"] == pytest.approx(metrics[plot.SPACES[space][1]])
+        assert fit["n_record"] == (0 if space == "Z" else metrics_record(run_dir))
+    if space == "Z":
+        with np.load(sweep / f"N{N}_p1.0" / plot.NPZ) as data:
+            np.testing.assert_allclose(fit["W"], np.ravel(data["W"]))
+
+
+def metrics_record(run_dir: Path) -> int:
+    with np.load(run_dir / "exp_QELM_Q.npz") as data:
+        return int(np.prod(data["M"].shape[1:]))
+
+
+def test_record_sum_at_p1_is_the_charge(sweep: Path) -> None:
+    """At p = 1 every round sums to Ns - 2 Q: one value of x @ u per sector."""
+    plot = _load("plot_pca")
+    fit = plot.refit_ridge(sweep / f"N{N}_p1.0", "M")
+    u = plot.sum_direction(fit["X_test"].shape[1], fit["n_record"])
+    n_rounds = fit["n_record"] // (N - 1)
+    total = fit["X_test"] @ u * np.sqrt(fit["n_record"])
+    np.testing.assert_allclose(total, n_rounds * ((N - 1) - 2 * fit["y_test"]))
+
+
+def test_sum_and_ridge_figures(sweep: Path) -> None:
+    plot = _load("plot_pca")
+    rows, values = plot.select_runs(plot.load_sweep(sweep, keys=plot.KEYS), N)
+    _, extra = plot.draw_sum_direction(sweep, rows, values)
+    assert set(extra) == {f"{s}_p{p:g}" for s in ("M", "M_Z") for p in (0, 0.5, 1)}
+    assert extra["M_p0"]["variance_share_u"] == 0.0
+    assert 0.0 < extra["M_p1"]["variance_share_u"] < 1.0
+    assert -1.0 <= extra["M_p1"]["cos_W_u"] <= 1.0
+    _, extra = plot.draw_ridge_outputs(sweep, rows, values, p_values=[1.0])
+    assert set(extra) == {"M_p1", "M_Z_p1", "Z_p1"}
+    panel = extra["Z_p1"]
+    outputs = [v for values in panel["outputs"].values() for v in values]
+    with np.load(sweep / f"N{N}_p1.0" / plot.NPZ) as data:
+        assert len(outputs) == len(data["y_test"])
