@@ -280,6 +280,65 @@ OMP_NUM_THREADS=1 N_VALUES="4 6 8" H_VALUES=1 FINAL_VALUES="false true" \
 uv run python experiments/QELM_Q/plot_knn.py outputs/exp_QELM_Q/<date_time>
 ```
 
+### Run many runs at once: `MAX_JOBS` (issue #199)
+
+By default the launcher runs one run after the other. `MAX_JOBS=n` puts the
+whole grid in a bounded queue (`xargs -P n`): the runs start in the order of
+the loops, and a new one starts only when one of the `n` running ones ends,
+so there are never more than `n` alive. `JOBS`, the former name, still works
+when `MAX_JOBS` is not set.
+
+```bash
+OMP_NUM_THREADS=1 MAX_JOBS=6 N_VALUES=12 STATE=vector \
+  ./experiments/QELM_Q/exp_QELM_Q.sh
+```
+
+- **Memory sets `n`, not the cores.** With the density matrix
+  (`STATE=density`, the default), a run at `N = 12` holds `4096 x 4096`
+  complex matrices, about 1 to 1.5 GB: on 16 GB of RAM, use at most 6 to 8
+  jobs. The state vector (`STATE=vector`) needs far less, and there the
+  number of cores is the limit. Set `OMP_NUM_THREADS=1` so that each run
+  uses one core.
+- **A failed run does not stop the sweep.** A Python error, or a run killed
+  by the kernel when the machine runs out of memory (exit 137, `SIGKILL`),
+  is written to `<sweep folder>/failed_runs.txt` (`exit <code>: N h t final
+  seed p`) and the other runs go on. At the end the launcher prints that
+  list and exits with 1; if nothing failed, the file is removed. Rerun only
+  the failed points, with a smaller `MAX_JOBS` if they ran out of memory.
+- **No two runs write the same file.** Each run writes only into its own
+  folder `N<N>_h<h>_t<t>_final<final>_seed<seed>_p<p>/` (`hydra.run.dir`):
+  its `.npz`, `metrics.json`, `resolved_config.json`, log and `.hydra/`. The
+  only shared file is `failed_runs.txt`, where each failure appends one
+  short line, which the system writes in one piece. A grid that lists the
+  same value twice (`P_VALUES="0.5 0.5"`) would give two runs one folder,
+  so the launcher refuses it.
+
+**On a cluster (Slurm).** The queue maps to a job array: one array task per
+line of the grid, and `%n` plays the role of `MAX_JOBS`. A sketch, for one
+`N` and `h`, with the grid over `seed x p`:
+
+```bash
+#!/usr/bin/env bash
+#SBATCH --array=0-104%8          # 5 seeds x 21 p = 105 tasks, 8 at a time
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=2G                 # per task, N = 12 with the density matrix
+SEEDS=(42 43 44 45 46)
+P_VALUES=($(seq 0 0.05 1))
+SEED=${SEEDS[$((SLURM_ARRAY_TASK_ID / 21))]}
+p=${P_VALUES[$((SLURM_ARRAY_TASK_ID % 21))]}
+OMP_NUM_THREADS=1 N_VALUES=12 H_VALUES=1 SEEDS=$SEED P_VALUES=$p \
+  OUT_DIR=outputs/exp_QELM_Q/$SLURM_ARRAY_JOB_ID \
+  FAILED_LOG=logs/failed_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}.txt \
+  ./experiments/QELM_Q/exp_QELM_Q.sh
+```
+
+Each task runs the launcher on a grid of one point, into the same
+`OUT_DIR`, so the folders land side by side as with `MAX_JOBS` and the
+notebooks read them the same way. The tasks share that folder, so each one
+gets its own `FAILED_LOG` (by default `<sweep folder>/failed_runs.txt`, which
+a task that succeeds removes); Slurm also tracks the failures itself
+(`sacct -j <job id>`).
+
 ## Run the double-descent experiment on MNIST (issue #181)
 
 ```bash

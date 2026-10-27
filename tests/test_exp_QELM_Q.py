@@ -397,19 +397,125 @@ def test_bash_sweep_with_delta_scales_l_with_n(tmp_path: Path) -> None:
 
 
 def test_bash_sweep_in_parallel_fails_when_a_run_fails(tmp_path: Path) -> None:
-    """A failed run in the background still fails the sweep."""
+    """A failed run fails the sweep but not the runs queued after it (#199)."""
     env = {
         **os.environ,
         "OUT_DIR": str(tmp_path),
         "N_VALUES": "3",
         "SEEDS": "42",
-        "P_VALUES": "0.0 2.0",  # p = 2 is not a probability
+        "P_VALUES": "0.0 2.0 1.0",  # p = 2 is not a probability
         "L": "10",
-        "JOBS": "2",
+        "MAX_JOBS": "2",
         "TQDM_DISABLE": "1",
     }
     result = subprocess.run(
         ["bash", str(BASH_SCRIPT)], env=env, cwd=tmp_path, capture_output=True
     )
-    assert result.returncode != 0
-    assert len(list(tmp_path.glob("*/metrics.json"))) == 1
+    assert result.returncode == 1
+    runs = sorted(p.parent.name for p in tmp_path.glob("*/metrics.json"))
+    assert runs == [
+        "N3_h10_t10_finalfalse_seed42_p0.0",
+        "N3_h10_t10_finalfalse_seed42_p1.0",
+    ]
+    failed = (tmp_path / "failed_runs.txt").read_text().splitlines()
+    assert failed == ["exit 1: 3 10 10 false 42 2.0"]
+
+
+# A stand-in for `uv` (first on PATH): each call records how many calls run at
+# that moment, sleeps, writes metrics.json into hydra.run.dir, and kills
+# itself with SIGKILL, as the OOM killer would, when p = 0.5.
+FAKE_UV = r"""#!/usr/bin/env bash
+for arg in "$@"; do
+  case "$arg" in
+    hydra.run.dir=*) run_dir="${arg#hydra.run.dir=}" ;;
+    projective_measurement.p=*) p="${arg#projective_measurement.p=}" ;;
+  esac
+done
+mkdir -p "$ACTIVE_DIR" "$run_dir"
+touch "$ACTIVE_DIR/$$"
+ls "$ACTIVE_DIR" | wc -l >> "$COUNT_LOG"
+sleep 0.3
+rm "$ACTIVE_DIR/$$"
+if [[ "$p" == "0.5" ]]; then kill -9 $$; fi
+echo "{}" > "$run_dir/metrics.json"
+"""
+
+
+def _fake_uv_env(tmp_path: Path, **extra: str) -> dict[str, str]:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake = bin_dir / "uv"
+    fake.write_text(FAKE_UV)
+    fake.chmod(0o755)
+    return {
+        **os.environ,
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "OUT_DIR": str(tmp_path / "sweep"),
+        "ACTIVE_DIR": str(tmp_path / "active"),
+        "COUNT_LOG": str(tmp_path / "counts.txt"),
+        "N_VALUES": "3",
+        "SEEDS": "42 43",
+        "L": "10",
+        **extra,
+    }
+
+
+def test_bash_sweep_keeps_at_most_max_jobs_runs_alive(tmp_path: Path) -> None:
+    """MAX_JOBS=3 over 8 runs: never more than 3 at once, and 3 reached (#199)."""
+    env = _fake_uv_env(tmp_path, P_VALUES="0.0 0.2 0.8 1.0", MAX_JOBS="3")
+    subprocess.run(["bash", str(BASH_SCRIPT)], check=True, env=env, cwd=tmp_path)
+    counts = [int(c) for c in (tmp_path / "counts.txt").read_text().split()]
+    assert len(counts) == 8
+    assert max(counts) == 3
+    assert len(list((tmp_path / "sweep").glob("*/metrics.json"))) == 8
+    # Nothing failed, so no list of failures is left behind.
+    assert not (tmp_path / "sweep" / "failed_runs.txt").exists()
+
+
+def test_bash_sweep_survives_a_run_killed_out_of_memory(tmp_path: Path) -> None:
+    """A run killed by SIGKILL (exit 137) is listed; the queue goes on (#199)."""
+    env = _fake_uv_env(tmp_path, P_VALUES="0.0 0.5 1.0", MAX_JOBS="2")
+    result = subprocess.run(
+        ["bash", str(BASH_SCRIPT)], env=env, cwd=tmp_path, capture_output=True
+    )
+    assert result.returncode == 1
+    sweep = tmp_path / "sweep"
+    assert len(list(sweep.glob("*/metrics.json"))) == 4
+    failed = sorted((sweep / "failed_runs.txt").read_text().splitlines())
+    assert failed == [
+        "exit 137: 3 10 10 false 42 0.5",
+        "exit 137: 3 10 10 false 43 0.5",
+    ]
+
+
+def test_bash_sweep_refuses_a_grid_with_the_same_run_twice(tmp_path: Path) -> None:
+    """P_VALUES="0.5 0.5" would make two runs write to one folder (#199)."""
+    env = _fake_uv_env(tmp_path, P_VALUES="0.5 0.5")
+    result = subprocess.run(
+        ["bash", str(BASH_SCRIPT)], env=env, cwd=tmp_path, capture_output=True
+    )
+    assert result.returncode == 2
+    assert b"same run twice" in result.stderr
+    assert not (tmp_path / "counts.txt").exists()
+
+
+@pytest.mark.parametrize("max_jobs", ["0", "-1", "two"])
+def test_bash_sweep_refuses_a_bad_max_jobs(tmp_path: Path, max_jobs: str) -> None:
+    env = _fake_uv_env(tmp_path, P_VALUES="0.0", MAX_JOBS=max_jobs)
+    result = subprocess.run(
+        ["bash", str(BASH_SCRIPT)], env=env, cwd=tmp_path, capture_output=True
+    )
+    assert result.returncode == 2
+    assert b"MAX_JOBS" in result.stderr
+
+
+def test_bash_sweep_writes_failures_to_failed_log(tmp_path: Path) -> None:
+    """FAILED_LOG moves the list of failures, one per Slurm array task (#199)."""
+    log = tmp_path / "logs" / "task_3.txt"
+    env = _fake_uv_env(tmp_path, P_VALUES="0.5", SEEDS="42", FAILED_LOG=str(log))
+    result = subprocess.run(
+        ["bash", str(BASH_SCRIPT)], env=env, cwd=tmp_path, capture_output=True
+    )
+    assert result.returncode == 1
+    assert log.read_text() == "exit 137: 3 10 10 false 42 0.5\n"
+    assert not (tmp_path / "sweep" / "failed_runs.txt").exists()
