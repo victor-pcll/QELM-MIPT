@@ -150,11 +150,9 @@ from QELM.evaluation.metrics import (
     balanced_accuracy,
     majority_accuracy,
 )
-from QELM.models.circuits import (
-    CliffordBrickworkCircuit,
-    HaarBrickworkCircuit,
-    U1BrickworkCircuit,
-)
+from QELM.models.circuits.base import BrickworkCircuit
+from QELM.models.circuits.clifford import CliffordBrickworkCircuit
+from QELM.models.circuits.haar import HaarBrickworkCircuit
 from QELM.physics import Z, local_expectation
 from QELM.training import ProjectiveMeasurement, RidgeReadout
 from QELM.training.measurements.projective import measure_projective_rho
@@ -183,7 +181,7 @@ SECTOR_A = [0]
 # Number of time-evolution steps, each followed by a measurement (issue #132).
 NBR_TIME_EVOLUTION = "projective_measurement.nbr_time_evolution"
 # Random circuits that can replace the TFIM, by models value (issue #171).
-CIRCUITS: dict[str, type[U1BrickworkCircuit]] = {
+CIRCUITS: dict[str, type[BrickworkCircuit]] = {
     HaarBrickworkCircuit.name: HaarBrickworkCircuit,
     CliffordBrickworkCircuit.name: CliffordBrickworkCircuit,
 }

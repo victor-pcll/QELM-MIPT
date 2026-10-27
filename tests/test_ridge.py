@@ -114,3 +114,42 @@ def test_state_dict_holds_the_weights() -> None:
 def test_from_config_without_training_block() -> None:
     cfg = OmegaConf.create({"seed": 0})
     assert RidgeReadout.from_config(cfg).config_alpha == 1e-3
+
+
+# --- alpha = 0 : limit of ridge without penalty (issue #181) ---
+
+
+def test_alpha_zero_is_least_squares_when_overdetermined() -> None:
+    phi, y = _data(n=50, d=6)
+    model = RidgeReadout({"alpha": 0.0})
+    assert model.fit(phi, y) == "fitted"
+    np.testing.assert_allclose(model.W, np.linalg.lstsq(phi, y, rcond=None)[0])
+
+
+def test_alpha_zero_interpolates_with_the_smallest_norm() -> None:
+    phi, y = _data(n=5, d=12)
+    model = RidgeReadout({"alpha": 0.0})
+    model.fit(phi, y)
+    assert model.W is not None
+    np.testing.assert_allclose(model.predict(phi), y, atol=1e-10)
+    np.testing.assert_allclose(model.W, np.linalg.pinv(phi) @ y, atol=1e-10)
+    # Adding a null-space vector keeps the fit and lengthens W.
+    other = model.W + np.linalg.svd(phi)[2][-1]
+    np.testing.assert_allclose(phi @ other, y, atol=1e-10)
+    assert np.linalg.norm(other) > np.linalg.norm(model.W)
+
+
+@pytest.mark.parametrize("n", [5, 50])
+def test_alpha_zero_is_the_limit_of_small_alpha(n: int) -> None:
+    phi, y = _data(n=n, d=12, k=3)
+    exact, small = RidgeReadout({"alpha": 0.0}), RidgeReadout({"alpha": 1e-9})
+    exact.fit(phi, y)
+    small.fit(phi, y)
+    assert exact.W is not None and exact.W.shape == (12, 3)
+    np.testing.assert_allclose(small.W, exact.W, atol=1e-5)
+
+
+def test_double_descent_config_uses_ridge_without_penalty() -> None:
+    cfg = load_config(config_name="double_descent")
+    assert cfg.training.name == "ridge"
+    assert RidgeReadout.from_config(cfg).config_alpha == 0.0

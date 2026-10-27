@@ -101,7 +101,7 @@ from QELM.evaluation import (
     sharpening_statistics,
     von_neumann_entropy,
 )
-from QELM.models.circuits import U1BrickworkCircuit
+from QELM.models.circuits.haar import U1BrickworkCircuit
 from QELM.physics import charge_leakage, sharp_charge
 from QELM.training import WeakMeasurement
 from QELM.utils import save_config

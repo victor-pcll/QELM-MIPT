@@ -5,7 +5,8 @@ parameters, calls the Hydra entry point once per combination, and writes every
 run to its own folder under `outputs/`, which git ignores (see `.gitignore`).
 
 Next to `metrics.json`, every Python experiment script (`projective/`,
-`QELM_Z/`, `QELM_M/`, `QELM_Q/`, `charge_sharpening/`, `learnability/`) writes
+`QELM_Z/`, `QELM_M/`, `QELM_Q/`, `charge_sharpening/`, `learnability/`,
+`double_descent/`) writes
 `resolved_config.json`, the config of the run with every interpolation
 evaluated (`QELM.utils.save_config`, issue #85). `.hydra/config.yaml` keeps the
 formulas as written in `conf/`, such as `depth: ${int:${div:${Ns},2}}`;
@@ -244,6 +245,92 @@ the `(p, h)` plane (`heatmaps_p_h.png`), then the same three figures for the
 readouts on `M`, `[M, <Z_k>]` and `[M, <X_i X_j>]` (`*_record.png`). Each run is small enough to be
 fastest on a single thread: the notebook sets `OMP_NUM_THREADS=1`, which
 made a run at `N = 6` about 6 times faster.
+
+## Run the double-descent experiment on MNIST (issue #181)
+
+```bash
+./experiments/double_descent/double_descent.sh
+```
+
+A static, non-linear task where the readout shows the double descent: MNIST
+digits 3 against 5 by default, or any two or more digits (`CLASSES="3 5 8"`)
+for a harder task. The protocol follows the QELM image classification of
+"Harnessing quantum extreme learning machines for image classification",
+Phys. Rev. Applied (2025): PCA, angle encoding, a fixed reservoir and a
+linear readout of local observables. The first run downloads MNIST
+to `data/mnist/` (about 11 MB, gitignored), checked against the SHA-256 of
+the published files; `DATASET=digits` uses scikit-learn's 8x8 digits
+instead, with no download. The config is `conf/double_descent.yaml`; each
+run of `experiments/double_descent/double_descent.py` is one seed:
+
+1. Each image is reduced to `N` principal components (default `N = 8`),
+   fitted on the training images of the chosen digits, and each component is
+   mapped to an angle in `[0, pi]` (`QELM.datasets.AngleEncoder`).
+2. Qubit `i` starts in `R_y(theta_i)|0>` (`QELM.embedding.RotationEmbedding`),
+   with no ancilla (`Nr = 0`).
+3. One fixed quench `U = exp(-i H t)` acts on every image: a single TFIM,
+   drawn once per seed, with `h = J` (not the `10 J` of the TFIM config, at
+   which the field dominates) and `t = 10 / J`.
+4. The features are `<X_i>, <Y_i>, <Z_i>` and `<X_i X_j>, <Y_i Y_j>,
+   <Z_i Z_j>` of the final state, plus a bias column: 109 columns at
+   `N = 8`.
+5. The readout is `RidgeReadout` (`training/regression=ridge`) with
+   `training.alpha = 0` (`RIDGE_ALPHA`): no penalty, the limit `alpha -> 0`
+   of ridge regression, `W = pinv(Phi) @ Y`, least squares above
+   `n_train = rank(Phi)` and the minimum-norm interpolation below, so that
+   the peak is not smoothed; `RIDGE_ALPHA=0.1` regularizes it. The targets
+   are one-hot, `Y` of shape `(n, K)` for `K` digits, and the predicted
+   digit is the largest output. It is fitted on
+   `n_train = round(alpha * n_features)` images drawn from a pool of
+   `n_pool = 2000` training images, `n_repeats = 20` times per `alpha`, for
+   `alpha` from 0.1 to 10 (`double_descent.alpha_ratios`), and scored on the
+   whole MNIST test split of the chosen digits (1902 images for 3 and 5).
+   The MSE is averaged over the samples and the `K` outputs.
+
+`n_features` is the **rank** of the feature matrix of the pool, not its
+number of columns: two dependent observables would otherwise move the peak
+away from `alpha = 1`. With `alpha = n_train / n_features`, `alpha < 1` is
+the over-parameterized side (the readout interpolates the training set,
+train error 0) and `alpha > 1` the under-parameterized one (least squares).
+
+The same run computes the three checks of the issue, each with the same
+readout and the same images:
+
+- `elm`: a classical ELM, one fixed random ReLU layer with as many neurons
+  as the QELM has observables (`QELM.evaluation.double_descent.random_features`;
+  the hyperplane of each neuron goes through a training image, otherwise
+  many ReLUs are always on, affine in the input, and the rank collapses);
+- `qelm_t0`: the same observables at `t = 0`. Its simulated features are
+  checked against their closed form on the product state
+  (`t0_max_deviation`, about `1e-15`): at `t = 0` the readout is a linear
+  regression on fixed functions of the encoded input. `<Y_i>` and
+  `<Y_i Y_j>` vanish for a real state, so its rank is 73, not 109;
+- `peak_alpha_<model>`: the `alpha` of the largest median test MSE.
+
+`linear` (a readout on the `N` angles) and `accuracy_pixels` (a readout on
+the 784 pixels fitted on every training image, the classical reference of
+the task) complete the picture. The launcher sweeps `SEEDS` (default
+`0 1 2`), `CLASSES` (default `3 5`) and `RIDGE_ALPHA` (default `0.0`):
+
+```bash
+SEEDS="0 1 2 3 4" N=8 ./experiments/double_descent/double_descent.sh
+CLASSES="3 5 8" ./experiments/double_descent/double_descent.sh
+```
+
+Each run lands in
+`outputs/double_descent/<date_time>/N<N>_c<classes>_seed<seed>/` (`c35` for
+3 and 5) with `double_descent.npz` (per model `<m>_alpha`, `<m>_n_train` and
+the train and test MSE and classification error and `||W||`, shape
+`(n_ratios, n_repeats)`, and `confusion_<m>`, the `(K, K)` confusion matrix
+on the test set of the readout fitted on the whole pool, rows the true
+digit, from `sklearn.metrics.confusion_matrix`), `metrics.json` and the
+config. At the end, `plot_double_descent.py` draws the test MSE, train MSE,
+test error and train error against `alpha` (`double_descent.png` and
+`.json`), the confusion matrices summed over the seeds and normalized by row
+(`confusion_matrices.png` and `.json`), and writes `summary.json`, in the
+sweep folder. `notebooks/results/07_double_descent_mnist.ipynb` runs the
+sweep in `outputs/double_descent/<date_time>/`, prints the checks and shows
+both figures. Three seeds take about 40 s.
 
 ## Run the charge-sharpening benchmark (issue #137)
 
