@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from QELM import load_config
-from QELM.embedding import AncillaChargeSectorEmbedding, product_charge_index
+from QELM.encoding import AncillaChargeSectorEncoding, product_charge_index
 from QELM.evaluation import von_neumann_entropy
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -51,18 +51,18 @@ def test_product_charge_index() -> None:
         product_charge_index(6, 4)
 
 
-def test_product_embedding_is_eq_b1() -> None:
+def test_product_encoding_is_eq_b1() -> None:
     """(|0>|010101> + |1>|010100>) / sqrt(2), avec R maximalement intriqué."""
-    emb = AncillaChargeSectorEmbedding({"N": 7, "initial": "product"})
+    emb = AncillaChargeSectorEncoding({"N": 7, "initial": "product"})
     psi = emb.state()
     expected = np.zeros(2**7, dtype=complex)
     expected[0b0010101] = expected[0b1010100] = 1 / np.sqrt(2)
     np.testing.assert_allclose(psi, expected)
     assert von_neumann_entropy(psi, [0]) == pytest.approx(1.0)
     with pytest.raises(ValueError):
-        AncillaChargeSectorEmbedding({"N": 7, "initial": "random"})
+        AncillaChargeSectorEncoding({"N": 7, "initial": "random"})
     # The default stays the uniform superposition.
-    assert AncillaChargeSectorEmbedding({"N": 7}).initial == "uniform"
+    assert AncillaChargeSectorEncoding({"N": 7}).initial == "uniform"
 
 
 def test_config_composes_with_the_paper_parameters() -> None:

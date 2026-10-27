@@ -66,7 +66,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from QELM.evaluation.charge_sharpening import binder_ratio, central_moment
-from QELM.models.circuits import U1BrickworkCircuit
+from QELM.models.circuits.haar import U1BrickworkCircuit
 from QELM.physics.charge import batch_charge_leakage
 
 UNMEASURED = -1
@@ -154,7 +154,7 @@ def default_charges(L: int) -> tuple[int, int]:
 def random_u1_gates(n: int, rng: np.random.Generator) -> np.ndarray:
     """Draw ``n`` random U(1) gates at once.
 
-    Same distribution as :func:`QELM.models.circuits.random_u1_gate`:
+    Same distribution as :func:`QELM.models.circuits.haar.random_u1_gate`:
     uniform phases on ``|00>`` and ``|11>``, a Haar ``2 x 2`` block on
     ``{|01>, |10>}``.
 

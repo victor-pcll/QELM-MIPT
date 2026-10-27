@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.physics import qubit_counts
 
 
@@ -21,9 +21,9 @@ def test_counts_add_up(N: int, Nr: int) -> None:
     assert total == system + ancilla
 
 
-def test_matches_the_ancilla_embedding() -> None:
-    """Sur l'état de l'embedding, (N, Ns, 1) comme emb.N, emb.Ns."""
-    emb = AncillaChargeSectorEmbedding({"N": 5})
+def test_matches_the_ancilla_encoding() -> None:
+    """Sur l'état de l'encoding, (N, Ns, 1) comme emb.N, emb.Ns."""
+    emb = AncillaChargeSectorEncoding({"N": 5})
     rho = emb.density_matrix()
     assert qubit_counts(rho, emb.Nr) == (emb.N, emb.Ns, emb.Nr)
 

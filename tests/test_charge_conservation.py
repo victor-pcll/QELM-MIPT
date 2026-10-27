@@ -12,10 +12,11 @@ import numpy as np
 import pytest
 
 from QELM import load_config
-from QELM.embedding import AncillaChargeSectorEmbedding, charge_sector_state
+from QELM.encoding import AncillaChargeSectorEncoding, charge_sector_state
 from QELM.evaluation import charge_filter, conservation_metrics, conserved_mask
 from QELM.evaluation.learnability import charge_state, sample_records
-from QELM.models.circuits import U1BrickworkCircuit, apply_two_qubit_gate
+from QELM.models.circuits.base import apply_two_qubit_gate
+from QELM.models.circuits.haar import U1BrickworkCircuit
 from QELM.physics import (
     X,
     batch_charge_leakage,
@@ -97,7 +98,7 @@ def test_density_matrix_and_column_agree_with_the_vector() -> None:
 def test_sharp_charge() -> None:
     """La charge de Eq. (B1) sur R + S vaut Ns // 2 ; |+>^N n'en a pas."""
     for initial in ("uniform", "product"):
-        psi = AncillaChargeSectorEmbedding({"N": 7, "initial": initial}).state()
+        psi = AncillaChargeSectorEncoding({"N": 7, "initial": initial}).state()
         assert sharp_charge(psi) == 3
     with pytest.raises(ValueError, match="sharp"):
         sharp_charge(np.full(8, 8**-0.5))
@@ -122,7 +123,7 @@ def test_u1_dynamics_conserves_the_charge_exactly() -> None:
         {"N": 7, "Nr": 1, "depth": 3, "scrambling_layers": 5}, rng
     )
     measurement = WeakMeasurement({"gamma": 0.5, "Nr": 1})
-    psi = AncillaChargeSectorEmbedding({"N": 7, "initial": "product"}).state()
+    psi = AncillaChargeSectorEncoding({"N": 7, "initial": "product"}).state()
     Q = sharp_charge(psi)
     psi = circuit.scramble(psi)
     assert charge_leakage(psi, Q) == 0.0
