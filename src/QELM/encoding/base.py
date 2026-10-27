@@ -1,9 +1,9 @@
 """Base class for the ways of encoding an input into the reservoir state.
 
-An embedding prepares the initial state of the reservoir: a pure state
+An encoding prepares the initial state of the reservoir: a pure state
 ``psi`` of shape ``(dim,)`` and its density matrix ``rho = |psi><psi|`` of
 shape ``(dim, dim)``. ``N`` is the total number of qubits, so
-``dim = 2**N`` matches the models built with the same ``N``. Some embeddings
+``dim = 2**N`` matches the models built with the same ``N``. Some encodings
 use ``Nr`` of them as ancillas, which leaves ``Ns = N - Nr``
 system qubits.
 
@@ -23,17 +23,17 @@ import scipy.sparse as sp
 from omegaconf import DictConfig, OmegaConf
 
 
-class Embedding:
-    """Base class for state embeddings configured from a Hydra block.
+class Encoding:
+    """Base class for state encodings configured from a Hydra block.
 
     Attributes:
-        name: Config key for this embedding; ``from_config`` reads
+        name: Config key for this encoding; ``from_config`` reads
             ``cfg[name]``.
         Nr: Number of ancilla qubits placed before the system.
         params: Scalar parameters from the matching YAML block.
         N: Total number of qubits, ancillas included.
         Ns: Number of system qubits, ``N - Nr``.
-        dim: Dimension of the embedded state, ``2**N``.
+        dim: Dimension of the encoded state, ``2**N``.
     """
 
     name: str = "base"
@@ -60,7 +60,7 @@ class Embedding:
 
     @classmethod
     def from_config(cls, cfg: DictConfig) -> Self:
-        """Build the embedding from the Hydra block named ``cls.name``.
+        """Build the encoding from the Hydra block named ``cls.name``.
 
         Args:
             cfg: Composed Hydra config. ``cfg[cls.name]`` is a mapping of
@@ -99,10 +99,10 @@ class Embedding:
     def state(
         self, x: np.ndarray | None = None, sparse: bool = False
     ) -> np.ndarray | sp.csr_matrix:
-        """Return the embedded pure state.
+        """Return the encoded pure state.
 
         Args:
-            x: Input data to encode. ``None`` for an embedding that does not
+            x: Input data to encode. ``None`` for an encoding that does not
                 depend on the input.
             sparse: ``True`` for a CSR column, ``False`` (default) for a
                 NumPy vector.
@@ -157,7 +157,7 @@ class Embedding:
     ) -> np.ndarray | sp.csr_matrix:
         """Return the initial density matrix ``rho = |psi><psi|``.
 
-        Short name for :meth:`density_matrix`, inherited by every embedding.
+        Short name for :meth:`density_matrix`, inherited by every encoding.
 
         Args:
             x: Input data, passed to :meth:`state`.

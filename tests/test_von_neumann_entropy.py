@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 
-from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.evaluation.metrics import von_neumann_entropy
 
 
@@ -42,9 +42,9 @@ def test_base_e_gives_ln2() -> None:
 
 
 @pytest.mark.parametrize("N", [3, 4, 5, 6])
-def test_initial_embedding_is_maximally_entangled(N: int) -> None:
+def test_initial_encoding_is_maximally_entangled(N: int) -> None:
     """L'état initial (|0>|Q1> + |1>|Q2>)/sqrt(2) vaut 1 bit, dense ou creux."""
-    emb = AncillaChargeSectorEmbedding({"N": N})
+    emb = AncillaChargeSectorEncoding({"N": N})
     assert von_neumann_entropy(emb.density_matrix(), N) == pytest.approx(1.0)
     rho_sp = emb.density_matrix(sparse=True)
     assert von_neumann_entropy(rho_sp, N) == pytest.approx(1.0)

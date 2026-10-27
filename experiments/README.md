@@ -90,8 +90,9 @@ sample, instead of the observables; an unmeasured qubit (`p < 1`) counts as 0.
 The target is the outcome ±1 of the ancilla `R` measured in Z at the end.
 `R` is a reference qubit that the TFIM does not act on, so this label is the
 charge sector the system started in, ±1 with probability 1/2 whatever `p`
-(issue #104); `accuracy_optimal` is the accuracy of the Bayes classifier
-`sign(<Z_0>)`, the ceiling of the readout.
+(issue #104). No Bayes ceiling is reported (issue #195): the former
+`accuracy_optimal`, `sign(<Z_0>)` on the exact state of `R`, used
+`P(Y | rho_R)` while the readout only sees `M`, so it was removed with `<Z_0>`.
 Each run lands in `outputs/exp_QELM_M/<date_time>/N<N>_seed<seed>_p<p>/`.
 
 `H_VALUES` sweeps the transverse field `TFIM.h`, in units of `TFIM.J = 1`
@@ -184,9 +185,8 @@ MODEL=clifford_circuit P_VALUES="0.2 0.5 1.0" ./experiments/QELM_M/exp_QELM_M_ra
 `notebooks/results/05_QELM_M_circuits.ipynb` runs the ratio sweep once per
 model in `outputs/QELM_M_circuits/<date_time>/<model>/`, draws the curves
 and heatmaps of notebook 03 for each, and compares the three dynamics
-(`comparison_models.png`): the balanced accuracy of the readout and the
-Bayes accuracy `accuracy_optimal` against `p`, and the NMSE against the
-ratio. Its last section runs the same sweep of the two circuits with one
+(`comparison_models.png`): the balanced accuracy of the readout against
+`p`, and the NMSE against the ratio. Its last section runs the same sweep of the two circuits with one
 fixed draw of their gates per seed (`EXTRA_OVERRIDES="<model>.fixed_instance=true"`,
 any Hydra overrides added to every run of the ratio launcher), in
 `<model>_fixed/`, and compares the two (`comparison_fixed_circuit.png`).
@@ -245,6 +245,40 @@ the `(p, h)` plane (`heatmaps_p_h.png`), then the same three figures for the
 readouts on `M`, `[M, <Z_k>]` and `[M, <X_i X_j>]` (`*_record.png`). Each run is small enough to be
 fastest on a single thread: the notebook sets `OMP_NUM_THREADS=1`, which
 made a run at `N = 6` about 6 times faster.
+
+`notebooks/results/08_QELM_Q_linear_observables.ipynb` (issue #191) calls
+`exp_QELM_Q.run` in its own process at `p = 0` with one evolution step, the
+unitary QELM, for datasets of increasing size (`samples.L` = 100, 500, 2000,
+5000, one seed per size) at `h = 10 J` and `h = J`, in
+`outputs/QELM_Q_linear/<date_time>/h<h>_n<L>/`. It splits the features into
+`<Z_k>`, `<Y_k>`, `<X_k>`
+(`QELM.evaluation.feature_distribution.linear_observables`), refits the
+ridge readout of `Q` on each Pauli alone, and superimposes the histograms of
+one `<Z_k>` for the different sizes (`QELM.utils.plots.draw_histograms`),
+separately for the samples of charge `Q1`, of charge `Q2` and for both, each
+panel with its Gaussian fit. It also measures the convergence of the
+empirical laws (Kolmogorov-Smirnov distance to the largest dataset) and
+their shape. `H` conserves the parity of the system and each sector has a
+definite parity, so `<X_k>` and `<Y_k>` are exactly 0.
+
+`experiments/QELM_Q/plot_knn.py` (issue #214) fits K-NN classifiers of `Q`
+on the `<Z_k>` of every run of a sweep, with the split of the ridge readout,
+and writes two figures in the sweep folder: `knn_parity_vs_p.png`, the
+accuracy of scikit-learn's `KNeighborsClassifier(round(sqrt(n_train)),
+weights="distance")` and of the NumPy `CustomKNN` against `p`, with the
+fraction of test points they classify the same way and the fraction with a
+tie at the `K`-th neighbor; and `knn_K_vs_p.png`, the accuracy of `CustomKNN`
+for several `K` (`--K`, default `1 5 sqrt 3sqrt`) with the ridge readout.
+The accuracies of every run go to `knn_runs.json`; the sweep must hold a
+single field `TFIM.h`. The figures of the PR come from:
+
+```bash
+OMP_NUM_THREADS=1 N_VALUES="4 6 8" H_VALUES=1 FINAL_VALUES="false true" \
+  SEEDS="42 43 44" L=500 \
+  P_VALUES="0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0" \
+  ./experiments/QELM_Q/exp_QELM_Q.sh
+uv run python experiments/QELM_Q/plot_knn.py outputs/exp_QELM_Q/<date_time>
+```
 
 ### Bayes ceilings of the accuracy on `<Z_k>` (issue #202)
 
@@ -336,7 +370,7 @@ run of `experiments/double_descent/double_descent.py` is one seed:
 1. Each image is reduced to `N` principal components (default `N = 8`),
    fitted on the training images of the chosen digits, and each component is
    mapped to an angle in `[0, pi]` (`QELM.datasets.AngleEncoder`).
-2. Qubit `i` starts in `R_y(theta_i)|0>` (`QELM.embedding.RotationEmbedding`),
+2. Qubit `i` starts in `R_y(theta_i)|0>` (`QELM.encoding.RotationEncoding`),
    with no ancilla (`Nr = 0`).
 3. One fixed quench `U = exp(-i H t)` acts on every image: a single TFIM,
    drawn once per seed, with `h = J` (not the `10 J` of the TFIM config, at

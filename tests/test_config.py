@@ -43,7 +43,7 @@ def test_config_loads_and_cli_overrides_apply() -> None:
     default = _compose()
     chosen = _compose(OVERRIDES)
 
-    assert set(chosen.TFIM.keys()) == {"N", "J", "h", "RUNS"}
+    assert set(chosen.TFIM.keys()) == {"N", "J", "h", "basis", "RUNS"}
     assert set(chosen.evolution.keys()) == {"t", "n_steps", "dt"}
     assert chosen.models == "TFIM"
     assert chosen.TFIM.N == 12

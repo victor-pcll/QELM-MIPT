@@ -8,12 +8,12 @@ from typing import Any, Literal, overload
 import numpy as np
 import scipy.sparse as sp
 
-from QELM.embedding.base import Embedding
+from QELM.encoding.base import Encoding
 
 AXES = ("x", "y")
 
 
-class RotationEmbedding(Embedding):
+class RotationEncoding(Encoding):
     """Product state ``R_a(x_0) |0> ⊗ ... ⊗ R_a(x_{N-1}) |0>`` (issue #181).
 
     Each component ``x_i`` of the input (an angle, in radians) rotates qubit
@@ -26,13 +26,13 @@ class RotationEmbedding(Embedding):
 
     The input has exactly ``N`` components, one per qubit, so ``x`` is
     reduced to ``N`` dimensions first (PCA, :mod:`QELM.datasets`). There is
-    no ancilla (``Nr = 0``). Config block: ``rotation_embedding: {N, axis}``.
+    no ancilla (``Nr = 0``). Config block: ``rotation_encoding: {N, axis}``.
 
     Attributes:
         axis: Rotation axis, ``"x"`` or ``"y"``.
     """
 
-    name: str = "rotation_embedding"
+    name: str = "rotation_encoding"
 
     def __init__(self, params: Mapping[str, Any]) -> None:
         """Store the parameters.
@@ -71,7 +71,7 @@ class RotationEmbedding(Embedding):
         return np.stack([np.cos(x / 2) + 0j, down + 0j], axis=-1)
 
     def states(self, x: np.ndarray) -> np.ndarray:
-        """Return the embedded state of every sample of a batch.
+        """Return the encoded state of every sample of a batch.
 
         Site 0 is the leftmost factor of the Kronecker product, as in
         :func:`QELM.physics.operators.get_site_operator`.
@@ -117,7 +117,7 @@ class RotationEmbedding(Embedding):
     def state(
         self, x: np.ndarray | None = None, sparse: bool = False
     ) -> np.ndarray | sp.csr_matrix:
-        """Return the embedded state of one input.
+        """Return the encoded state of one input.
 
         Args:
             x: Angles of shape ``(N,)``. Required.
@@ -131,7 +131,7 @@ class RotationEmbedding(Embedding):
             ValueError: If ``x`` is ``None`` or does not have shape ``(N,)``.
         """
         if x is None:
-            raise ValueError("RotationEmbedding.state needs the input x.")
+            raise ValueError("RotationEncoding.state needs the input x.")
         x = np.asarray(x, dtype=np.float64)
         if x.shape != (self.N,):
             raise ValueError(f"x must have shape ({self.N},), got {x.shape}.")

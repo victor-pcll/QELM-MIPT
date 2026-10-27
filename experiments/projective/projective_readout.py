@@ -4,7 +4,7 @@
 For each sample ``i`` (``samples.L`` in total):
 
 1. Draw a new TFIM (new disorder ``J_ij``) and prepare the initial state
-   ``rho`` with :class:`AncillaChargeSectorEmbedding`: the ancilla ``R``
+   ``rho`` with :class:`AncillaChargeSectorEncoding`: the ancilla ``R``
    (qubit 0) entangled with the charge of the ``N - 1`` system qubits.
 2. Evolve ``rho`` for ``evolution.n_steps`` steps of ``evolution.dt``.
    After every step but the last, measure the system qubits projectively in
@@ -52,7 +52,7 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
-from QELM.embedding import AncillaChargeSectorEmbedding
+from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.evaluation.metrics import NMSE, R2, NMSE_err
 from QELM.training import ProjectiveMeasurement, RidgeReadout, SingleObservable
 from QELM.utils import save_config, save_results
@@ -64,7 +64,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Args:
         cfg: Composed config (``load_config`` or Hydra). Reads
             ``evolution.n_steps``, ``samples.L``, ``samples.train_size``, the
-            TFIM, embedding, measurement, readout and training blocks, and
+            TFIM, encoding, measurement, readout and training blocks, and
             the optional ``experiment.backaction`` (default ``True``).
 
     Returns:
@@ -74,10 +74,10 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     set_seed(cfg)
     backaction = bool(OmegaConf.select(cfg, "experiment.backaction", default=True))
 
-    sector = AncillaChargeSectorEmbedding.from_config(cfg)
+    sector = AncillaChargeSectorEncoding.from_config(cfg)
     solver = RidgeReadout.from_config(cfg)
     P = ProjectiveMeasurement.from_config(cfg)
-    # Qubit counts from the config, not from the model or the embedding
+    # Qubit counts from the config, not from the model or the encoding
     # (issue #88): N in total, Ns system qubits, Nr ancillas.
     N, Ns, Nr = check_qubit_counts(cfg)
     # <Z_i> for i = 0 .. N-1, built once: Z_ops[0] is the ancilla.
