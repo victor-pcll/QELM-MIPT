@@ -11,6 +11,8 @@ Kept out of ``QELM.utils`` on purpose: Matplotlib is a dev dependency, so
   their comparison;
 - :mod:`~QELM.utils.plots.heatmap`: color maps of a metric over a sweep of
   two parameters;
+- :mod:`~QELM.utils.plots.histogram`: superimposed histograms of one
+  feature for several datasets;
 - :mod:`~QELM.utils.plots.io`: :func:`save_figure`, the figure and its data
   in the output folder of the run.
 """
@@ -23,6 +25,7 @@ from QELM.utils.plots.heatmap import (
     draw_heatmap,
     sweep_grid,
 )
+from QELM.utils.plots.histogram import common_edges, draw_histograms
 from QELM.utils.plots.io import figure_data, save_figure
 from QELM.utils.plots.style import (
     COLORS,
@@ -53,10 +56,12 @@ __all__ = [
     "apply_style",
     "cell_edges",
     "color_map",
+    "common_edges",
     "compare_same_size",
     "draw_companion",
     "draw_curve",
     "draw_heatmap",
+    "draw_histograms",
     "draw_references",
     "draw_residuals",
     "figure_data",

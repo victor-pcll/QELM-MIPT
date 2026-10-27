@@ -246,6 +246,21 @@ readouts on `M`, `[M, <Z_k>]` and `[M, <X_i X_j>]` (`*_record.png`). Each run is
 fastest on a single thread: the notebook sets `OMP_NUM_THREADS=1`, which
 made a run at `N = 6` about 6 times faster.
 
+`notebooks/results/08_QELM_Q_linear_observables.ipynb` (issue #191) calls
+`exp_QELM_Q.run` in its own process at `p = 0` with one evolution step, the
+unitary QELM, for datasets of increasing size (`samples.L` = 100, 500, 2000,
+5000, one seed per size) at `h = 10 J` and `h = J`, in
+`outputs/QELM_Q_linear/<date_time>/h<h>_n<L>/`. It splits the features into
+`<Z_k>`, `<Y_k>`, `<X_k>`
+(`QELM.evaluation.feature_distribution.linear_observables`), refits the
+ridge readout of `Q` on each Pauli alone, and superimposes the histograms of
+one `<Z_k>` for the different sizes (`QELM.utils.plots.draw_histograms`),
+separately for the samples of charge `Q1`, of charge `Q2` and for both, each
+panel with its Gaussian fit. It also measures the convergence of the
+empirical laws (Kolmogorov-Smirnov distance to the largest dataset) and
+their shape. `H` conserves the parity of the system and each sector has a
+definite parity, so `<X_k>` and `<Y_k>` are exactly 0.
+
 ## Run the double-descent experiment on MNIST (issue #181)
 
 ```bash
