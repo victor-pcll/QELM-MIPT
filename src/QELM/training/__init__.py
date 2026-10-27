@@ -26,6 +26,7 @@ from QELM.training.measurements import (
     Readout,
     ReadoutResult,
     WeakMeasurement,
+    measure_projective_psi,
     measure_projective_rho,
 )
 from QELM.training.readout import DoubleObservable, Observables, SingleObservable
@@ -95,6 +96,7 @@ __all__ = [
     "create_qelm_dataset",
     "get_readout",
     "get_trainer",
+    "measure_projective_psi",
     "measure_projective_rho",
     "split_dataset",
 ]

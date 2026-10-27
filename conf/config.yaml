@@ -28,6 +28,12 @@ Ns: ${int:${sub:${N},${Nr}}}
 ancilla_charge_sector:
   N: ${N}
 
+# Simulated object of experiments/QELM_Q/exp_QELM_Q.py (issue #183): density
+# follows the density matrix rho, vector the state vector psi, which stays pure
+# and costs O(2**N) instead of O(4**N). Both give the same results for a seed.
+# Override with state_representation=vector.
+state_representation: density
+
 # The evolution block (evolution.t, evolution.dt, evolution.n_steps) depends on the
 # Hamiltonian, so it lives in conf/models/ next to it.
 
@@ -38,6 +44,10 @@ ancilla_charge_sector:
 # Samples. Not read by the pipeline yet.
 samples:
   L: 10000 # number of samples
+  # Ratio of samples to qubits (issue #201): when set, experiments/QELM_Q
+  # replaces L by int(delta * N), so that the data grow with the number of
+  # features of the readout. Override with samples.delta=200.
+  delta: null
   train_fraction: 0.7
   train_size: ${int:${mul:${samples.train_fraction},${samples.L}}} # int(0.7 * L)
 

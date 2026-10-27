@@ -12,6 +12,7 @@ from QELM.training import (
     Readout,
     SingleObservable,
     get_readout,
+    measure_projective_psi,
     measure_projective_rho,
 )
 
@@ -420,3 +421,51 @@ def test_invalid_n_ancilla_is_rejected() -> None:
         ProjectiveMeasurement({"Nr": -1})
     with pytest.raises(ValueError):
         ProjectiveMeasurement({"Nr": 3}).measure(BELL)
+
+
+# --- State vectors (issue #183) ----------------------------------------------
+
+
+def _random_psi(N: int, seed: int) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    psi = rng.normal(size=2**N) + 1j * rng.normal(size=2**N)
+    return psi / np.linalg.norm(psi)
+
+
+@pytest.mark.parametrize("seed", range(5))
+@pytest.mark.parametrize("qubit", [0, 1, 2])
+def test_psi_measurement_matches_the_rho_one(seed: int, qubit: int) -> None:
+    """Same draw, same outcome, and |psi_m><psi_m| = rho_m."""
+    psi = _random_psi(3, seed)
+    rho = np.outer(psi, psi.conj())
+    psi_m, m_psi = measure_projective_psi(psi, qubit, rng=np.random.default_rng(seed))
+    rho_m, m_rho = measure_projective_rho(rho, qubit, rng=np.random.default_rng(seed))
+    assert m_psi == m_rho
+    np.testing.assert_allclose(np.linalg.norm(psi_m), 1.0, atol=1e-12)
+    np.testing.assert_allclose(np.outer(psi_m, psi_m.conj()), rho_m, atol=1e-12)
+
+
+@pytest.mark.parametrize("p", [0.0, 0.4, 1.0])
+def test_measure_accepts_a_state_vector(p: float) -> None:
+    """ProjectiveMeasurement.measure on psi follows the draws of rho."""
+    psi = _random_psi(4, 7)
+    rho = np.outer(psi, psi.conj())
+    P = ProjectiveMeasurement({"p": p, "Nr": 1})
+    on_psi = P.measure(psi, rng=np.random.default_rng(3))
+    on_rho = P.measure(rho, rng=np.random.default_rng(3))
+    np.testing.assert_array_equal(on_psi.outcomes, on_rho.outcomes)
+    assert on_psi.rho.shape == (16,)
+    np.testing.assert_allclose(
+        np.outer(on_psi.rho, on_psi.rho.conj()), on_rho.rho, atol=1e-12
+    )
+
+
+def test_psi_measurement_rejects_invalid_arguments() -> None:
+    with pytest.raises(ValueError, match="psi must have shape"):
+        measure_projective_psi(np.ones(3), 0)
+    with pytest.raises(ValueError, match="qubit_idx"):
+        measure_projective_psi(_random_psi(2, 0), 2)
+    with pytest.raises(ValueError, match="does not match"):
+        measure_projective_psi(_random_psi(2, 0), 0, N=3)
+    with pytest.raises(ValueError, match="ancilla"):
+        ProjectiveMeasurement({"Nr": 3}).measure(_random_psi(2, 0))

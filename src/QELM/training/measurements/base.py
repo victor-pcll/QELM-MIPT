@@ -29,7 +29,8 @@ class ReadoutResult:
         outcomes: Real array of shape ``(n_outcomes,)``, one entry per
             target qubit; ``np.nan`` marks a qubit that was not measured.
         rho: Density matrix of shape ``(2**N, 2**N)`` after the
-            measurement back-action.
+            measurement back-action, or the state vector ``(2**N,)`` when a
+            pure state was measured.
     """
 
     outcomes: np.ndarray
