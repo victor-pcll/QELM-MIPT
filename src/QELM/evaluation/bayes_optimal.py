@@ -59,11 +59,55 @@ from sklearn.mixture import GaussianMixture  # type: ignore[import-untyped]
 from sklearn.neighbors import KNeighborsClassifier  # type: ignore[import-untyped]
 from sklearn.svm import SVC  # type: ignore[import-untyped]
 
+from QELM.evaluation.gmm import CustomGMM
+
 # Defaults of evaluate_bayes_optimal_limit, so that a plot refits the same
 # models as the run: the floor of the QDA variances and the number of
 # Gaussians per sector of the mixture.
 QDA_REG_PARAM = 1.0e-6
 GMM_COMPONENTS = 3
+# Who fits the mixtures: scikit-learn's GaussianMixture or the NumPy
+# CustomGMM (issue #223).
+GMM_BACKENDS = ("sklearn", "numpy")
+
+
+def gaussian_mixture(
+    n_components: int,
+    reg_covar: float = 1.0e-6,
+    random_state: int | None = None,
+    n_init: int = 1,
+    backend: str = "sklearn",
+) -> Any:
+    """Return a mixture of full-covariance Gaussians, not fitted.
+
+    Args:
+        n_components: ``K``, the number of Gaussians.
+        reg_covar: Added to the diagonal of every covariance.
+        random_state: Seed of the k-means initialization.
+        n_init: Number of initializations; the best likelihood is kept.
+        backend: ``"sklearn"`` for ``sklearn.mixture.GaussianMixture``,
+            ``"numpy"`` for :class:`~QELM.evaluation.gmm.CustomGMM` (issue
+            #223). Both have ``fit``, ``score_samples`` and ``bic``.
+
+    Raises:
+        ValueError: If ``backend`` is not one of :data:`GMM_BACKENDS`.
+    """
+    if backend == "sklearn":
+        return GaussianMixture(
+            n_components=n_components,
+            covariance_type="full",
+            reg_covar=reg_covar,
+            random_state=random_state,
+            n_init=n_init,
+        )
+    if backend == "numpy":
+        return CustomGMM(
+            n_components=n_components,
+            reg_covar=reg_covar,
+            random_state=random_state,
+            n_init=n_init,
+        )
+    raise ValueError(f"backend must be one of {GMM_BACKENDS}, got {backend!r}.")
 
 
 class QDA:
@@ -315,12 +359,15 @@ class GaussianMixtureBayes:
             for a reproducible fit.
         n_init: Number of initializations of each mixture; the best
             likelihood is kept.
+        backend: ``"sklearn"`` (default) or ``"numpy"``, who fits the
+            mixtures (:func:`gaussian_mixture`).
 
     Attributes:
         classes_: The sorted class labels, shape ``(C,)``.
         priors_: ``pi_k``, shape ``(C,)``.
-        mixtures_: The fitted ``GaussianMixture`` of each class, in the
-            order of ``classes_``.
+        mixtures_: The fitted mixture of each class (``GaussianMixture`` or
+            :class:`~QELM.evaluation.gmm.CustomGMM`), in the order of
+            ``classes_``.
     """
 
     def __init__(
@@ -329,13 +376,17 @@ class GaussianMixtureBayes:
         reg_covar: float = 1.0e-6,
         random_state: int | None = None,
         n_init: int = 1,
+        backend: str = "sklearn",
     ) -> None:
         if n_components < 1:
             raise ValueError(f"n_components must be >= 1, got {n_components}.")
+        if backend not in GMM_BACKENDS:
+            raise ValueError(f"backend must be one of {GMM_BACKENDS}, got {backend!r}.")
         self.n_components = n_components
         self.reg_covar = reg_covar
         self.random_state = random_state
         self.n_init = n_init
+        self.backend = backend
 
     def fit(self, X: ArrayLike, y: ArrayLike) -> GaussianMixtureBayes:
         """Fit the prior and the mixture of every class.
@@ -364,12 +415,12 @@ class GaussianMixtureBayes:
             )
         self.priors_ = counts / len(y_arr)
         self.mixtures_ = [
-            GaussianMixture(
-                n_components=self.n_components,
-                covariance_type="full",
-                reg_covar=self.reg_covar,
-                random_state=self.random_state,
-                n_init=self.n_init,
+            gaussian_mixture(
+                self.n_components,
+                self.reg_covar,
+                self.random_state,
+                self.n_init,
+                self.backend,
             ).fit(X_arr[y_arr == label])
             for label in self.classes_
         ]

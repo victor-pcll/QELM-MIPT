@@ -31,14 +31,15 @@ Two tools to check it:
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 from numpy.typing import ArrayLike
-from sklearn.mixture import GaussianMixture  # type: ignore[import-untyped]
 
 from QELM.evaluation.bayes_optimal import (
     GaussianMixtureBayes,
     _as_samples,
+    gaussian_mixture,
     knn_classifier,
 )
 
@@ -54,7 +55,8 @@ def bic_curve(
     reg_covar: float = 1.0e-6,
     random_state: int | None = None,
     n_init: int = 1,
-) -> tuple[np.ndarray, list[GaussianMixture]]:
+    backend: str = "sklearn",
+) -> tuple[np.ndarray, list[Any]]:
     """Fit mixtures of ``K = 1 .. k_max`` full-covariance Gaussians to ``X``.
 
     Args:
@@ -63,6 +65,8 @@ def bic_curve(
         reg_covar: As in :class:`GaussianMixtureBayes`.
         random_state: Seed of the initialization of every mixture.
         n_init: Number of initializations of every mixture.
+        backend: ``"sklearn"`` or ``"numpy"``, who fits the mixtures
+            (:func:`~QELM.evaluation.bayes_optimal.gaussian_mixture`).
 
     Returns:
         ``bic``, shape ``(k_max,)``, ``bic[K - 1]`` the BIC of the mixture of
@@ -80,13 +84,8 @@ def bic_curve(
     bic = np.full(k_max, np.inf)
     mixtures = []
     for K in range(1, min(k_max, X_arr.shape[0]) + 1):
-        mixture = GaussianMixture(
-            n_components=K,
-            covariance_type="full",
-            reg_covar=reg_covar,
-            random_state=random_state,
-            n_init=n_init,
-        ).fit(X_arr)
+        mixture = gaussian_mixture(K, reg_covar, random_state, n_init, backend)
+        mixture.fit(X_arr)
         bic[K - 1] = mixture.bic(X_arr)
         mixtures.append(mixture)
     return bic, mixtures
@@ -105,6 +104,7 @@ class BICGaussianMixtureBayes(GaussianMixtureBayes):
         reg_covar: As in :class:`GaussianMixtureBayes`.
         random_state: As in :class:`GaussianMixtureBayes`.
         n_init: As in :class:`GaussianMixtureBayes`.
+        backend: As in :class:`GaussianMixtureBayes`.
 
     Attributes:
         classes_: The sorted class labels, shape ``(C,)``.
@@ -122,12 +122,14 @@ class BICGaussianMixtureBayes(GaussianMixtureBayes):
         reg_covar: float = 1.0e-6,
         random_state: int | None = None,
         n_init: int = 1,
+        backend: str = "sklearn",
     ) -> None:
         super().__init__(
             n_components=k_max,
             reg_covar=reg_covar,
             random_state=random_state,
             n_init=n_init,
+            backend=backend,
         )
         self.k_max = k_max
 
@@ -160,6 +162,7 @@ class BICGaussianMixtureBayes(GaussianMixtureBayes):
                 self.reg_covar,
                 self.random_state,
                 self.n_init,
+                self.backend,
             )
             bics.append(bic)
             self.mixtures_.append(mixtures[int(np.argmin(bic))])
