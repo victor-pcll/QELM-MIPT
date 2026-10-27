@@ -35,6 +35,13 @@ is there but not linearly; if they fall to 0.5 too, it is gone.
   the QDA can fall below the ridge readout.
 
 :func:`evaluate_bayes_optimal_limit` scores the three on a train/test split.
+
+Issue #200 checks that the single Gaussian of the QDA is enough: besides
+the mixtures, :func:`svm_rbf_classifier` is an SVM with an RBF kernel, a
+non-linear boundary with no density at all, and
+:func:`benchmark_bayes_estimators` scores and times the QDA, the mixtures,
+the SVM and the K-NN on one and the same split.
+
 :func:`pca_plane` and :func:`project_gaussians` bring the data and the
 fitted Gaussians onto the plane of largest variance, to draw the contours
 of ``f_1`` and ``f_2`` (:func:`QELM.utils.plots.draw_qda_contours`).
@@ -42,10 +49,15 @@ of ``f_1`` and ``f_2`` (:func:`QELM.utils.plots.draw_qda_contours`).
 
 from __future__ import annotations
 
+import time
+from collections.abc import Sequence
+from typing import Any
+
 import numpy as np
 from numpy.typing import ArrayLike
 from sklearn.mixture import GaussianMixture  # type: ignore[import-untyped]
 from sklearn.neighbors import KNeighborsClassifier  # type: ignore[import-untyped]
+from sklearn.svm import SVC  # type: ignore[import-untyped]
 
 # Defaults of evaluate_bayes_optimal_limit, so that a plot refits the same
 # models as the run: the floor of the QDA variances and the number of
@@ -387,6 +399,86 @@ class GaussianMixtureBayes:
         """Return the accuracy of :meth:`predict` on ``(X, y)``."""
         X_arr, y_arr = _as_samples(X, y)
         return float(np.mean(self.predict(X_arr) == y_arr))
+
+
+def svm_rbf_classifier(C: float = 1.0) -> SVC:
+    """Return the SVM with a Gaussian (RBF) kernel, not fitted (issue #200).
+
+    ``SVC(kernel="rbf", C=C, gamma="scale")``: the boundary between the
+    classes can take any smooth shape, with no model of the densities.
+    ``gamma="scale"`` sets the width of the kernel from the variance of the
+    training features, ``1 / (d Var X)``. The fit is deterministic.
+
+    Args:
+        C: Inverse strength of the regularization of the margin.
+    """
+    return SVC(kernel="rbf", C=C, gamma="scale")
+
+
+def benchmark_bayes_estimators(
+    X_train: ArrayLike,
+    y_train: ArrayLike,
+    X_test: ArrayLike,
+    y_test: ArrayLike,
+    gmm_components: Sequence[int] = (3, 5),
+    seed: int = 0,
+    reg_param: float = QDA_REG_PARAM,
+    n_neighbors: int | None = None,
+) -> dict[str, float]:
+    """Score and time the estimators of the Bayes accuracy on one split.
+
+    Every estimator sees the same ``X_train, y_train`` and is scored on the
+    same ``X_test, y_test`` (issue #200): the QDA (as in
+    :func:`evaluate_bayes_optimal_limit`), one :class:`GaussianMixtureBayes`
+    per ``K`` of ``gmm_components``, the SVM of :func:`svm_rbf_classifier`
+    and the K-NN of :func:`knn_classifier`.
+
+    Args:
+        X_train: Training features, shape ``(n_train, d)``, without a bias
+            column.
+        y_train: Training labels, shape ``(n_train,)``, two classes.
+        X_test: Test features, shape ``(n_test, d)``.
+        y_test: Test labels, shape ``(n_test,)``.
+        gmm_components: The ``K`` of the mixtures.
+        seed: ``random_state`` of the mixtures, the only random step.
+        reg_param: Regularization of the QDA covariances.
+        n_neighbors: ``K`` of the K-NN, default ``round(sqrt(n_train))``.
+
+    Returns:
+        For each estimator ``<name>`` (``qda``, ``gmm<K>``, ``svm``,
+        ``knn``), ``accuracy_<name>``, its test accuracy, and
+        ``time_<name>``, the wall time of its fit and prediction in seconds.
+        An estimator that cannot be fitted on the split gives ``nan`` for
+        both: the QDA when a sector has no more samples than features (as in
+        :func:`evaluate_bayes_optimal_limit`), a mixture when a sector has
+        fewer samples than ``K``.
+    """
+    X_tr, y_tr = _as_samples(X_train, y_train)
+    X_te, y_te = _as_samples(X_test, y_test)
+    _, counts = np.unique(y_tr, return_counts=True)
+    estimators: dict[str, Any] = {}
+    if counts.min() > X_tr.shape[1]:
+        estimators["qda"] = QDA(reg_param=reg_param, tol=0.0)
+    else:
+        estimators["qda"] = None
+    for K in gmm_components:
+        fits = counts.min() >= K
+        estimators[f"gmm{K}"] = (
+            GaussianMixtureBayes(n_components=K, random_state=seed) if fits else None
+        )
+    estimators["svm"] = svm_rbf_classifier()
+    estimators["knn"] = knn_classifier(len(y_tr), n_neighbors)
+
+    out: dict[str, float] = {}
+    for name, estimator in estimators.items():
+        if estimator is None:
+            out[f"accuracy_{name}"] = out[f"time_{name}"] = float("nan")
+            continue
+        start = time.perf_counter()
+        y_pred = estimator.fit(X_tr, y_tr).predict(X_te)
+        out[f"time_{name}"] = time.perf_counter() - start
+        out[f"accuracy_{name}"] = float(np.mean(y_pred == y_te))
+    return out
 
 
 def pca_plane(

@@ -342,6 +342,30 @@ writes, each with its `.json`:
 `--h`, `--t`, `--final` pick one setting of a sweep that holds several,
 `--p` the columns of the PCA figures.
 
+### Is the QDA ceiling enough? QDA against GMM, SVM and K-NN (issue #200)
+
+The QDA models each charge sector by one Gaussian. If the measured
+trajectories make a sector multimodal (several bundles of points), the QDA
+can miss a separation, and its accuracy is then not the Bayes ceiling.
+`experiments/QELM_Q/bayes_benchmark.py` checks it on a sweep of
+`exp_QELM_Q.sh`: for every run it reads `<Z_k>` and `Q` back from
+`exp_QELM_Q.npz`, keeps the split of the run and fits on it, with the seed of
+the run, the QDA, a Bayes classifier with a mixture of 3 and of 5 Gaussians
+per sector (`GaussianMixtureBayes`), an SVM with an RBF kernel and the K-NN
+(`benchmark_bayes_estimators` in `src/QELM/evaluation/bayes_optimal.py`).
+
+```bash
+N_VALUES="8 10" H_VALUES="1 2" SEEDS="42 43" L=300 \
+  P_VALUES="0.0 0.1 0.2 0.3 0.5 0.7 1.0" ./experiments/QELM_Q/exp_QELM_Q.sh
+uv run python experiments/QELM_Q/bayes_benchmark.py outputs/exp_QELM_Q/<date_time>
+```
+
+writes `bayes_benchmark.json` (accuracy and fit + prediction time of every
+estimator per run, and their means per `(N, h)`),
+`accuracy_vs_p_bayes_benchmark.pdf` (and `.png`, `.json`: one panel per
+`(h, N)`, every estimator against `p` with the ridge readout and chance) and
+`time_bayes_benchmark.png` (time of every estimator against `N`).
+
 ### The mixture ceiling over the (p, h) plane at N = 8 (issue #215)
 
 `bayes_estimate_gmm` fixes 3 Gaussians per sector. To check that it is a
