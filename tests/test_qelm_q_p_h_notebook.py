@@ -141,7 +141,20 @@ def test_notebook_runs_the_sweep_and_plots(
     binder_path = namespace["figure_binder"]
     assert binder_path == namespace["fss_dir"] / "binder_vs_p_N.png"
     assert binder_path.with_suffix(".json").is_file()
-    assert len(shows) == 9
+    # p_linear*, the critical p of the ridge readout (#227): one row per
+    # (N, h) and estimator whose curve is not all nan.
+    estimates = namespace["p_linear_estimates"]
+    assert {(e["N"], e["h"]) for e in estimates} == {(3, 1), (3, 2), (4, 1), (4, 2)}
+    assert {"accuracy", "residual"} <= {e["estimator"] for e in estimates}
+    assert all(0.0 <= e["p_refined"] <= 1.0 for e in estimates)
+    assert namespace["axes_p_linear"].shape == (2, 2)
+    assert namespace["axes_p_linear_N"].shape == (2,)
+    for name in ("figure_p_linear", "figure_p_linear_N"):
+        path = namespace[name]
+        assert path.parent == namespace["fss_dir"]
+        data = json.loads(path.with_suffix(".json").read_text())
+        assert data["extra"]["estimates"] == json.loads(json.dumps(estimates))
+    assert len(shows) == 11
     # Every figure in this notebook's own folder (#151), with its data.
     for name in (
         "figure_p",
