@@ -398,6 +398,35 @@ writes, each with its `.json`:
   from the plane can lie in the region of the other class and still be
   right; the crosses are the true mistakes.
 
+### PCA of the feature spaces `[M]`, `[M, Z]` and `[Z]` (issue #225)
+
+`experiments/QELM_Q/plot_pca.py` shows how the geometry of three feature
+spaces of `exp_QELM_Q.py` changes with `p`, for one size (`--N`, default 8):
+the measurement record `M` (`features_M`), the record next to the final
+`<Z_k>` (`features_M_Z`) and the `<Z_k>` alone (`features_Z`). For each run
+the principal axes are fitted on the training samples only
+(`QELM.evaluation.pca.fit_pca`, bias column dropped, no standardization) and
+the test samples are projected on them (`--samples all` for every sample).
+At `p = 0` the record is all zeros: the PCA has no direction at all, and the
+panel says so and draws every sample at the origin instead of arbitrary axes.
+
+```bash
+N_VALUES=8 P_VALUES="0.0 0.5 1.0" DELTA=200 STATE=vector MAX_JOBS=3 \
+    ./experiments/QELM_Q/exp_QELM_Q.sh
+uv run python experiments/QELM_Q/plot_pca.py outputs/exp_QELM_Q/<date_time>
+```
+
+writes `pca_feature_spaces.png` and its `.json` (the projected samples of
+each panel, the variances, explained shares and rank of its PCA, and the
+ridge accuracy of that feature set): one row per feature space, one column
+per `p`, colored by charge sector, each panel titled with the ridge accuracy
+of its feature set. `--components 3` draws the first three components in 3D
+(`pca_feature_spaces_3d.png`). The PCA keeps the directions of largest
+variance, not those that separate the sectors: a feature set can be
+linearly separable (ridge accuracy 1) along a direction of small variance
+that the plane does not show, which is what `[M]` does at `p = 1`, where
+the charge is the sum of the outcomes of a round.
+
 `--h`, `--t`, `--final` pick one setting of a sweep that holds several,
 `--p` the columns of the PCA figures.
 
