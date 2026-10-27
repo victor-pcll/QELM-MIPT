@@ -120,7 +120,16 @@ def test_notebook_runs_the_sweep_and_plots(
     assert fss_path.parent == namespace["fss_dir"]
     data = json.loads(fss_path.with_suffix(".json").read_text())
     assert len(data["extra"]["table"]) == 12
-    assert len(shows) == 7
+    # The residuals 1 - score on a log scale, from the same table (no new run).
+    axes_res = namespace["axes_res"]
+    assert axes_res.shape == (2, 2)
+    for ax in axes_res.flat:
+        assert ax.get_yscale() == "log"
+        assert "1 - " in ax.get_title()
+    res_path = namespace["figure_res"]
+    assert res_path == namespace["fss_dir"] / "residuals_vs_p_N.png"
+    assert res_path.with_suffix(".json").is_file()
+    assert len(shows) == 8
     # Every figure in this notebook's own folder (#151), with its data.
     for name in (
         "figure_p",
