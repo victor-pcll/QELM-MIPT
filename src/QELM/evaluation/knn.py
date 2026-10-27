@@ -1,15 +1,16 @@
-"""K-nearest-neighbors classifier in NumPy (issue #214).
+"""K-nearest-neighbors classifier in NumPy (issues #214 and #213).
 
 The Bayes ceilings of the p-sweep use a K-NN with ``K = round(sqrt(n_train))``
 and a vote weighted by the inverse distance, the same model as
 ``sklearn.neighbors.KNeighborsClassifier(n_neighbors=K, weights="distance")``.
-:class:`CustomKNN` is that classifier written out, so that the metric can be
-changed later (the Mahalanobis distance of issue #213).
+:class:`CustomKNN` is that classifier written out, with a choice of metric:
+the Euclidean distance (``metric="euclidean"``, the default and scikit-learn's
+model) or the Mahalanobis distance (``metric="mahalanobis"``, issue #213).
 
 The rule, for a test point ``x``:
 
-1. Compute the Euclidean distance ``d_i = ||x - x_i||`` to every training
-   point ``x_i``.
+1. Compute the distance ``d_i = d(x, x_i)`` to every training point
+   ``x_i``.
 2. Keep the ``K`` closest points.
 3. Give each kept point the weight ``w_i = 1 / d_i``. If some kept points
    sit exactly on ``x`` (``d_i = 0``), they get the weight 1 and the others 0.
@@ -38,13 +39,41 @@ Both rules give the same answer as every scikit-learn algorithm when the
 ``K``-th distance is not tied, which is the case for continuous features
 such as the ``<Z_k>`` of ``exp_QELM_Q.py``.
 
+The Mahalanobis distance (issue #213) uses the covariance of the training set
+as the metric tensor:
+
+    d(x, y) = sqrt((x - y)^T Sigma^+ (x - y)),
+
+with ``Sigma`` the covariance of all the training features (both classes
+together, ``np.cov``, ``ddof=1``) and ``Sigma^+`` its Moore-Penrose
+pseudo-inverse. Directions in which the features are strongly correlated, or
+spread widely, then count less, and directions of small spread count more.
+The pseudo-inverse keeps the distance defined when ``Sigma`` is singular, for
+example when a feature is constant: the eigenvalues of ``Sigma`` at or below
+``rtol`` times the largest one are dropped, and the distance ignores their
+directions, as ``np.linalg.pinv(Sigma, rtol=rtol, hermitian=True)`` does
+(``rtol=None`` is NumPy's default, ``d * eps``). Eigenvalues just above the
+cutoff are kept and amplified by ``1 / lambda``: a nearly singular ``Sigma``
+makes the metric dominated by its directions of smallest spread.
+
+Writing ``Sigma = V diag(lambda) V^T``, ``Sigma^+ = A A^T`` with
+``A = V diag(lambda^-1/2)`` over the kept eigenvalues, so
+``d(x, y) = ||A^T x - A^T y||``: :meth:`CustomKNN.fit` maps the training
+points once by ``A^T`` (the whitening), and the test points are mapped the
+same way, after which the K-NN is the Euclidean one. Since the votes ``1 / d``
+are normalized, a common factor on ``Sigma`` (such as ``ddof``) changes
+neither ``predict`` nor ``predict_proba``.
+
 The distances are computed from the differences ``x - x_i``, as scikit-learn's
 k-d and ball trees do, and they agree with them to rounding. scikit-learn's
 brute force uses the expansion ``||x||^2 - 2 x.x_i + ||x_i||^2`` instead,
 whose squared distance is off by about ``1e-16 ||x||^2``: for two very close
 points the distance, hence the weight ``1 / d``, loses digits (``1e-7``
 relative for ``d ~ 1e-5`` in the ``<Z_k>`` features). The differences are
-exact for points on the hypercube.
+exact for points on the hypercube with the Euclidean metric. The whitened
+coordinates of the Mahalanobis metric are rounded, so two distances that are
+equal in exact arithmetic (a tie) can differ in the last digits and the tie
+rule then no longer applies to them.
 """
 
 from __future__ import annotations
@@ -59,6 +88,8 @@ _CHUNK = 256
 
 # The rules for the points tied with the K-th neighbor.
 TIES = ("average", "index")
+# The distances between feature vectors.
+METRICS = ("euclidean", "mahalanobis")
 
 
 def default_n_neighbors(n_train: int) -> int:
@@ -69,7 +100,7 @@ def default_n_neighbors(n_train: int) -> int:
 
 
 class CustomKNN:
-    """K-NN classifier with the Euclidean distance and inverse-distance votes.
+    """K-NN classifier with inverse-distance votes.
 
     Args:
         n_neighbors: ``K``; ``None`` takes :func:`default_n_neighbors` of the
@@ -77,19 +108,42 @@ class CustomKNN:
             is reduced to its size.
         ties: How the points tied with the ``K``-th neighbor vote,
             ``"average"`` or ``"index"`` (see the module docstring).
+        metric: ``"euclidean"`` or ``"mahalanobis"`` (issue #213, see the
+            module docstring).
+        rtol: For ``"mahalanobis"``, the relative cutoff on the eigenvalues
+            of the covariance, as in ``np.linalg.pinv``; ``None`` is NumPy's
+            default, ``d * eps`` for ``d`` features.
 
     Attributes:
         classes_: The sorted class labels, set by :meth:`fit`.
         n_neighbors_: The ``K`` used, set by :meth:`fit`.
+        covariance_: For ``"mahalanobis"``, the covariance ``Sigma`` of the
+            training features, shape ``(d, d)``, set by :meth:`fit`.
+        precision_: For ``"mahalanobis"``, its pseudo-inverse ``Sigma^+``,
+            shape ``(d, d)``, set by :meth:`fit`.
+        rank_: For ``"mahalanobis"``, the number of eigenvalues of ``Sigma``
+            kept by the pseudo-inverse, set by :meth:`fit`.
     """
 
-    def __init__(self, n_neighbors: int | None = None, ties: str = "average") -> None:
+    def __init__(
+        self,
+        n_neighbors: int | None = None,
+        ties: str = "average",
+        metric: str = "euclidean",
+        rtol: float | None = None,
+    ) -> None:
         if n_neighbors is not None and int(n_neighbors) < 1:
             raise ValueError(f"n_neighbors must be positive, got {n_neighbors}")
         if ties not in TIES:
             raise ValueError(f"ties must be one of {TIES}, got {ties!r}")
+        if metric not in METRICS:
+            raise ValueError(f"metric must be one of {METRICS}, got {metric!r}")
+        if rtol is not None and not rtol >= 0:
+            raise ValueError(f"rtol must be non-negative, got {rtol}")
         self.n_neighbors = n_neighbors
         self.ties = ties
+        self.metric = metric
+        self.rtol = rtol
 
     def fit(self, X: ArrayLike, y: ArrayLike) -> CustomKNN:
         """Store the training set (lazy learning: nothing else is fitted).
@@ -114,6 +168,10 @@ class CustomKNN:
         if not np.all(np.isfinite(X_arr)):
             raise ValueError("X contains NaN or infinite values")
         self.classes_, self._y = np.unique(y_arr, return_inverse=True)
+        self._n_features = X_arr.shape[1]
+        if self.metric == "mahalanobis":
+            self._whitening = self._fit_whitening(X_arr)
+            X_arr = X_arr @ self._whitening
         self._X = X_arr
         n_train = X_arr.shape[0]
         if self.n_neighbors is None:
@@ -122,6 +180,32 @@ class CustomKNN:
             self.n_neighbors_ = min(int(self.n_neighbors), n_train)
         return self
 
+    def _fit_whitening(self, X: np.ndarray) -> np.ndarray:
+        """Set the covariance attributes and return ``A``, ``Sigma^+ = A A^T``.
+
+        Args:
+            X: Training features, shape ``(n_train, d)``.
+
+        Returns:
+            Shape ``(d, rank_)``: the eigenvectors of ``Sigma`` with a kept
+            eigenvalue ``lambda``, each divided by ``sqrt(lambda)``.
+        """
+        d = X.shape[1]
+        if X.shape[0] < 2:
+            # One sample has no spread: Sigma = 0, and every distance is 0.
+            sigma = np.zeros((d, d))
+        else:
+            sigma = np.atleast_2d(np.cov(X, rowvar=False))
+        eigvals, eigvecs = np.linalg.eigh(sigma)
+        rtol = d * np.finfo(float).eps if self.rtol is None else self.rtol
+        largest = np.max(np.abs(eigvals))
+        keep = eigvals > rtol * largest if largest > 0 else np.zeros(d, dtype=bool)
+        whitening = eigvecs[:, keep] / np.sqrt(eigvals[keep])
+        self.covariance_ = sigma
+        self.precision_ = whitening @ whitening.T
+        self.rank_ = int(keep.sum())
+        return whitening
+
     def _check_fitted(self) -> None:
         if not hasattr(self, "_X"):
             raise RuntimeError("CustomKNN is not fitted; call fit first")
@@ -129,12 +213,14 @@ class CustomKNN:
     def _check_X(self, X: ArrayLike) -> np.ndarray:
         self._check_fitted()
         X_arr = np.asarray(X, dtype=float)
-        if X_arr.ndim != 2 or X_arr.shape[1] != self._X.shape[1]:
+        if X_arr.ndim != 2 or X_arr.shape[1] != self._n_features:
             raise ValueError(
-                f"X must have shape (n, {self._X.shape[1]}), got {X_arr.shape}"
+                f"X must have shape (n, {self._n_features}), got {X_arr.shape}"
             )
         if not np.all(np.isfinite(X_arr)):
             raise ValueError("X contains NaN or infinite values")
+        if self.metric == "mahalanobis":
+            X_arr = X_arr @ self._whitening
         return X_arr
 
     def _chunks(self, X: ArrayLike) -> Iterator[tuple[slice, np.ndarray]]:
@@ -147,6 +233,8 @@ class CustomKNN:
 
     def kneighbors(self, X: ArrayLike) -> tuple[np.ndarray, np.ndarray]:
         """Return the distances and indices of the ``K`` nearest training points.
+
+        The distances are those of ``metric``.
 
         Args:
             X: Test features, shape ``(n, d)``.
