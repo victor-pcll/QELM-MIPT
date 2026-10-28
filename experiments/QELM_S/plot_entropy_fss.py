@@ -9,7 +9,7 @@ seed), averages ``S_mean_p<p>`` over the seeds and writes
 row per model:
 
 - left: ``S_A / (N/2)`` against ``p``, one curve per ``N``, with the
-  crossings of the curves of consecutive sizes
+  crossings of the curves of every pair of sizes
   (:func:`QELM.evaluation.finite_size.curve_crossings`);
 - middle: ``S_A`` in bits against ``p``. In the volume-law phase it grows
   linearly with ``N``, in the area-law phase it stops growing;
@@ -19,8 +19,16 @@ row per model:
   of the paper.
 
 The JSON holds, per model, the mean curves, the crossings, the collapse of
-the seed-averaged curves and the collapse of each seed alone (its spread is
-the error bar of ``p_c`` and ``nu`` quoted in the title). The paper's values
+the seed-averaged curves, the collapse of each seed alone (its spread is
+the error bar of ``p_c`` and ``nu`` quoted in the title), the collapse
+restricted to ``|p - p_c| <= 0.25`` and ``0.15`` (at ``N <= 12`` the
+estimate moves with the window, the main finite-size caveat), and the collapse of
+the sizes with ``N / 2`` even and with ``N / 2`` odd apart. A brickwork
+alternates even and odd bonds, so whether the bond across the cut got its
+gate in the last half-layer depends on the parity of ``N / 2`` (and, for
+``floquet_circuit``, is fixed by ``exp_QELM_S.floquet_rounds``); with full
+periods per round (``haar_circuit``, ``U1_circuit``) the two families of
+sizes are offset from each other. The paper's values
 for the Floquet model (von Neumann entropy ``S_1``, Table I) are
 ``p_c = 0.21 +- 0.16`` and ``nu = 1.74 +- 0.45``.
 
@@ -46,6 +54,8 @@ KEYS = (("N", "N"), ("seed", "seed"), ("model", "models"))
 # Search box of the collapse.
 P_RANGE = (0.05, 0.45)
 NU_RANGE = (0.5, 4.0)
+# Half-widths |p - p_c| of the windows of the collapses near p_c.
+WINDOWS = (0.25, 0.15)
 # Table I of Skinner, Ruhman and Nahum, PRX 9, 031009 (2019), S_1.
 REFERENCES = {
     "floquet_circuit": {"p_c": 0.21, "p_c_err": 0.16, "nu": 1.74, "nu_err": 0.45},
@@ -93,7 +103,8 @@ def analyse(by_n: dict[int, dict[int, Any]]) -> dict[str, Any]:
         f"N{a}-N{b}": curve_crossings(
             mean[a][0], mean[a][1] / (a // 2), mean[b][1] / (b // 2)
         )
-        for a, b in zip(sizes[:-1], sizes[1:], strict=True)
+        for k, a in enumerate(sizes)
+        for b in sizes[k + 1 :]
     }
     result: dict[str, Any] = {
         "sizes": sizes,
@@ -112,6 +123,25 @@ def analyse(by_n: dict[int, dict[int, Any]]) -> dict[str, Any]:
             for s in seeds
         ]
         result["collapse_per_seed"] = {str(s): f for s, f in zip(seeds, per_seed)}
+        # The scaling form holds near p_c only: how p_c and nu move when the
+        # fit keeps only the points with |p - p_c| <= window.
+        result["collapse_by_window"] = {
+            f"{w:g}": fit_collapse(curves, P_RANGE, NU_RANGE, window=w) for w in WINDOWS
+        }
+        # The brickwork alternates even and odd bonds, so the bond across the
+        # cut is in one half-layer or the other with the parity of N / 2:
+        # the collapse of each family of sizes alone.
+        families = {
+            parity: [N for N in sizes if (N // 2) % 2 == parity] for parity in (0, 1)
+        }
+        result["collapse_by_half_parity"] = {
+            f"N/2 {'even' if parity == 0 else 'odd'}": {
+                "sizes": family,
+                **fit_collapse({N: curves[N] for N in family}, P_RANGE, NU_RANGE),
+            }
+            for parity, family in families.items()
+            if len(family) >= 2
+        }
         if len(per_seed) > 1:
             for key in ("p_c", "nu"):
                 values = np.array([f[key] for f in per_seed])

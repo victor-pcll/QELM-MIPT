@@ -72,7 +72,9 @@ def rescale(curves: Curves, p_c: float, nu: float) -> dict[int, np.ndarray]:
     return out
 
 
-def collapse_cost(curves: Curves, p_c: float, nu: float) -> float:
+def collapse_cost(
+    curves: Curves, p_c: float, nu: float, window: float | None = None
+) -> float:
     """Return the mismatch of the rescaled curves, 0 for a perfect collapse.
 
     For every ordered pair of sizes ``(a, b)``, the points of ``a`` that fall
@@ -81,10 +83,23 @@ def collapse_cost(curves: Curves, p_c: float, nu: float) -> float:
     points, divided by the variance of all the ``y`` (so that it does not
     depend on the units of ``S``).
 
+    Args:
+        curves: ``N -> (p, S)``.
+        p_c, nu: The trial critical point and exponent.
+        window: When set, only the points with ``|p - p_c| <= window`` are
+            compared: the scaling form holds near ``p_c`` only.
+
     Returns:
         The cost, or ``inf`` when no two curves overlap.
     """
     scaled = rescale(curves, p_c, nu)
+    if window is not None:
+        # |p - p_c| <= window is |x| <= window N^(1/nu).
+        scaled = {
+            N: xy[:, np.abs(xy[0]) <= (window + 1e-12) * float(N) ** (1.0 / nu)]
+            for N, xy in scaled.items()
+        }
+        scaled = {N: xy for N, xy in scaled.items() if xy.shape[1] >= 2}
     residuals: list[np.ndarray] = []
     for a, (xa, ya) in scaled.items():
         for b, (xb, yb) in scaled.items():
@@ -105,6 +120,7 @@ def fit_collapse(
     p_range: tuple[float, float],
     nu_range: tuple[float, float] = (0.5, 4.0),
     grid: int = 41,
+    window: float | None = None,
 ) -> dict[str, float]:
     """Find the ``(p_c, nu)`` of the best collapse.
 
@@ -117,6 +133,7 @@ def fit_collapse(
         p_range: Search interval of ``p_c``, inside the ``p`` grid.
         nu_range: Search interval of ``nu``.
         grid: Points per axis of the grid search.
+        window: Passed to :func:`collapse_cost`.
 
     Returns:
         ``{"p_c", "nu", "cost"}``.
@@ -128,14 +145,16 @@ def fit_collapse(
         raise ValueError(f"A collapse needs at least two sizes, got {len(curves)}.")
     p_grid = np.linspace(*p_range, grid)
     nu_grid = np.geomspace(*nu_range, grid)
-    costs = np.array([[collapse_cost(curves, p, nu) for nu in nu_grid] for p in p_grid])
+    costs = np.array(
+        [[collapse_cost(curves, p, nu, window) for nu in nu_grid] for p in p_grid]
+    )
     i, j = np.unravel_index(int(np.argmin(costs)), costs.shape)
     lo = np.array([p_range[0], nu_range[0]])
     hi = np.array([p_range[1], nu_range[1]])
 
     def objective(v: np.ndarray) -> float:
         v = np.clip(v, lo, hi)
-        return collapse_cost(curves, float(v[0]), float(v[1]))
+        return collapse_cost(curves, float(v[0]), float(v[1]), window)
 
     res = scipy.optimize.minimize(
         objective,

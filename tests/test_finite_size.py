@@ -51,5 +51,8 @@ def test_fit_collapse_recovers_p_c_and_nu() -> None:
     fit = fit_collapse(_scaling_curves(0.21, 1.8), p_range=(0.05, 0.45))
     assert fit["p_c"] == pytest.approx(0.21, abs=0.01)
     assert fit["nu"] == pytest.approx(1.8, rel=0.1)
+    near = fit_collapse(_scaling_curves(0.21, 1.8), p_range=(0.05, 0.45), window=0.2)
+    assert near["p_c"] == pytest.approx(0.21, abs=0.01)
+    assert near["nu"] == pytest.approx(1.8, rel=0.1)
     with pytest.raises(ValueError, match="two sizes"):
         fit_collapse({6: (P, P)}, p_range=(0.1, 0.3))
