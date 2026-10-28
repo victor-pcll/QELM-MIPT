@@ -398,6 +398,66 @@ writes, each with its `.json`:
   from the plane can lie in the region of the other class and still be
   right; the crosses are the true mistakes.
 
+### PCA of the feature spaces `[M]`, `[M, Z]` and `[Z]` (issue #225)
+
+`experiments/QELM_Q/plot_pca.py` shows how the geometry of three feature
+spaces of `exp_QELM_Q.py` changes with `p`, for one size (`--N`, default 8):
+the measurement record `M` (`features_M`), the record next to the final
+`<Z_k>` (`features_M_Z`) and the `<Z_k>` alone (`features_Z`). For each run
+the principal axes are fitted on the training samples only
+(`QELM.evaluation.pca.fit_pca`, bias column dropped, no standardization) and
+the test samples are projected on them (`--samples all` for every sample).
+At `p = 0` the record is all zeros: the PCA has no direction at all, and the
+panel says so and draws every sample at the origin instead of arbitrary axes.
+
+```bash
+N_VALUES=8 P_VALUES="0.0 0.5 1.0" DELTA=200 STATE=vector MAX_JOBS=3 \
+    ./experiments/QELM_Q/exp_QELM_Q.sh
+uv run python experiments/QELM_Q/plot_pca.py outputs/exp_QELM_Q/<date_time>
+```
+
+writes `pca_feature_spaces.png` and its `.json` (the projected samples of
+each panel, the variances, explained shares and rank of its PCA, and the
+ridge accuracy of that feature set): one row per feature space, one column
+per `p`, colored by charge sector, each panel titled with the ridge accuracy
+of its feature set. `--components 3` draws the first three components in 3D
+(`pca_feature_spaces_3d.png`). The PCA keeps the directions of largest
+variance, not those that separate the sectors: a feature set can be
+linearly separable (ridge accuracy 1) along a direction of small variance
+that the plane does not show, which is what `[M]` does at `p = 1`, where
+the charge is the sum of the outcomes of a round.
+
+Two more figures, from the same command, show where a ridge accuracy of 1
+comes from when the PCA plane is a blur. `record_sum_direction.png` draws
+`[M]` and `[M, Z]` against the unit vector `u` that sums the record
+(`sum_direction`), with the share of the training variance along `u` and
+the cosine between `u` and the ridge weights: at `p = 1` every qubit is
+measured in every round, each round sums to `Ns - 2 Q`, and the sectors fall
+on two vertical lines of a direction holding about 2 % of the variance.
+`ridge_outputs.png` draws the histogram of the ridge output `phi . W` on the
+test samples, by sector, with the decision threshold: an accuracy of 1 is
+two histograms on both sides of the line. The readouts of `[M]` and
+`[M, Z]` are refitted from the `.npz` with the `alpha` of the run
+(`refit_ridge`), and give the accuracies logged by the run.
+
+### Heatmaps of the ridge accuracy over `(p, h)` (issue #225)
+
+`experiments/QELM_Q/plot_ridge_heatmap.py` draws the test accuracy of the
+ridge readout of `Q` over `(p, h)` for one size, one panel per feature space
+(`accuracy_M`, `accuracy_M_Z`, `accuracy`), averaged over the seeds, with
+the value of each cell and contour lines at 0.6, 0.75 and 0.9. It maps the
+wall of the linear readout only, not the Bayes ceilings.
+
+```bash
+N_VALUES=8 H_VALUES="0.3 0.5 0.7 1 1.5 2 3 5 7 10" \
+    P_VALUES="0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0" \
+    DELTA=200 STATE=vector MAX_JOBS=4 ./experiments/QELM_Q/exp_QELM_Q.sh
+uv run python experiments/QELM_Q/plot_ridge_heatmap.py outputs/exp_QELM_Q/<date_time>
+```
+
+writes `ridge_heatmap_p_h.png` and its `.json` (`--no-values` leaves the
+numbers out of the cells).
+
 `--h`, `--t`, `--final` pick one setting of a sweep that holds several,
 `--p` the columns of the PCA figures.
 
