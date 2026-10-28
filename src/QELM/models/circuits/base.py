@@ -126,6 +126,10 @@ class BrickworkCircuit:
     """
 
     name: str = "brickwork_circuit"
+    # Layers in one period of the brickwork (every bond once): 1 here, where
+    # a layer is a full period; 2 for FloquetBrickworkCircuit, whose layers
+    # are half-layers.
+    layers_per_period: int = 1
 
     def __init__(
         self, params: Mapping[str, Any], rng: np.random.Generator | None = None

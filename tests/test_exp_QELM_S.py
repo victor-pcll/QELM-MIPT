@@ -21,6 +21,7 @@ FOLDER = REPO_ROOT / "experiments" / "QELM_S"
 SCRIPT = FOLDER / "exp_QELM_S.py"
 BASH_SCRIPT = FOLDER / "exp_QELM_S.sh"
 PLOT_SCRIPT = FOLDER / "plot_QELM_S.py"
+FSS_SCRIPT = FOLDER / "plot_entropy_fss.py"
 N = 4
 P_VALUES = "[0.0,0.3,1.0]"
 PER_P = 12
@@ -95,10 +96,15 @@ def test_measure_round_at_p_zero_and_one() -> None:
     assert np.count_nonzero(np.abs(collapsed) > 1e-12) == 1
 
 
-@pytest.mark.parametrize("model", ["haar_circuit", "clifford_circuit", "TFIM"])
+@pytest.mark.parametrize(
+    "model",
+    ["haar_circuit", "clifford_circuit", "U1_circuit", "floquet_circuit", "TFIM"],
+)
 def test_shapes_and_range_of_the_outputs(model: str) -> None:
     out = _run(f"models={model}")
-    L, n_rounds = 3 * PER_P, 2 * N
+    # The Floquet chain runs half-layers: 2 N periods are 4 N rounds, here
+    # with N // 2 = 2 even, the last one already on the cut bond.
+    L, n_rounds = 3 * PER_P, (4 if model == "floquet_circuit" else 2) * N
     assert out["M"].shape == (L, n_rounds, N)
     assert out["Z"].shape == out["Zshot"].shape == (L, N)
     assert out["S"].shape == out["p"].shape == (L,)
@@ -256,3 +262,57 @@ def test_bash_sweep_refuses_a_bad_max_jobs(tmp_path: Path) -> None:
         ["bash", str(BASH_SCRIPT)], env=env, cwd=tmp_path, capture_output=True
     )
     assert result.returncode == 2
+
+
+def test_floquet_sweep_and_finite_size_figure(tmp_path: Path) -> None:
+    """Issue #239: the sweep runs the Floquet chain and the U(1) circuit, with
+    the p_c of Table I of Skinner et al. (2019) for the Floquet chain, and
+    plot_entropy_fss.py draws the crossings and the collapse."""
+    env = {
+        **os.environ,
+        "OUT_DIR": str(tmp_path),
+        "MODELS": "floquet_circuit U1_circuit",
+        "N_VALUES": "4 6",
+        "SEEDS": "1 2",
+        "PER_P": "4",
+        "P_VALUES": "0 0.2 0.4 0.6",
+        "MAX_JOBS": "2",
+        "TQDM_DISABLE": "1",
+    }
+    subprocess.run(
+        ["bash", str(BASH_SCRIPT)],
+        check=True,
+        env=env,
+        cwd=tmp_path,
+        capture_output=True,
+    )
+    cfg = (tmp_path / "floquet_circuit_N4_seed1" / ".hydra" / "config.yaml").read_text()
+    assert "p_c: 0.21" in cfg
+    cfg = (tmp_path / "U1_circuit_N4_seed1" / ".hydra" / "config.yaml").read_text()
+    assert "p_c: null" in cfg
+    _load(FSS_SCRIPT).main([str(tmp_path)])
+    data = json.loads((tmp_path / "entropy_fss.json").read_text())["extra"]
+    assert (tmp_path / "entropy_fss.png").is_file()
+    assert set(data) >= {"floquet_circuit", "U1_circuit"}
+    floquet = data["floquet_circuit"]
+    assert floquet["sizes"] == [4, 6]
+    assert set(floquet["collapse"]) >= {"p_c", "nu", "cost", "p_c_err", "nu_err"}
+    assert 0.05 <= floquet["collapse"]["p_c"] <= 0.45
+    assert floquet["reference"]["p_c"] == 0.21
+    # At p = 0 the entropy grows with N (volume law).
+    S0 = [floquet["curves"][n]["S"][0] for n in ("4", "6")]
+    assert S0[1] > S0[0]
+
+
+def test_floquet_rounds_end_on_the_cut_bond() -> None:
+    """The default number of rounds of the Floquet chain ends on the
+    half-layer that holds the bond (N/2 - 1, N/2) across the cut."""
+    from QELM.models.circuits import FloquetBrickworkCircuit
+
+    exp = _load(SCRIPT)
+    for N in (4, 6, 8, 10, 12):
+        R = exp.floquet_rounds(N)
+        assert R in (4 * N, 4 * N + 1)
+        circuit = FloquetBrickworkCircuit({"N": N, "Nr": 0, "depth": R})
+        last = [(i, j) for i, j, _ in circuit.layers[-1]]
+        assert (N // 2 - 1, N // 2) in last

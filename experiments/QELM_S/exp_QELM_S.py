@@ -10,9 +10,14 @@ probability ``p`` of ``entropy_task.p_values`` and each of its
 1. Start from the Néel product state ``|0101...>`` on the ``N`` qubits (no
    ancilla, ``Nr = 0``) and draw new dynamics: a new TFIM disorder
    (``models=TFIM``, step ``U(dt)`` with ``dt = entropy_task.dt``) or new
-   gates of a brickwork circuit (``models=haar_circuit`` or
-   ``clifford_circuit``, ``layers_per_step`` layers per step).
-2. Run ``n_rounds`` rounds (``entropy_task.n_rounds``, default ``2 N``) of a
+   gates of a brickwork circuit (``models=haar_circuit``, ``clifford_circuit``
+   or ``U1_circuit``, ``layers_per_step`` layers per step), or the fixed
+   Floquet Ising chain of Skinner et al. (2019) (``models=floquet_circuit``,
+   issue #239, whose layer is a half-layer of bricks, the time step of the
+   paper).
+2. Run ``n_rounds`` rounds (``entropy_task.n_rounds``, default ``2 N``, and
+   about ``4 N`` half-layers, ``2 N`` periods, for ``floquet_circuit``,
+   :func:`floquet_rounds`) of a
    unitary step followed by a projective measurement in Z of each qubit with
    probability ``p``. Row ``j`` of the record ``M`` holds the outcomes of
    round ``j``, +-1, and 0 for an unmeasured qubit.
@@ -111,7 +116,8 @@ from QELM.evaluation.entropy_regression import (
 from QELM.evaluation.metrics import NMSE, R2, NMSE_err, accuracy
 from QELM.models.circuits.base import BrickworkCircuit
 from QELM.models.circuits.clifford import CliffordBrickworkCircuit
-from QELM.models.circuits.haar import HaarBrickworkCircuit
+from QELM.models.circuits.floquet import FloquetBrickworkCircuit
+from QELM.models.circuits.haar import HaarBrickworkCircuit, U1BrickworkCircuit
 from QELM.training import RidgeReadout
 from QELM.training.measurements.projective import measure_projective_psi
 from QELM.utils import save_config, save_results
@@ -151,6 +157,8 @@ PER_P_KEY = re.compile(r"r2_within_.+_p[0-9.e+-]+")
 CIRCUITS: dict[str, type[BrickworkCircuit]] = {
     HaarBrickworkCircuit.name: HaarBrickworkCircuit,
     CliffordBrickworkCircuit.name: CliffordBrickworkCircuit,
+    U1BrickworkCircuit.name: U1BrickworkCircuit,
+    FloquetBrickworkCircuit.name: FloquetBrickworkCircuit,
 }
 # Seed tag of the generator of the measurements and the single shots.
 RNG_TAG = 230
@@ -214,6 +222,22 @@ def _circuit_sampler(cfg: DictConfig, n_rounds: int) -> Callable[[], Step]:
         return step
 
     return draw
+
+
+def floquet_rounds(N: int) -> int:
+    """Return the default number of rounds of the Floquet chain on ``N`` qubits.
+
+    About ``2 N`` periods, ``4 N`` half-layers, by when the entropy at
+    ``p = 0`` has saturated, plus one when needed so that the last half-layer
+    holds the bond ``(N // 2 - 1, N // 2)`` across the cut of ``S``. The
+    half-layers alternate, and the entropy read right after the measurements
+    depends on whether the cut bond got its gate in the last half-layer or
+    one half-layer earlier (with one more round of measurements in between):
+    without this choice the curves of ``N / 2`` even and odd split into two
+    families (issue #239).
+    """
+    # Half-layer t holds the bond (i, i + 1) when i and t have the same parity.
+    return 4 * N + (N // 2) % 2
 
 
 def measure_round(
@@ -319,11 +343,16 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     per_p = int(task.samples_per_p)
     if per_p < 2:
         raise ValueError(f"entropy_task.samples_per_p must be >= 2, got {per_p}.")
-    n_rounds = 2 * N if task.n_rounds is None else int(task.n_rounds)
+    model_name = str(cfg.models)
+    if task.n_rounds is not None:
+        n_rounds = int(task.n_rounds)
+    elif model_name == FloquetBrickworkCircuit.name:
+        n_rounds = floquet_rounds(N)
+    else:
+        n_rounds = 2 * N
     if n_rounds < 1:
         raise ValueError(f"entropy_task.n_rounds must be >= 1, got {n_rounds}.")
 
-    model_name = str(cfg.models)
     if model_name == TransverseFieldIsingModel.name:
         draw_evolution = _tfim_sampler(cfg, N, float(task.dt))
     elif model_name in CIRCUITS:
