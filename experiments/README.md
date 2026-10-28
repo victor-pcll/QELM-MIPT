@@ -887,22 +887,32 @@ uv run python experiments/diagnostics/diagnostics_physiques.py
 
 A measurement-induced transition needs a chaotic unitary dynamics (to keep a
 volume law at `p > 0`) and a local one (a light cone, for the competition
-between the spreading and the measurements). The script measures both on five
-reservoirs, with the diagnostics of `QELM.evaluation.chaos_locality`:
+between the spreading and the measurements). The script measures both, with
+the diagnostics of `QELM.evaluation.chaos_locality`, on two families of
+reservoirs (`--families`):
 
-| key | reservoir | step |
-| --- | --- | --- |
-| `tfim_all_to_all` | TFIM of `conf/models/TFIM.yaml`, `h = 10` (`--tfim-h`) | `exp(-i H 0.25)` |
-| `ising_hz0` | open Ising chain of #241, `h_x = 1.05`, `h_z = 0`, `J_i` in `[0.5, 1.5]` | `exp(-i H 0.3)` |
-| `ising_hz05` | the same chain with `h_z = 0.5`, the reservoir of #241 | `exp(-i H 0.3)` |
-| `xxz` | clean Heisenberg chain of #236, `J = Delta = 1`, `h = 0` | `exp(-i H 0.1)` |
-| `floquet` | Floquet Ising chain of Skinner et al. (2019), #239 | one half-layer |
+| family | key | reservoir | step |
+| --- | --- | --- | --- |
+| continuous | `tfim_all_to_all` | TFIM of `conf/models/TFIM.yaml`, `h = 10` (`--tfim-h`) | `exp(-i H 0.25)` |
+| continuous | `ising_hz0` | open Ising chain of #241, `h_x = 1.05`, `h_z = 0`, `J_i` in `[0.5, 1.5]` | `exp(-i H 0.3)` |
+| continuous | `ising_hz05` | the same chain with `h_z = 0.5`, the reservoir of #241 | `exp(-i H 0.3)` |
+| continuous | `xxz` | clean Heisenberg chain of #236, `J = Delta = 1`, `h = 0` | `exp(-i H 0.1)` |
+| continuous | `xxz_disorder` | the same chain with fields `h_i` in `[-1, 1]` (`--xxz-h`) | `exp(-i H 0.1)` |
+| discrete | `floquet` | Floquet Ising chain of Skinner et al. (2019), #239 | one half-layer |
+| discrete | `haar` | Haar-random two-qubit gates, as `haar_circuit` | one half-layer |
+| discrete | `clifford` | random two-qubit Clifford gates, as `clifford_circuit` | one half-layer |
+
+The Haar and Clifford circuits draw new gates at every step, as in the
+experiments, and their dynamics is averaged over `--circuit-draws` draws. A
+circuit with new gates at every step has no spectrum, so part A uses their
+Floquet version: one draw of the gates of a period, repeated in time.
 
 The 1D Hamiltonians and the Floquet bricks are rebuilt in
 `QELM.evaluation.chaos_locality` with the conventions of their pull requests
 (#238, #240, #242), so that the diagnostics run on `main`. It writes five
-figures, each with its JSON, and `summary.json`, in
-`outputs/diagnostics_physiques/<date_time>/` (`--out` to change it):
+figures per family, each with its JSON, in
+`outputs/diagnostics_physiques/<date_time>/<family>/`, and `summary.json`
+(`--out` to change the folder):
 
 - `level_spacing.png` (part A): histogram of the unfolded level spacings of
   the central third of every symmetry sector (parities, charge, reflection),
@@ -930,12 +940,13 @@ figures, each with its JSON, and `summary.json`, in
   the measurements at `|x - x0| > l` are not recorded (the state is averaged
   over them), for `l` in `--cutoffs` (`-1`: nothing recorded, `S_Q = 1`).
 
-The default sizes (`N = 12` for the spectra, 6 to 12 for the growth, 10 for
-the OTOC, 8 for the reference qubit) take about half an hour; `--quick` runs
-tiny sizes in seconds, `--models ising_hz05 floquet` a subset of the
-reservoirs and `--parts spectra growth otoc reference` a subset of the
-diagnostics (each part has its own random generator, so a part run alone
-gives the same figure as in the full run).
+The default sizes (`N = 12` for the continuous spectra and 10 for the
+quasi-energies, 6 to 12 for the growth, 10 for the OTOC, 8 for the reference
+qubit) take about an hour; `--quick` runs tiny sizes in seconds,
+`--models ising_hz05 haar` a subset of the reservoirs and `--parts spectra
+growth otoc reference` a subset of the diagnostics (each part of each family
+has its own random generator, so a part run alone gives the same figure as in
+the full run).
 
 ## Write your own
 

@@ -54,7 +54,7 @@ the rest of the package. Entropies are in bits.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import cast
 
@@ -64,6 +64,12 @@ import scipy.sparse as sp
 from scipy.sparse.linalg import LinearOperator, expm_multiply
 
 from QELM.evaluation.entropy import von_neumann_entropy
+
+# A time step: a dense unitary or an operator applied by ``@`` (sparse
+# propagator, layer of gates).
+Step = np.ndarray | LinearOperator
+# A two-qubit gate on the sites (i, j), most significant bit i.
+Gate = tuple[int, int, np.ndarray]
 
 # Mean gap ratio <r> for large matrices (Atas et al., PRL 110, 084101 (2013)).
 R_POISSON = 2 * math.log(2) - 1
@@ -278,11 +284,6 @@ def floquet_ising_gate(
     return np.asarray(u_x @ u_z)
 
 
-def two_site_unitary(N: int, i: int, gate: np.ndarray) -> np.ndarray:
-    """Return the dense ``2**N`` unitary of ``gate`` on the sites ``i, i + 1``."""
-    return np.kron(np.kron(np.eye(2**i), gate), np.eye(2 ** (N - i - 2)))
-
-
 def brickwork_layers(N: int, gate: np.ndarray) -> list[np.ndarray]:
     """Return the even and the odd half-layers of an open brickwork chain.
 
@@ -290,13 +291,91 @@ def brickwork_layers(N: int, gate: np.ndarray) -> list[np.ndarray]:
     odd one on ``(1, 2), (3, 4), ...``: the two time steps of one Floquet
     period, ``U_period = U_odd @ U_even``.
     """
-    layers = []
-    for start in (0, 1):
-        U = np.eye(2**N, dtype=complex)
-        for i in range(start, N - 1, 2):
-            U = two_site_unitary(N, i, gate) @ U
-        layers.append(U)
-    return layers
+    return [
+        dense_operator(
+            gate_layer_operator(N, [(i, j, gate) for i, j in brickwork_bonds(N, half)])
+        )
+        for half in (0, 1)
+    ]
+
+
+def _apply_gate_rows(M: np.ndarray, gate: np.ndarray, i: int, j: int) -> np.ndarray:
+    """Return ``G_ij @ M`` for ``M`` of shape ``(2**N, k)``, without building ``G``."""
+    dim, k = M.shape
+    N = dim.bit_length() - 1
+    T = np.moveaxis(M.reshape((2,) * N + (k,)), (i, j), (0, 1))
+    shape = T.shape
+    T = (gate @ T.reshape(4, -1)).reshape(shape)
+    return np.moveaxis(T, (0, 1), (i, j)).reshape(dim, k)
+
+
+def gate_layer_operator(N: int, gates: Sequence[Gate]) -> LinearOperator:
+    """Return a layer of two-qubit gates as an operator on ``2**N`` amplitudes.
+
+    ``op @ M`` applies the gates ``(i, j, G)`` in order to the rows of ``M``
+    (a vector or a ``(2**N, k)`` matrix) by reshaping, in ``O(2**N k)`` per
+    gate: no ``2**N x 2**N`` matrix is formed.
+    """
+    dim = 2**N
+    layer = [(int(i), int(j), np.asarray(g, dtype=complex)) for i, j, g in gates]
+
+    def matmat(M: np.ndarray) -> np.ndarray:
+        M = np.asarray(M, dtype=complex)
+        for i, j, gate in layer:
+            M = _apply_gate_rows(M, gate, i, j)
+        return M
+
+    def matvec(v: np.ndarray) -> np.ndarray:
+        return matmat(np.asarray(v).reshape(dim, 1))[:, 0]
+
+    return LinearOperator((dim, dim), matvec=matvec, matmat=matmat, dtype=complex)
+
+
+def dense_operator(op: Step) -> np.ndarray:
+    """Return a step (dense or operator) as a dense matrix."""
+    if isinstance(op, np.ndarray):
+        return op
+    return np.asarray(op @ np.eye(op.shape[0], dtype=complex))
+
+
+def brickwork_bonds(N: int, half: int) -> list[tuple[int, int]]:
+    """Bonds ``(i, i + 1)`` of the even (``half = 0``) or odd half-layer, open."""
+    return [(i, i + 1) for i in range(half % 2, N - 1, 2)]
+
+
+def random_brickwork_steps(
+    N: int,
+    n_steps: int,
+    draw_gate: Callable[[np.random.Generator], np.ndarray],
+    rng: np.random.Generator,
+) -> list[LinearOperator]:
+    """Return ``n_steps`` half-layers of a random circuit, new gates everywhere.
+
+    Half-layer ``t`` acts on the even bonds for even ``t`` and on the odd ones
+    for odd ``t``, as the brickwork of :mod:`QELM.models.circuits`, every gate
+    drawn independently by ``draw_gate`` (Haar or Clifford): a circuit random
+    in space and time.
+    """
+    return [
+        gate_layer_operator(
+            N, [(i, j, draw_gate(rng)) for i, j in brickwork_bonds(N, t)]
+        )
+        for t in range(n_steps)
+    ]
+
+
+def random_floquet_layers(
+    N: int,
+    draw_gate: Callable[[np.random.Generator], np.ndarray],
+    rng: np.random.Generator,
+) -> list[LinearOperator]:
+    """Return the two half-layers of a random Floquet circuit.
+
+    One draw of the gates of a period (even then odd half-layer), repeated
+    in time: the period ``U_odd U_even`` has quasi-energies, which a circuit
+    with new gates at every step has not.
+    """
+    return random_brickwork_steps(N, 2, draw_gate, rng)
 
 
 def step_unitary(H: sp.spmatrix | np.ndarray, tau: float) -> np.ndarray:
@@ -603,7 +682,7 @@ def level_statistics(
 
 
 def entanglement_growth(
-    steps: Sequence[np.ndarray | LinearOperator],
+    steps: Sequence[Step],
     psi0: np.ndarray,
     n_steps: int,
     sector_A: Sequence[int] | None = None,
@@ -635,7 +714,7 @@ def entanglement_growth(
 # Part B2: OTOC
 
 
-def otoc_map(steps: Sequence[np.ndarray], x0: int, n_steps: int) -> np.ndarray:
+def otoc_map(steps: Sequence[Step], x0: int, n_steps: int) -> np.ndarray:
     """Return ``C(x, t) = (1/2) <|[Z_x(t), Z_x0]|^2>`` at infinite temperature.
 
     With ``A = Z_x(t) = W^dagger Z_x W`` (``W`` the evolution operator up to
@@ -736,7 +815,7 @@ class ReferenceQubitResult:
 
 
 def reference_qubit_trajectories(
-    steps: Sequence[np.ndarray],
+    steps: Sequence[Step],
     x0: int,
     p: float,
     n_steps: int,
@@ -802,7 +881,7 @@ def _measure(
 
 
 def reference_qubit_cutoff(
-    steps: Sequence[np.ndarray],
+    steps: Sequence[Step],
     x0: int,
     p: float,
     n_steps: int,
@@ -840,7 +919,6 @@ def reference_qubit_cutoff(
     N = int(round(math.log2(dim)))
     # System bits of the 2**(N+1) indices (the reference is the last bit).
     sys_bits = np.repeat(_bits(N), 2, axis=0)
-    full_steps = [np.kron(U, _I2) for U in steps]
     out = np.zeros((len(cutoffs), n_steps + 1))
     for _ in range(n_trajectories):
         measured = rng.random((n_steps, N)) < p
@@ -851,8 +929,7 @@ def reference_qubit_cutoff(
             rho = np.outer(psi, psi.conj())
             out[k, 0] += 1.0
             for t in range(n_steps):
-                U = full_steps[t % len(full_steps)]
-                rho = U @ rho @ U.conj().T
+                rho = _evolve_with_reference(steps[t % len(steps)], rho)
                 for x in np.flatnonzero(measured[t]):
                     b = sys_bits[:, x]
                     if abs(x - x0) <= cutoff:
@@ -865,6 +942,22 @@ def reference_qubit_cutoff(
                         rho = rho * (b[:, None] == b[None, :])
                 out[k, t + 1] += _reference_entropy_rho(rho)
     return out / n_trajectories
+
+
+def _evolve_with_reference(U: Step, rho: np.ndarray) -> np.ndarray:
+    """Return ``(U x 1) rho (U x 1)^+``, the reference the last qubit of ``rho``.
+
+    The rows of ``rho`` are ``(system, reference)``, so ``(U x 1) X`` is ``U``
+    applied to ``X`` reshaped to ``(2**N, 2 k)``.
+    """
+    d2 = rho.shape[0]
+    d = d2 // 2
+
+    def left(X: np.ndarray) -> np.ndarray:
+        return np.asarray(U @ X.reshape(d, 2 * X.shape[1])).reshape(d2, X.shape[1])
+
+    A = left(rho)
+    return left(A.conj().T).conj().T
 
 
 def _reference_entropy_rho(rho: np.ndarray) -> float:

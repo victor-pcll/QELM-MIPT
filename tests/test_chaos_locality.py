@@ -18,12 +18,15 @@ from QELM.evaluation.chaos_locality import (
     R_GOE,
     R_POISSON,
     bell_reference_state,
+    brickwork_bonds,
     brickwork_layers,
     central_window,
     charge_operator,
+    dense_operator,
     entanglement_growth,
     floquet_ising_gate,
     gap_ratios,
+    gate_layer_operator,
     goe_pdf,
     gue_pdf,
     ising_chain_hamiltonian,
@@ -34,6 +37,8 @@ from QELM.evaluation.chaos_locality import (
     poisson_pdf,
     propagator_operator,
     quasienergies,
+    random_brickwork_steps,
+    random_floquet_layers,
     reference_entropy,
     reference_qubit_cutoff,
     reference_qubit_trajectories,
@@ -46,6 +51,8 @@ from QELM.evaluation.chaos_locality import (
     y_polarized_state,
 )
 from QELM.evaluation.entropy import von_neumann_entropy
+from QELM.models.circuits.clifford import random_clifford_gate
+from QELM.models.circuits.haar import haar_gate
 from QELM.models.TFIM import TransverseFieldIsingModel
 from QELM.physics.operators import get_site_operator, pauli
 
@@ -283,6 +290,65 @@ def test_y_polarized_state_sits_at_zero_energy() -> None:
         assert np.vdot(psi, H @ psi).real == pytest.approx(0, abs=1e-12)
 
 
+def test_gate_layer_operator_matches_the_kronecker_products() -> None:
+    rng = np.random.default_rng(10)
+    N = 4
+    gates = [(0, 1, haar_gate(rng)), (2, 3, haar_gate(rng)), (1, 2, haar_gate(rng))]
+    op = gate_layer_operator(N, gates)
+    expected = np.eye(2**N, dtype=complex)
+    for i, _, gate in gates:
+        expected = (
+            np.kron(np.kron(np.eye(2**i), gate), np.eye(2 ** (N - i - 2))) @ expected
+        )
+    np.testing.assert_allclose(dense_operator(op), expected, atol=1e-12)
+    psi = rng.normal(size=2**N) + 1j * rng.normal(size=2**N)
+    np.testing.assert_allclose(op @ psi, expected @ psi, atol=1e-12)
+
+
+def test_random_brickwork_draws_new_gates_on_alternating_bonds() -> None:
+    N, n = 6, 4
+    steps = random_brickwork_steps(N, n, haar_gate, np.random.default_rng(11))
+    assert len(steps) == n
+    assert brickwork_bonds(N, 0) == [(0, 1), (2, 3), (4, 5)]
+    assert brickwork_bonds(N, 1) == [(1, 2), (3, 4)]
+    dense = [dense_operator(op) for op in steps]
+    for U in dense:
+        np.testing.assert_allclose(U @ U.conj().T, np.eye(2**N), atol=1e-10)
+    assert not np.allclose(dense[0], dense[2])  # new gates at every step
+    # Exact light cone of a random circuit, as for the Floquet brickwork.
+    C = otoc_map(steps, 3, n)
+    for t in range(n + 1):
+        for x in range(N):
+            if abs(x - 3) > t + 1:
+                assert C[t, x] < 1e-12
+    assert C[n, 1] > 1e-3
+
+
+def test_clifford_floquet_spectrum_is_degenerate() -> None:
+    """A Clifford period has a finite order: its quasi-energies pile up."""
+    rng = np.random.default_rng(12)
+    N = 6
+    even, odd = (
+        dense_operator(op) for op in random_floquet_layers(N, random_clifford_gate, rng)
+    )
+    theta = quasienergies(odd @ even)[0]
+    gaps = np.diff(theta)
+    assert np.mean(gaps < 1e-8) > 0.3
+    haar_even, haar_odd = (
+        dense_operator(op) for op in random_floquet_layers(N, haar_gate, rng)
+    )
+    assert np.mean(np.diff(quasienergies(haar_odd @ haar_even)[0]) < 1e-8) == 0
+
+
+def test_cutoff_accepts_operator_steps() -> None:
+    N, x0 = 4, 2
+    steps = random_brickwork_steps(N, 3, haar_gate, np.random.default_rng(13))
+    dense = [dense_operator(op) for op in steps]
+    a = reference_qubit_cutoff(steps, x0, 0.4, 3, [0, N], 3, np.random.default_rng(14))
+    b = reference_qubit_cutoff(dense, x0, 0.4, 3, [0, N], 3, np.random.default_rng(14))
+    np.testing.assert_allclose(a, b, atol=1e-10)
+
+
 def test_otoc_has_an_exact_light_cone_in_the_brickwork() -> None:
     N, x0 = 8, 4
     layers = brickwork_layers(N, floquet_ising_gate())
@@ -389,36 +455,51 @@ def _load_script() -> ModuleType:
     return module
 
 
-def test_script_writes_every_figure(tmp_path: Path) -> None:
+FAMILIES = {
+    "continuous": {"tfim_all_to_all", "ising_hz0", "ising_hz05", "xxz", "xxz_disorder"},
+    "discrete": {"floquet", "haar", "clifford"},
+}
+
+
+def test_script_writes_every_figure_of_both_families(tmp_path: Path) -> None:
     script = _load_script()
     out = script.main(["--quick", "--out", str(tmp_path)])
-    for name in (
-        "level_spacing",
-        "entropy_growth",
-        "otoc",
-        "reference_qubit_delta",
-        "reference_qubit_cutoff",
-    ):
-        assert (out / f"{name}.png").is_file()
-        data = json.loads((out / f"{name}.json").read_text())
-        assert len(data["panels"]) >= 5
     summary = json.loads((out / "summary.json").read_text())
-    assert set(summary["spectra"]) == {
-        "tfim_all_to_all",
-        "ising_hz0",
-        "ising_hz05",
-        "xxz",
-        "floquet",
-    }
-    assert set(summary["growth"]["ising_hz05"]) == {"neel", "y"}
+    for family, keys in FAMILIES.items():
+        for name in (
+            "level_spacing",
+            "entropy_growth",
+            "otoc",
+            "reference_qubit_delta",
+            "reference_qubit_cutoff",
+        ):
+            assert (out / family / f"{name}.png").is_file()
+            data = json.loads((out / family / f"{name}.json").read_text())
+            assert len(data["panels"]) >= len(keys)
+        assert set(summary[family]["spectra"]) == keys
+        assert set(summary[family]["otoc"]) == keys
+    assert set(summary["continuous"]["growth"]["ising_hz05"]) == {"neel", "y"}
+    assert summary["discrete"]["otoc"]["haar"]["draws"] == 2
+    assert summary["discrete"]["otoc"]["floquet"]["draws"] == 1
 
 
-def test_script_runs_one_part_alone(tmp_path: Path) -> None:
+def test_script_runs_one_part_of_one_family_alone(tmp_path: Path) -> None:
     script = _load_script()
     out = script.main(
-        ["--quick", "--out", str(tmp_path), "--parts", "otoc", "--models", "floquet"]
+        [
+            "--quick",
+            "--out",
+            str(tmp_path),
+            "--families",
+            "discrete",
+            "--parts",
+            "otoc",
+            "--models",
+            "haar",
+        ]
     )
-    assert sorted(p.name for p in out.glob("*.png")) == ["otoc.png"]
+    assert sorted(p.name for p in out.rglob("*.png")) == ["otoc.png"]
     summary = json.loads((out / "summary.json").read_text())
-    assert set(summary) == {"args", "otoc"}
-    assert set(summary["otoc"]) == {"floquet"}
+    assert set(summary) == {"args", "discrete"}
+    assert set(summary["discrete"]) == {"otoc"}
+    assert set(summary["discrete"]["otoc"]) == {"haar"}

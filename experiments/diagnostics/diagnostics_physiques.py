@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Check the chaos and the locality of the reservoirs (issue #243).
 
-Runs the diagnostics of :mod:`QELM.evaluation.chaos_locality` on five
-reservoirs and draws one figure per diagnostic, each with its data
-(:func:`QELM.utils.plots.save_figure`):
+Runs the diagnostics of :mod:`QELM.evaluation.chaos_locality` on two
+families of reservoirs and draws, for each family, one figure per
+diagnostic, each with its data (:func:`QELM.utils.plots.save_figure`).
+
+**Continuous evolutions** (``continuous/``), ``exp(-i H tau)`` of a
+Hamiltonian, time in units of ``1 / J``:
 
 - ``tfim_all_to_all``: the TFIM of ``conf/models/TFIM.yaml``, ``H = h sum_i
   Z_i + sum_{i<j} J_ij X_i X_j``, ``J_ij`` uniform in ``[-1/2, 1/2]``, ``h =
-  10`` (``--tfim-h``), step ``tau = 0.25``. Symmetry: ``prod_i Z_i``.
+  10`` (``--tfim-h``), ``tau = 0.25``. Symmetry: ``prod_i Z_i``.
 - ``ising_hz0``: the open Ising chain ``- sum_i J_i Z_i Z_{i+1} - h_x sum_i
   X_i - h_z sum_i Z_i`` of ``conf/models/continuous_tfim_1d.yaml`` (issue
   #241) with ``h_z = 0``: free fermions, integrable. ``J_i`` uniform in
@@ -18,21 +21,38 @@ reservoirs and draws one figure per diagnostic, each with its data
   #236), ``J = Delta = 1``, ``h = 0``, ``tau = 0.1`` (its spin waves move
   up to 4 sites per unit time). Symmetries: the charge ``Q``, the reflection
   and, at ``Q = N/2``, the spin flip ``prod_i X_i``.
-- ``floquet``: the Floquet Ising chain of Skinner et al. (2019) of
-  ``conf/models/floquet_circuit.yaml`` (issue #239); one step is one
-  half-layer of bricks, the period two. Symmetry: the reflection (even
-  ``N``).
+- ``xxz_disorder``: the same chain with the random fields ``h_i`` uniform in
+  ``[-h, h]``, ``h = 1`` (``--xxz-h``), the ``h`` of ``conf/models/XXZ.yaml``.
+  Symmetry: the charge ``Q``.
 
-Figures, in ``outputs/diagnostics_physiques/<date_time>/`` (``--out``):
+**Discrete evolutions** (``discrete/``), brickwork circuits of two-qubit
+gates on an open chain, one step a half-layer (the even bonds, then the odd
+ones), time in half-layers:
+
+- ``floquet``: the Floquet Ising chain of Skinner et al. (2019) of
+  ``conf/models/floquet_circuit.yaml`` (issue #239), the same brick
+  everywhere and at every step. Symmetry: the reflection (even ``N``).
+- ``haar``: Haar-random gates of U(4), as ``conf/models/haar_circuit.yaml``.
+- ``clifford``: random gates of the two-qubit Clifford group, as
+  ``conf/models/clifford_circuit.yaml``.
+
+The Haar and Clifford circuits of the experiments draw new gates at every
+step: their dynamics (growth, OTOC, reference qubit) is that random circuit,
+averaged over ``--circuit-draws`` draws. Such a circuit has no spectrum; the
+level statistics use their Floquet version, one draw of the gates of a
+period repeated in time, over ``--realisations`` draws.
+
+Figures, in ``outputs/diagnostics_physiques/<date_time>/<family>/``
+(``--out``):
 
 1. ``level_spacing.png`` (part A): histogram of the unfolded spacings of the
-   central third of every symmetry sector, pooled over ``--realisations``
-   disorder draws, against Poisson, the GOE and the GUE; ``<r>`` in the
-   title of each panel.
-2. ``entropy_growth.png`` (part B1): half-chain ``S_A(t)`` from the Néel
-   state at ``p = 0``, one curve per ``N`` of ``--N-growth``. A local model
-   grows linearly at a rate independent of ``N``; the all-to-all one does
-   not. The maximal rate ``max_t dS_A/dt`` per ``N`` is in the JSON.
+   central third of every symmetry sector (the quasi-energies of the period
+   for a circuit), pooled over disorder draws, against Poisson, the GOE and
+   the GUE; ``<r>`` in the title of each panel.
+2. ``entropy_growth.png`` (part B1): half-chain ``S_A(t)`` at ``p = 0`` from
+   the Néel state and from ``|+y>^N``, one curve per ``N`` of ``--N-growth``.
+   A local model grows linearly at a rate independent of ``N``; the
+   all-to-all one does not. The maximal rate per ``N`` is in the JSON.
 3. ``otoc.png`` (part B2): ``C(x, t) = (1/2) <|[Z_x(t), Z_x0]|^2>`` against
    ``x - x0`` and ``t``, ``x0 = N/2``: a "V" for a local model.
 4. ``reference_qubit_delta.png`` (part B3a): ``-<Delta S_Q(x, t)>``, the
@@ -42,8 +62,8 @@ Figures, in ``outputs/diagnostics_physiques/<date_time>/`` (``--out``):
    outcomes of the measurements at ``|x - x0| <= l`` are kept, at the same
    two ``p``.
 
-The time unit is ``1 / J`` for the Hamiltonians and one half-layer for the
-Floquet chain. ``--quick`` runs tiny sizes in a few seconds (tests).
+``--families``, ``--models`` and ``--parts`` run a subset; ``--quick`` runs
+tiny sizes in a few seconds (tests).
 
     uv run python experiments/diagnostics/diagnostics_physiques.py
 """
@@ -67,10 +87,13 @@ from QELM.evaluation.chaos_locality import (
     R_GOE,
     R_GUE,
     R_POISSON,
-    brickwork_layers,
+    Step,
+    brickwork_bonds,
     charge_operator,
+    dense_operator,
     entanglement_growth,
     floquet_ising_gate,
+    gate_layer_operator,
     goe_pdf,
     gue_pdf,
     ising_chain_hamiltonian,
@@ -81,6 +104,8 @@ from QELM.evaluation.chaos_locality import (
     poisson_pdf,
     propagator_operator,
     quasienergies,
+    random_brickwork_steps,
+    random_floquet_layers,
     reference_qubit_cutoff,
     reference_qubit_trajectories,
     reflection_operator,
@@ -90,6 +115,8 @@ from QELM.evaluation.chaos_locality import (
     xxz_chain_hamiltonian,
     y_polarized_state,
 )
+from QELM.models.circuits.clifford import random_clifford_gate
+from QELM.models.circuits.haar import haar_gate
 from QELM.models.TFIM import TransverseFieldIsingModel
 from QELM.utils import new_sweep_dir
 from QELM.utils.plots import COLORS, save_figure, subplots
@@ -97,63 +124,68 @@ from QELM.utils.plots import COLORS, save_figure, subplots
 
 @dataclass
 class Instance:
-    """One draw of a reservoir.
+    """One draw of a reservoir, for its level statistics.
 
     Attributes:
         H: The Hamiltonian, ``None`` for a circuit.
         symmetries: Hermitian operators commuting with ``H`` (or with the
             period of the circuit).
-        layers: The unitaries of the half-layers of a circuit, else ``None``.
+        layers: The even and the odd half-layers of a circuit, else ``None``.
     """
 
     H: sp.csr_matrix | None
     symmetries: list[sp.csr_matrix]
-    layers: list[np.ndarray] | None = None
+    layers: list[Step] | None = None
 
 
 @dataclass
 class Reservoir:
-    """One reservoir and the way to draw an instance of it.
+    """One reservoir and the way to draw it.
 
     Attributes:
         key: Short name, used in the JSON.
         label: Title of its panels.
-        local: Whether the couplings are nearest-neighbour.
+        family: ``"continuous"`` (Hamiltonian) or ``"discrete"`` (circuit).
         time_unit: Label of the time axis.
         build: ``build(N, rng)`` draws an :class:`Instance`.
         tau: Time of one step: ``exp(-i H tau)`` for a Hamiltonian, one
             half-layer (``tau = 1``) for a circuit.
+        disordered: Whether two draws differ (averaged over in part A).
+        random_gates: For a random circuit, the draw of one gate: its
+            dynamics has new gates at every step.
     """
 
     key: str
     label: str
-    local: bool
+    family: str
     time_unit: str
     build: Callable[[int, np.random.Generator], Instance]
     tau: float = 1.0
+    disordered: bool = False
+    random_gates: Callable[[np.random.Generator], np.ndarray] | None = None
 
-    @property
-    def floquet(self) -> bool:
-        """Whether the levels are the quasi-energies of a circuit period."""
-        return self.key == "floquet"
+    def steps(
+        self, N: int, n_steps: int, rng: np.random.Generator, sparse: bool = False
+    ) -> list[Step]:
+        """Draw the time steps of the dynamics, cycled by the diagnostics.
 
-    def steps(self, instance: Instance) -> list[np.ndarray]:
-        """Return the dense unitaries of the time steps, cycled."""
+        A Hamiltonian gives ``[exp(-i H tau)]``, dense or applied from the
+        sparse ``H`` (``sparse=True``), the Floquet chain its two
+        half-layers, a random circuit ``n_steps`` half-layers of new gates.
+        """
+        if self.random_gates is not None:
+            return list(random_brickwork_steps(N, n_steps, self.random_gates, rng))
+        instance = self.build(N, rng)
         if instance.layers is not None:
             return instance.layers
         assert instance.H is not None
+        if sparse:
+            return [propagator_operator(instance.H, self.tau)]
         return [step_unitary(instance.H, self.tau)]
 
-    def state_steps(self, instance: Instance) -> list[Any]:
-        """As :meth:`steps`, applied to a state from the sparse ``H``."""
-        if instance.layers is not None:
-            return instance.layers
-        assert instance.H is not None
-        return [propagator_operator(instance.H, self.tau)]
 
-
-def reservoirs(tfim_h: float = 10.0) -> list[Reservoir]:
-    """Return the five reservoirs of the module docstring."""
+def reservoirs(tfim_h: float = 10.0, xxz_h: float = 1.0) -> list[Reservoir]:
+    """Return the reservoirs of the module docstring, both families."""
 
     def tfim(N: int, rng: np.random.Generator) -> Instance:
         np.random.seed(int(rng.integers(2**31)))
@@ -173,25 +205,83 @@ def reservoirs(tfim_h: float = 10.0) -> list[Reservoir]:
         symmetries = [charge_operator(N), reflection_operator(N)]
         return Instance(H, [*symmetries, parity_operator(N, "X")])
 
-    def floquet(N: int, rng: np.random.Generator) -> Instance:
-        layers = brickwork_layers(N, floquet_ising_gate())
-        symmetries = [reflection_operator(N)] if N % 2 == 0 else []
-        return Instance(None, symmetries, layers)
+    def xxz_disorder(N: int, rng: np.random.Generator) -> Instance:
+        fields = rng.uniform(-xxz_h, xxz_h, size=N)
+        H = xxz_chain_hamiltonian(N, J=1.0, Delta=1.0, fields=fields)
+        return Instance(H, [charge_operator(N)])
 
+    def floquet(N: int, rng: np.random.Generator) -> Instance:
+        gate = floquet_ising_gate()
+        layers: list[Step] = [
+            gate_layer_operator(N, [(i, j, gate) for i, j in brickwork_bonds(N, h)])
+            for h in (0, 1)
+        ]
+        return Instance(None, [reflection_operator(N)] if N % 2 == 0 else [], layers)
+
+    def random_floquet(
+        draw: Callable[[np.random.Generator], np.ndarray],
+    ) -> Callable[[int, np.random.Generator], Instance]:
+        def build(N: int, rng: np.random.Generator) -> Instance:
+            return Instance(None, [], list(random_floquet_layers(N, draw, rng)))
+
+        return build
+
+    hamiltonian = "continuous"
     return [
         Reservoir(
             "tfim_all_to_all",
             f"TFIM all-to-all ($h={tfim_h:g}$)",
-            False,
+            hamiltonian,
             "$tJ$",
             tfim,
             tau=0.25,
+            disordered=True,
         ),
-        Reservoir("ising_hz0", "Ising 1D $h_z=0$", True, "$tJ$", ising(0.0), 0.3),
-        Reservoir("ising_hz05", "Ising 1D $h_z=0.5$", True, "$tJ$", ising(0.5), 0.3),
-        Reservoir("xxz", "XXZ 1D ($\\Delta=J$)", True, "$tJ$", xxz, tau=0.1),
-        Reservoir("floquet", "Floquet 1D (Skinner)", True, "half-layers", floquet),
+        Reservoir(
+            "ising_hz0", "Ising 1D $h_z=0$", hamiltonian, "$tJ$", ising(0.0), 0.3, True
+        ),
+        Reservoir(
+            "ising_hz05",
+            "Ising 1D $h_z=0.5$",
+            hamiltonian,
+            "$tJ$",
+            ising(0.5),
+            0.3,
+            True,
+        ),
+        Reservoir("xxz", "XXZ 1D clean", hamiltonian, "$tJ$", xxz, tau=0.1),
+        Reservoir(
+            "xxz_disorder",
+            f"XXZ 1D, $h_i\\in[-{xxz_h:g},{xxz_h:g}]$",
+            hamiltonian,
+            "$tJ$",
+            xxz_disorder,
+            tau=0.1,
+            disordered=True,
+        ),
+        Reservoir("floquet", "Floquet (Skinner)", "discrete", "half-layers", floquet),
+        Reservoir(
+            "haar",
+            "Haar circuit",
+            "discrete",
+            "half-layers",
+            random_floquet(haar_gate),
+            disordered=True,
+            random_gates=haar_gate,
+        ),
+        Reservoir(
+            "clifford",
+            "Clifford circuit",
+            "discrete",
+            "half-layers",
+            random_floquet(random_clifford_gate),
+            disordered=True,
+            random_gates=random_clifford_gate,
+        ),
     ]
+
+
+FAMILIES = ("continuous", "discrete")
 
 
 def _times(reservoir: Reservoir, n_steps: int) -> np.ndarray:
@@ -214,11 +304,7 @@ def run_level_spacing(
     s_grid = np.linspace(0, 4, 200)
     summary: dict[str, Any] = {}
     for ax, model in zip(axes[0], models, strict=True):
-        draws = (
-            realisations
-            if model.key in ("tfim_all_to_all", "ising_hz0", "ising_hz05")
-            else 1
-        )
+        draws = realisations if model.disordered else 1
         spectra = []
         blocks: list[np.ndarray] | None = None
         for _ in range(draws):
@@ -226,12 +312,13 @@ def run_level_spacing(
             if blocks is None:  # the symmetries do not depend on the disorder
                 blocks = symmetry_blocks(2**N, instance.symmetries)
             if instance.layers is not None:
-                period = instance.layers[1] @ instance.layers[0]
-                spectra.append(quasienergies(period, blocks=blocks))
+                even, odd = (dense_operator(layer) for layer in instance.layers)
+                spectra.append(quasienergies(odd @ even, blocks=blocks))
             else:
                 assert instance.H is not None
                 spectra.append(sector_spectra(instance.H, blocks=blocks))
-        stats = level_statistics(spectra, circular=model.floquet)
+        circular = model.family == "discrete"
+        stats = level_statistics(spectra, circular=circular)
         if stats.spacings.size:
             ax.hist(
                 stats.spacings,
@@ -295,7 +382,7 @@ def run_entropy_growth(
     for j, model in enumerate(models):
         t = _times(model, n_steps)
         for k, N in enumerate(N_values):
-            steps = model.state_steps(model.build(N, rng))
+            steps = model.steps(N, n_steps, rng, sparse=True)
             for i, (name, (label, state)) in enumerate(states.items()):
                 S = entanglement_growth(steps, state(N), n_steps)
                 rate = float(np.max(np.diff(S) / np.diff(t)))
@@ -343,17 +430,24 @@ def run_otoc(
     models: Sequence[Reservoir],
     N: int,
     n_steps: int,
+    circuit_draws: int,
     rng: np.random.Generator,
     out_dir: Path,
 ) -> dict[str, Any]:
-    """Draw ``otoc.png``, ``C(x, t)`` with ``x0 = N // 2``."""
+    """Draw ``otoc.png``, ``C(x, t)`` with ``x0 = N // 2``.
+
+    A random circuit is averaged over ``circuit_draws`` draws of its gates.
+    """
     x0 = N // 2
     fig, axes = subplots(1, len(models), figsize=(4 * len(models), 3.8), squeeze=False)
     summary: dict[str, Any] = {}
     x_edges = np.arange(N + 1) - 0.5 - x0
     for ax, model in zip(axes[0], models, strict=True):
-        steps = model.steps(model.build(N, rng))
-        C = otoc_map(steps, x0, n_steps)
+        draws = circuit_draws if model.random_gates is not None else 1
+        C = np.mean(
+            [otoc_map(model.steps(N, n_steps, rng), x0, n_steps) for _ in range(draws)],
+            axis=0,
+        )
         t = _times(model, n_steps)
         t_edges = np.concatenate([t - model.tau / 2, [t[-1] + model.tau / 2]])
         mesh = ax.pcolormesh(
@@ -361,7 +455,7 @@ def run_otoc(
         )
         ax.set_title(model.label)
         ax.set_xlabel("$x - x_0$")
-        summary[model.key] = {"front": _front(C, t, x0)}
+        summary[model.key] = {"front": _front(C, t, x0), "draws": draws}
     axes[0, 0].set_ylabel("time")
     fig.colorbar(mesh, ax=axes[0, -1], label="$C(x, t)$")
     fig.suptitle(
@@ -385,6 +479,11 @@ def _front(C: np.ndarray, t: np.ndarray, x0: int, threshold: float = 0.1) -> dic
 # Part B3
 
 
+def _share(total: int, parts: int, k: int) -> int:
+    """Number of items of part ``k`` when ``total`` is split in ``parts``."""
+    return total // parts + (1 if k < total % parts else 0)
+
+
 def run_reference_qubit(
     models: Sequence[Reservoir],
     N: int,
@@ -393,10 +492,15 @@ def run_reference_qubit(
     cutoffs: Sequence[int],
     trajectories: int,
     cutoff_trajectories: int,
+    circuit_draws: int,
     rng: np.random.Generator,
     out_dir: Path,
 ) -> dict[str, Any]:
-    """Draw ``reference_qubit_delta.png`` and ``reference_qubit_cutoff.png``."""
+    """Draw ``reference_qubit_delta.png`` and ``reference_qubit_cutoff.png``.
+
+    The trajectories of a random circuit are split over ``circuit_draws``
+    draws of its gates.
+    """
     x0 = N // 2
     shape = (len(p_values), len(models))
     size = (4 * len(models), 3.4 * len(p_values))
@@ -405,14 +509,27 @@ def run_reference_qubit(
     x_edges = np.arange(N + 1) - 0.5 - x0
     summary: dict[str, Any] = {}
     for j, model in enumerate(models):
-        steps = model.steps(model.build(N, rng))
+        # A random circuit gets new gates for every batch of trajectories.
+        draws = circuit_draws if model.random_gates is not None else 1
         t = _times(model, n_steps)
         t_edges = np.concatenate([t - model.tau / 2, [t[-1] + model.tau / 2]])
         summary[model.key] = {}
         for i, p in enumerate(p_values):
-            result = reference_qubit_trajectories(
-                steps, x0, p, n_steps, trajectories, rng
-            )
+            batches = [
+                (
+                    model.steps(N, n_steps, rng),
+                    _share(trajectories, draws, d),
+                    _share(cutoff_trajectories, draws, d),
+                )
+                for d in range(draws)
+            ]
+            runs = [
+                reference_qubit_trajectories(steps, x0, p, n_steps, n, rng)
+                for steps, n, _ in batches
+            ]
+            weights = np.array([n for _, n, _ in batches], dtype=float)
+            S_Q = np.average([r.S_Q for r in runs], axis=0, weights=weights)
+            delta = np.average([r.delta_S_Q for r in runs], axis=0, weights=weights)
             ax = axes_d[i, j]
             mesh = ax.pcolormesh(
                 x_edges,
@@ -420,7 +537,7 @@ def run_reference_qubit(
                 # Log scale: the light cone is the edge of the faint values,
                 # far below the -1 of a measurement of x0 at t = 0. Zeros
                 # (outside the cone) are drawn in the lowest color.
-                np.clip(-result.delta_S_Q, 1e-4, 1),
+                np.clip(-delta, 1e-4, 1),
                 norm=LogNorm(vmin=1e-4, vmax=1),
                 cmap="viridis",
                 label=f"{model.key} p={p:g}",
@@ -428,13 +545,19 @@ def run_reference_qubit(
             ax.set_title(f"{model.label}, p = {p:g}")
             ax.set_xlabel("$x - x_0$")
             ax.set_ylabel("time" if j == 0 else "")
-            S_cut = reference_qubit_cutoff(
-                steps, x0, p, n_steps, cutoffs, cutoff_trajectories, rng
+            cut_weights = np.array([n for _, _, n in batches], dtype=float)
+            S_cut = np.average(
+                [
+                    reference_qubit_cutoff(steps, x0, p, n_steps, cutoffs, n, rng)
+                    for steps, _, n in batches
+                ],
+                axis=0,
+                weights=cut_weights,
             )
             ax = axes_c[i, j]
             ax.plot(
                 t,
-                result.S_Q,
+                S_Q,
                 color="k",
                 lw=1,
                 ls=":",
@@ -452,7 +575,7 @@ def run_reference_qubit(
             ax.set_xlabel(model.time_unit)
             ax.set_ylim(-0.02, 1.05)
             summary[model.key][str(p)] = {
-                "S_Q_final": float(result.S_Q[-1]),
+                "S_Q_final": float(S_Q[-1]),
                 "S_Q_final_cutoff": {
                     str(c): float(S_cut[k, -1]) for k, c in enumerate(cutoffs)
                 },
@@ -506,8 +629,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out", type=Path, default=None, help="output folder")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--tfim-h", type=float, default=10.0)
-    parser.add_argument("--N-spectra", type=int, default=12)
+    parser.add_argument("--xxz-h", type=float, default=1.0)
+    parser.add_argument("--N-spectra", type=int, default=12, help="continuous")
+    parser.add_argument("--N-spectra-discrete", type=int, default=10)
     parser.add_argument("--realisations", type=int, default=5)
+    parser.add_argument("--circuit-draws", type=int, default=4)
     parser.add_argument("--N-growth", type=int, nargs="+", default=[6, 8, 10, 12])
     parser.add_argument("--growth-steps", type=int, default=40)
     parser.add_argument("--N-otoc", type=int, default=10)
@@ -519,6 +645,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--cutoffs", type=int, nargs="+", default=[-1, 0, 1, 2, 4])
     parser.add_argument("--trajectories", type=int, default=400)
     parser.add_argument("--cutoff-trajectories", type=int, default=60)
+    parser.add_argument(
+        "--families", nargs="+", choices=FAMILIES, default=list(FAMILIES)
+    )
     parser.add_argument("--models", nargs="+", default=None, help="keys to run")
     parser.add_argument(
         "--parts", nargs="+", choices=PARTS, default=list(PARTS), help="parts to run"
@@ -528,34 +657,38 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     args = parser.parse_args(argv)
     if args.quick:
-        args.N_spectra, args.realisations = 6, 1
+        args.N_spectra, args.N_spectra_discrete, args.realisations = 6, 6, 1
+        args.circuit_draws = 2
         args.N_growth, args.growth_steps = [4, 6], 4
         args.N_otoc, args.otoc_steps = 4, 3
         args.N_ref, args.ref_steps = 4, 3
         args.cutoffs = [-1, 0, 4]
-        args.trajectories, args.cutoff_trajectories = 2, 1
+        args.trajectories, args.cutoff_trajectories = 2, 2
     return args
 
 
-def main(argv: Sequence[str] | None = None) -> Path:
-    """Run every diagnostic and return the output folder."""
-    matplotlib.use("Agg")
-    args = parse_args(argv)
-    models = reservoirs(args.tfim_h)
-    if args.models:
-        models = [m for m in models if m.key in args.models]
-    out_dir = args.out or new_sweep_dir("outputs", "diagnostics_physiques")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    rngs = dict(zip(PARTS, np.random.default_rng(args.seed).spawn(len(PARTS))))
+def run_family(
+    family: str, models: Sequence[Reservoir], args: argparse.Namespace, out_dir: Path
+) -> dict[str, Any]:
+    """Run the parts of ``args.parts`` on one family, in ``out_dir / family``."""
+    folder = out_dir / family
+    seed = [args.seed, FAMILIES.index(family)]
+    rngs = dict(zip(PARTS, np.random.default_rng(seed).spawn(len(PARTS))))
+    N_spectra = args.N_spectra if family == "continuous" else args.N_spectra_discrete
     runs: dict[str, Callable[[], dict[str, Any]]] = {
         "spectra": lambda: run_level_spacing(
-            models, args.N_spectra, args.realisations, rngs["spectra"], out_dir
+            models, N_spectra, args.realisations, rngs["spectra"], folder
         ),
         "growth": lambda: run_entropy_growth(
-            models, args.N_growth, args.growth_steps, rngs["growth"], out_dir
+            models, args.N_growth, args.growth_steps, rngs["growth"], folder
         ),
         "otoc": lambda: run_otoc(
-            models, args.N_otoc, args.otoc_steps, rngs["otoc"], out_dir
+            models,
+            args.N_otoc,
+            args.otoc_steps,
+            args.circuit_draws,
+            rngs["otoc"],
+            folder,
         ),
         "reference": lambda: run_reference_qubit(
             models,
@@ -565,11 +698,28 @@ def main(argv: Sequence[str] | None = None) -> Path:
             args.cutoffs,
             args.trajectories,
             args.cutoff_trajectories,
+            args.circuit_draws,
             rngs["reference"],
-            out_dir,
+            folder,
         ),
     }
-    summary = {part: runs[part]() for part in PARTS if part in args.parts}
+    return {part: runs[part]() for part in PARTS if part in args.parts}
+
+
+def main(argv: Sequence[str] | None = None) -> Path:
+    """Run every diagnostic on every family and return the output folder."""
+    matplotlib.use("Agg")
+    args = parse_args(argv)
+    models = reservoirs(args.tfim_h, args.xxz_h)
+    if args.models:
+        models = [m for m in models if m.key in args.models]
+    out_dir = args.out or new_sweep_dir("outputs", "diagnostics_physiques")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    summary: dict[str, Any] = {}
+    for family in args.families:
+        members = [m for m in models if m.family == family]
+        if members:
+            summary[family] = run_family(family, members, args, out_dir)
     config = {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()}
     (out_dir / "summary.json").write_text(
         json.dumps({"args": config, **summary}, indent=2) + "\n"
