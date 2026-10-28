@@ -356,6 +356,58 @@ uv run python experiments/QELM_Q/plot_bayes_ridge_fss.py outputs/fss233/tfim_rN 
   --sep outputs/fss233/sep_paper --out outputs/fss233/figures_rN
 ```
 
+### A local U(1) reservoir: the XXZ chain (issue #236)
+
+The all-to-all TFIM behaves like a fully scrambled reservoir (issue #233):
+between two rounds it erases every spatial memory of the outcomes, so the
+accuracy of `Q` from `M` follows the urn prediction `Phi(d' / 2)`. With
+`models=XXZ` (`MODEL=XXZ` for the launcher) the reservoir is the
+nearest-neighbour chain `H = sum J (X X + Y Y) + Delta Z Z + sum h_i Z_i`
+(`conf/models/XXZ.yaml`: Heisenberg `Delta = J`, clean `h = 0`, open
+boundaries, a step `dt = 0.25 / J` so that a charge moves about one site per
+round). It conserves `Q` exactly, so:
+
+- the vector path evolves only the `C(Ns, Q)` amplitudes of the charge
+  sector (`sector_step`), after checking that `H` does not couple it to the
+  rest of the space;
+- every run checks the charge along every record: `charge_leak_max`, the
+  largest weight outside the sector of the label after any step (exactly 0
+  for XXZ), and `contradicting_rounds_fraction` (0 for XXZ);
+- `accuracy_M_bayes_exact` is the scrambled Bayes rule with no leak
+  (`epsilon = 0`), which a conserved charge allows.
+
+A charge moves one bond at a time, so where and when a qubit was measured
+carries information that the urn model throws away. The local readout keeps
+it: `log P(M | Q)` under a hidden Markov model whose configuration of charge
+`Q` moves between two rounds by the nearest-neighbour symmetric exclusion
+process, with `lam = gamma dt` exchanges per bond per step fitted on the
+training records by maximum likelihood (`local_sep_rate`; `lam -> inf` is the
+scrambled model). Its Bayes-Ridge accuracy is
+`accuracy_M_local_bayes_ridge`, its Bayes rule `accuracy_M_local_bayes`;
+`bayes_ridge.local=false` skips it. `plot_bayes_ridge_fss.py` reads the
+reservoir from the configs and draws the local readout when it is there.
+
+Since `sum_k <Z_k> = Ns - 2 Q` exactly for a conserved charge, every readout
+that sees the final `<Z_k>` reads `Q` perfectly: only the readouts of the
+record alone (`M`, Bayes-Ridge, local Bayes-Ridge) are informative here.
+
+```bash
+# R = 5 rounds, dt = 0.25 / J.
+OMP_NUM_THREADS=1 MODEL=XXZ OUT_DIR=outputs/xxz236/r5 N_VALUES="12 10 8 6" \
+  SEEDS="42 43" P_VALUES="0.0 0.05 0.1 0.2 0.3 0.4 0.6 0.8 1.0" \
+  FINAL_VALUES=true BALANCED=true STATE=vector L=2000 MAX_JOBS=4 \
+  ./experiments/QELM_Q/exp_QELM_Q.sh
+# R = Ns rounds at the same dt (t = 0.25 Ns), one N at a time.
+for N in 12 10 8 6; do NS=$((N - 1)); T=$(awk -v n=$NS 'BEGIN{print 0.25*n}')
+  OMP_NUM_THREADS=1 MODEL=XXZ OUT_DIR=outputs/xxz236/rN N_VALUES=$N STEPS=$NS \
+    T_VALUES=$T SEEDS="42 43" P_VALUES="0.0 0.05 0.1 0.2 0.3 0.4 0.6 0.8 1.0" \
+    FINAL_VALUES=true BALANCED=true STATE=vector L=2000 MAX_JOBS=4 \
+    ./experiments/QELM_Q/exp_QELM_Q.sh
+done
+uv run python experiments/QELM_Q/plot_bayes_ridge_fss.py outputs/xxz236/r5 \
+  --sep outputs/fss233/sep_matched outputs/fss233/sep_paper
+```
+
 ### Run many runs at once: `MAX_JOBS` (issue #199)
 
 By default the launcher runs one run after the other. `MAX_JOBS=n` puts the
