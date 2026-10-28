@@ -7,14 +7,21 @@ import math
 
 import numpy as np
 import pytest
+import scipy.linalg
 
 from QELM.evaluation.bayes_ridge import (
+    DEFAULT_LOCAL_RATES,
     BayesRidge,
     bayes_accuracy,
+    fit_local_sep_rate,
+    local_log_likelihood_features,
+    local_sep_log_likelihood,
     log_likelihood_features,
     scrambled_accuracy,
     scrambled_discriminability,
     scrambled_log_likelihood,
+    sector_configurations,
+    sep_generator,
 )
 from QELM.evaluation.learnability import UNMEASURED, sep_log_likelihood
 
@@ -213,3 +220,123 @@ def test_scrambled_accuracy_limits_and_scaling() -> None:
         scrambled_discriminability(11, 1.0, 5, charges)
     with pytest.raises(ValueError):
         scrambled_discriminability(11, 0.3, 5, (4, 4))
+
+
+# ---- Local SEP model (issue #236) ----------------------------------------
+
+
+def _random_records(n: int, rounds: int, Ns: int, seed: int = 0) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    return rng.choice([-1, 0, 1], size=(n, rounds, Ns), p=[0.2, 0.6, 0.2])
+
+
+def test_sector_configurations_count_and_charge() -> None:
+    from math import comb
+
+    configs = sector_configurations(6, 2)
+    assert configs.shape == (comb(6, 2), 6)
+    assert np.all(np.sum(configs == -1, axis=1) == 2)
+    assert len({c.tobytes() for c in configs}) == comb(6, 2)
+
+
+@pytest.mark.parametrize("boundary", ["open", "periodic"])
+def test_sep_generator_is_a_symmetric_rate_matrix(boundary: str) -> None:
+    G = sep_generator(sector_configurations(5, 2), boundary).toarray()
+    np.testing.assert_allclose(G, G.T)
+    np.testing.assert_allclose(G.sum(axis=0), 0.0, atol=1e-12)
+    off = G - np.diag(np.diag(G))
+    assert set(np.unique(off)) <= {0.0, 1.0}
+
+
+def test_sep_generator_moves_one_particle_one_bond() -> None:
+    """One particle on an open chain: a random walk to the next site."""
+    configs = sector_configurations(4, 1)
+    G = sep_generator(configs).toarray()
+    sites = np.argmax(configs == -1, axis=1)
+    for a in range(4):
+        for b in range(4):
+            if a != b:
+                assert G[a, b] == (abs(sites[a] - sites[b]) == 1)
+
+
+def test_local_model_at_infinite_rate_is_the_scrambled_model() -> None:
+    M = _random_records(40, 4, 6)
+    np.testing.assert_allclose(
+        local_sep_log_likelihood(M, 3, np.inf), scrambled_log_likelihood(M, 3)
+    )
+    # A large but finite rate relaxes to the same uniform distribution.
+    np.testing.assert_allclose(
+        local_sep_log_likelihood(M, 3, 50.0), scrambled_log_likelihood(M, 3), atol=1e-5
+    )
+
+
+def test_local_model_one_round_is_the_hypergeometric_probability() -> None:
+    """With one round the memory plays no role: any rate gives the urn."""
+    M = _random_records(30, 1, 7, seed=4)
+    for lam in (0.0, 0.3, 2.0):
+        np.testing.assert_allclose(
+            local_sep_log_likelihood(M, 3, lam, epsilon=0.0),
+            scrambled_log_likelihood(M, 3, 0.0),
+        )
+
+
+def test_frozen_configuration_remembers_the_outcome() -> None:
+    """lam = 0: a site found at |1> stays at |1>; the opposite is impossible."""
+    Ns, Q = 4, 2
+    same = np.zeros((1, 2, Ns), dtype=int)
+    same[0, :, 0] = -1
+    flipped = same.copy()
+    flipped[0, 1, 0] = 1
+    ll_same = local_sep_log_likelihood(same, Q, 0.0, epsilon=0.0)
+    ll_flip = local_sep_log_likelihood(flipped, Q, 0.0, epsilon=0.0)
+    assert ll_same[0] == pytest.approx(np.log(Q / Ns))
+    assert ll_flip[0] == -np.inf
+    # The scrambled model gives both records the same probability.
+    np.testing.assert_allclose(
+        scrambled_log_likelihood(same, Q, 0.0),
+        scrambled_log_likelihood(flipped, Q, 0.0),
+    )
+
+
+def test_local_model_with_a_leak_is_finite() -> None:
+    M = _random_records(30, 5, 5, seed=2)
+    ll = local_log_likelihood_features(M, (2, 1), 0.0)
+    assert ll.shape == (30, 2) and np.all(np.isfinite(ll))
+
+
+def test_local_model_is_normalized_over_records() -> None:
+    """Summed over every record of 2 rounds on 3 sites, P(M | Q) = 1."""
+    values = np.array(list(itertools.product((-1, 0, 1), repeat=6))).reshape(-1, 2, 3)
+    for lam in (0.0, 0.4, np.inf):
+        ll = local_sep_log_likelihood(values, 1, lam, epsilon=0.0)
+        # Each site is measured or not; sum over outcomes for one choice of
+        # measured sites is 1, and there are 2**6 choices.
+        assert np.sum(np.exp(ll)) == pytest.approx(2**6)
+
+
+def test_fit_local_sep_rate_finds_the_rate_of_sep_records() -> None:
+    """Records drawn from the local SEP at lam = 0.2 are fitted near 0.2."""
+    rng = np.random.default_rng(7)
+    Ns, Q, rounds, n, lam = 6, 3, 6, 400, 0.2
+    configs = sector_configurations(Ns, Q)
+    T = scipy.linalg.expm(lam * sep_generator(configs).toarray())
+    M = np.zeros((n, rounds, Ns), dtype=int)
+    for i in range(n):
+        c = rng.integers(len(configs))
+        for r in range(rounds):
+            c = rng.choice(len(configs), p=T[:, c])
+            measured = rng.random(Ns) < 0.5
+            M[i, r] = np.where(measured, configs[c], 0)
+    best, totals = fit_local_sep_rate(M, np.full(n, Q))
+    assert totals.shape == (len(DEFAULT_LOCAL_RATES),)
+    assert 0.05 <= best <= 0.6
+
+
+def test_local_model_sparse_path_matches_dense(monkeypatch) -> None:
+    """Above the dense size the propagator goes through expm_multiply."""
+    import QELM.evaluation.bayes_ridge as module
+
+    M = _random_records(20, 3, 6, seed=9)
+    dense = local_sep_log_likelihood(M, 3, 0.5)
+    monkeypatch.setattr(module, "_DENSE_SECTOR", 0)
+    np.testing.assert_allclose(local_sep_log_likelihood(M, 3, 0.5), dense, rtol=1e-10)

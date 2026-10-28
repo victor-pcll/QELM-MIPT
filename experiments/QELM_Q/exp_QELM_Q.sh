@@ -20,8 +20,16 @@
 #                             L = int(DELTA * N), and L is ignored (issue #201)
 #     ALPHA=1e-2              ridge regularization (training.alpha, default 1e-3)
 #     N_VALUES="4 6"          total numbers of qubits, ancilla included
-#     H_VALUES="10 1"         transverse fields TFIM.h, in units of TFIM.J = 1
+#     MODEL=XXZ               reservoir (models=..., default TFIM): XXZ is the
+#                             nearest-neighbour U(1) chain of issue #236
+#     H_VALUES="10 1"         fields <MODEL>.h, in units of <MODEL>.J = 1: the
+#                             transverse field of the TFIM (default 10), the
+#                             width of the random fields of XXZ (default 0)
 #     T_VALUES="0.5 2 10"     total evolution times evolution.t, in units of 1/J
+#                             (default 10 for TFIM, 1.25 for XXZ)
+#     STEPS=11                steps, projective_measurement.nbr_time_evolution
+#                             (default of the config, 5)
+#     EXTRA="XXZ.Delta=0.5"   more Hydra overrides, space-separated, for every run
 #     SEEDS="42 43 44"        seeds (one disorder and measurement draw each)
 #     P_VALUES="0 0.5 1.0"    measurement probabilities
 #     FINAL_VALUES="false true"  without / with a round after the last step
@@ -57,10 +65,15 @@ unset VIRTUAL_ENV
 
 # ---- Parameters -------------------------------------------------------------
 EXPERIMENT="exp_QELM_Q"
-MODEL="TFIM"
+MODEL="${MODEL:-TFIM}"
+case "$MODEL" in
+  TFIM) H_DEFAULT=10; T_DEFAULT=10 ;;  # h = 10 J, t = 10 / J (conf/models/TFIM.yaml)
+  XXZ) H_DEFAULT=0; T_DEFAULT=1.25 ;;  # clean chain, dt = 0.25 / J (conf/models/XXZ.yaml)
+  *) echo "MODEL must be TFIM or XXZ, got '$MODEL'" >&2; exit 2 ;;
+esac
 read -r -a N_VALUES <<< "${N_VALUES:-4}"   # number of qubits, ancilla included
-read -r -a H_VALUES <<< "${H_VALUES:-10}"  # TFIM.h, 10 J is the config default
-read -r -a T_VALUES <<< "${T_VALUES:-10}"  # evolution.t, 10 / J is the config default
+read -r -a H_VALUES <<< "${H_VALUES:-$H_DEFAULT}"  # <MODEL>.h
+read -r -a T_VALUES <<< "${T_VALUES:-$T_DEFAULT}"  # evolution.t
 L="${L:-200}"                               # samples per run (samples.L)
 # ALPHA, when set, overrides training.alpha; otherwise the default of
 # conf/training/regression/ridge.yaml (1e-3) applies (issue #92).
@@ -142,14 +155,17 @@ run_one() {
   else
     L_RUN="$L"
   fi
-  echo "--- models=$MODEL N=$N TFIM.h=$h t=$T final=$FINAL seed=$SEED samples.L=$L_RUN delta=${DELTA:-none} training.alpha=${ALPHA:-config default} p=$p"
+  # EXTRA: more overrides, split on spaces (none holds a space).
+  local -a EXTRA_ARGS=()
+  if [[ -n "${EXTRA:-}" ]]; then read -r -a EXTRA_ARGS <<< "$EXTRA"; fi
+  echo "--- models=$MODEL N=$N $MODEL.h=$h t=$T final=$FINAL seed=$SEED samples.L=$L_RUN delta=${DELTA:-none} training.alpha=${ALPHA:-config default} p=$p"
   # h and t are always passed, so that .hydra/config.yaml holds their numbers
   # rather than the ${mul:...} and ${div:...} formulas and the notebook can
   # read them back.
   uv run python experiments/QELM_Q/exp_QELM_Q.py \
     "models=$MODEL" \
     "N=$N" \
-    "TFIM.h=$h" \
+    "$MODEL.h=$h" \
     "evolution.t=$T" \
     "seed=$SEED" \
     "samples.L=$L_RUN" \
@@ -159,19 +175,21 @@ run_one() {
     "projective_measurement.final_measurement=$FINAL" \
     ${STATE:+"state_representation=$STATE"} \
     ${BALANCED:+"samples.balanced=$BALANCED"} \
+    ${STEPS:+"projective_measurement.nbr_time_evolution=$STEPS"} \
+    ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
     "hydra.run.dir=$RUN_DIR"
   status=$?
   if (( status != 0 )); then
     # 137 = killed by SIGKILL, what the kernel's OOM killer sends.
     echo "exit $status: $1" >> "$FAILED_LOG"
-    echo "!!! run failed (exit $status): N=$N TFIM.h=$h t=$T final=$FINAL seed=$SEED p=$p" >&2
+    echo "!!! run failed (exit $status): N=$N $MODEL.h=$h t=$T final=$FINAL seed=$SEED p=$p" >&2
     # Exit 1 whatever the code: xargs keeps going after 1-125, and stops the
     # whole queue on 255 or if the worker itself dies from a signal.
     return 1
   fi
 }
 export -f run_one
-export OUT_DIR MODEL L FAILED_LOG DELTA ALPHA STATE BALANCED
+export OUT_DIR MODEL L FAILED_LOG DELTA ALPHA STATE BALANCED STEPS EXTRA
 
 # A bounded queue: xargs starts the runs in order and keeps at most MAX_JOBS
 # of them alive (issue #199). A failed run does not stop the others; xargs

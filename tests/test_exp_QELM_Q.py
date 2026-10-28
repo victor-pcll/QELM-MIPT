@@ -634,3 +634,114 @@ def test_bash_sweep_passes_balanced(tmp_path: Path) -> None:
     )
     metrics = json.loads(run.read_text())
     assert "accuracy_M_bayes_ridge" in metrics and "accuracy_M_bayes" in metrics
+
+
+# ---- The XXZ chain as the reservoir (issue #236) --------------------------
+
+XXZ = [
+    "models=XXZ",
+    "samples.balanced=true",
+    "projective_measurement.final_measurement=true",
+]
+
+
+@pytest.mark.parametrize("representation", ["density", "vector"])
+def test_xxz_reservoir_conserves_the_charge(representation: str) -> None:
+    """No weight leaves the charge sector, no round contradicts Q (#236)."""
+    out = _run(
+        *XXZ, "projective_measurement.p=0.5", f"state_representation={representation}"
+    )
+    assert out["charge_leak_max"] < 1e-12
+    assert out["contradicting_rounds_fraction"] == 0.0
+    # sum_k <Z_k> = Ns - 2 Q, exactly, when the charge is conserved.
+    Ns = N - 1
+    np.testing.assert_allclose(
+        out["X"][:, :-1].sum(axis=1), Ns - 2 * out["Y"], atol=1e-10
+    )
+
+
+def test_xxz_state_vector_matches_the_density_matrix() -> None:
+    """The charge-sector evolution of the vector path is exact (#236)."""
+    extra = (*XXZ, "projective_measurement.p=0.4", "XXZ.h=1.0")
+    density = _run(*extra, "state_representation=density")
+    vector = _run(*extra, "state_representation=vector")
+    np.testing.assert_array_equal(density["Y"], vector["Y"])
+    np.testing.assert_array_equal(density["M"], vector["M"])
+    np.testing.assert_allclose(density["X"], vector["X"], atol=1e-10)
+
+
+def test_tfim_leaks_charge_but_not_parity() -> None:
+    """The TFIM conserves only the parity of Q: a small, nonzero leak."""
+    out = _run("projective_measurement.p=0.0", "TFIM.h=1.0")
+    assert out["charge_leak_max"] > 1e-6
+
+
+def test_local_readout_of_the_record() -> None:
+    """The local SEP readout scores, and its rate goes to the metrics (#236)."""
+    out = _run(*XXZ, "projective_measurement.p=0.5")
+    for name in ("accuracy_M_local_bayes_ridge", "accuracy_M_local_bayes"):
+        assert 0.0 <= out[name] <= 1.0
+    assert out["local_sep_rate"] > 0
+    assert out["local_log_likelihood_M"].shape == (L, 2)
+    assert 0.0 <= out["accuracy_M_bayes_exact"] <= 1.0
+    skipped = _run(*XXZ, "projective_measurement.p=0.5", "bayes_ridge.local=false")
+    assert "local_sep_rate" not in skipped
+
+
+def test_sector_step_refuses_a_model_that_leaves_its_sector() -> None:
+    """A model whose sector is too small for its Hamiltonian is caught."""
+    module = _load_script()
+    from QELM.models import XXZChainModel
+
+    class Leaky(XXZChainModel):
+        def sector(self, b: int) -> np.ndarray:
+            return np.array([b])
+
+    model = Leaky({"N": 3, "J": 1.0})
+    psi = np.zeros(16, dtype=complex)
+    psi[0b0011] = 1.0
+    with pytest.raises(ValueError, match="couples its sector"):
+        module.sector_step(model, psi, 1, 1, 3, 0.1)
+
+
+def test_contradicting_rounds() -> None:
+    module = _load_script()
+    M = np.array([[[-1, -1, 1], [1, 1, 1], [-1, 0, 0]]])
+    np.testing.assert_array_equal(
+        module.contradicting_rounds(M, np.array([1])), [[True, True, False]]
+    )
+
+
+def test_bash_sweep_with_the_xxz_chain(tmp_path: Path) -> None:
+    """MODEL=XXZ, STEPS and EXTRA reach the runs (#236)."""
+    env = {
+        **os.environ,
+        "OUT_DIR": str(tmp_path),
+        "MODEL": "XXZ",
+        "N_VALUES": "4",
+        "SEEDS": "42",
+        "P_VALUES": "0.5",
+        "FINAL_VALUES": "true",
+        "L": "10",
+        "BALANCED": "true",
+        "STEPS": "3",
+        "EXTRA": "XXZ.Delta=0.5 bayes_ridge.local=false",
+        "TQDM_DISABLE": "1",
+    }
+    subprocess.run(["bash", str(BASH_SCRIPT)], check=True, env=env, cwd=tmp_path)
+    (run,) = tmp_path.glob("N4_h0_t1.25_*/metrics.json")
+    config = json.loads((run.parent / "resolved_config.json").read_text())
+    assert config["models"] == "XXZ"
+    assert config["XXZ"]["Delta"] == 0.5 and config["XXZ"]["h"] == 0
+    assert config["projective_measurement"]["nbr_time_evolution"] == 3
+    metrics = json.loads(run.read_text())
+    assert metrics["charge_leak_max"] < 1e-12
+    assert "local_sep_rate" not in metrics
+
+
+def test_bash_sweep_refuses_an_unknown_model(tmp_path: Path) -> None:
+    env = {**os.environ, "OUT_DIR": str(tmp_path), "MODEL": "kitaev"}
+    result = subprocess.run(
+        ["bash", str(BASH_SCRIPT)], env=env, cwd=tmp_path, capture_output=True
+    )
+    assert result.returncode == 2

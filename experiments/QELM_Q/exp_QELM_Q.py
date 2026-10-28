@@ -6,8 +6,11 @@ the Z basis, applied during the evolution with probability ``p``, disturb the
 entanglement of the reservoir, and the readout has to recover the charge from
 the final state alone. For each sample ``i`` (``samples.L`` in total):
 
-1. Draw a new TFIM (new disorder ``J_ij``) on the ``Ns = N - 1`` system
-   qubits and start from the state of :class:`AncillaChargeSectorEncoding`,
+1. Draw a new reservoir Hamiltonian on the ``Ns = N - 1`` system qubits,
+   the model selected by ``models``: the all-to-all TFIM (new disorder
+   ``J_ij``, the default) or, with ``models=XXZ``, the nearest-neighbour XXZ
+   chain of issue #236 (new random fields when ``XXZ.h > 0``), and start
+   from the state of :class:`AncillaChargeSectorEncoding`,
    ``(|0>_R |Q1>_S + |1>_R |Q2>_S) / sqrt(2)`` with ``Q1 = Ns // 2`` and
    ``Q2 = Ns // 2 - 1``. The ancilla ``R`` is measured in Z first, with the
    Born rule: the outcome fixes the charge sector of the system, the label
@@ -89,6 +92,15 @@ charge is in ``<Z_k>``, but not linearly).
 accuracy, with the QDA and mixture densities and the ridge and K-NN decision
 regions on the PCA plane.
 
+The XXZ chain conserves ``Q`` exactly and moves a charge one bond at a time
+(issue #236). The run checks the first along every record:
+``charge_leak_max`` is the largest weight of the state, after any step of any
+sample, outside the charge sector of its label (exactly 0 for the XXZ chain,
+of the order of the leakage per run for the TFIM), and
+``contradicting_rounds_fraction`` the fraction of rounds that find more
+qubits at ``|1>`` than ``Q`` or more at ``|0>`` than ``Ns - Q`` (impossible
+for a conserved charge). The second is what the local readout below uses.
+
 A last readout of the record, the Bayes-Ridge pipeline (issue #233,
 :mod:`QELM.evaluation.bayes_ridge`), reads ``M`` and nothing else: for each
 charge the log-likelihood ``log P(M | Q)`` of a generative model, the fully
@@ -100,7 +112,23 @@ gets ``accuracy_M_bayes_ridge``, ``balanced_accuracy_M_bayes_ridge`` and
 alone, ``argmax_Q log P(M | Q)``, on the same test samples, and
 ``log_likelihood_M`` (``(L, 2)``, columns ``Q1``, ``Q2``) goes to the
 ``.npz``. Use it with ``projective_measurement.final_measurement=true``, so
-that the record ends on a collapse after the last step.
+that the record ends on a collapse after the last step. The leak of the
+model is ``bayes_ridge.epsilon`` (default ``1e-3``); ``accuracy_M_bayes_exact``
+is the same Bayes rule with no leak, ``epsilon = 0``, exact for a conserved
+charge (issue #236).
+
+The scrambled model ignores where and when a qubit was measured. The local
+readout of issue #236 does not: ``log P(M | Q)`` under a hidden Markov model
+whose hidden configuration of charge ``Q`` moves between two rounds by the
+nearest-neighbour symmetric exclusion process
+(:func:`QELM.evaluation.bayes_ridge.local_sep_log_likelihood`), with
+``lam = gamma dt`` exchanges per bond per step picked on the training
+records by maximum likelihood (``local_sep_rate``, ``inf`` when the
+scrambled limit fits best). The same ridge on its two log-likelihoods gives
+``accuracy_M_local_bayes_ridge`` (with its balanced accuracy and R2), and
+its Bayes rule ``accuracy_M_local_bayes``. When the local accuracy beats the
+scrambled one, the positions of the measurements carry information on the
+charge that an urn model discards. ``bayes_ridge.local=false`` skips it.
 
 With ``samples.balanced=true`` (issue #233) the outcome of ``R`` is no
 longer drawn: sample ``i`` is projected on ``|0>_R`` (``Q1``) for an even
@@ -186,14 +214,18 @@ from omegaconf import DictConfig, OmegaConf
 from scipy.sparse.linalg import expm_multiply
 from tqdm import tqdm
 
-from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
+from QELM import check_qubit_counts, set_seed
 from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.evaluation import von_neumann_entropy
 from QELM.evaluation.bayes_optimal import evaluate_bayes_optimal_limit
 from QELM.evaluation.bayes_ridge import (
+    DEFAULT_EPSILON,
     BayesRidge,
     bayes_accuracy,
+    fit_local_sep_rate,
+    local_log_likelihood_features,
     log_likelihood_features,
+    scrambled_log_likelihood,
 )
 from QELM.evaluation.knn import CustomKNN
 from QELM.evaluation.metrics import (
@@ -204,9 +236,10 @@ from QELM.evaluation.metrics import (
     balanced_accuracy,
     majority_accuracy,
 )
+from QELM.models import HamiltonianModel, get_model
 from QELM.physics import X as PAULI_X
 from QELM.physics import Y as PAULI_Y
-from QELM.physics import Z, local_expectation, partial_trace
+from QELM.physics import Z, charge_leakage, local_expectation, partial_trace
 from QELM.training import ProjectiveMeasurement, RidgeReadout
 from QELM.training.measurements.projective import (
     measure_projective_psi,
@@ -222,8 +255,10 @@ FEATURE_SETS = ("X", "Y", "Z", "XX", "YY", "ZZ", "XY")
 # Readouts on the measurement record M, alone or next to the observables of
 # a feature set, phi = [M, X] (issue #179): name -> sets of FEATURE_SETS.
 RECORD_SETS: dict[str, tuple[str, ...]] = {"M": (), "M_Z": ("Z",), "M_XX": ("XX",)}
-# Bayes-Ridge readout of the record alone (issue #233).
+# Bayes-Ridge readout of the record alone (issue #233), and its local version
+# (issue #236).
 BAYES_RIDGE = "M_bayes_ridge"
+LOCAL_BAYES_RIDGE = "M_local_bayes_ridge"
 # Scalars written to metrics.json besides nmse, nmse_err and r2.
 EXTRA_METRICS = (
     "accuracy",
@@ -244,6 +279,18 @@ EXTRA_METRICS = (
         for score in ("accuracy", "balanced_accuracy", "r2")
     ),
     "accuracy_M_bayes",
+    "accuracy_M_bayes_exact",
+    "charge_leak_max",
+    "contradicting_rounds_fraction",
+)
+# Written only when the local readout runs (bayes_ridge.local, issue #236).
+LOCAL_METRICS = (
+    *(
+        f"{score}_{LOCAL_BAYES_RIDGE}"
+        for score in ("accuracy", "balanced_accuracy", "r2")
+    ),
+    "accuracy_M_local_bayes",
+    "local_sep_rate",
 )
 # Number of time-evolution steps (issue #132).
 NBR_TIME_EVOLUTION = "projective_measurement.nbr_time_evolution"
@@ -258,6 +305,11 @@ STATE_REPRESENTATION = "state_representation"
 STATE_REPRESENTATIONS = ("density", "vector")
 # Labels alternate Q1, Q2 instead of the Born draw of R (issue #233).
 BALANCED = "samples.balanced"
+# Leak of the generative models of M, and the local readout (issue #236).
+EPSILON = "bayes_ridge.epsilon"
+LOCAL = "bayes_ridge.local"
+# Largest weight outside the sector of a model that may be truncated away.
+SECTOR_ATOL = 1e-12
 
 
 def project_ancilla(state: np.ndarray, r: int, N: int) -> np.ndarray:
@@ -377,28 +429,30 @@ def sample_ratio(cfg: DictConfig, N: int) -> float | None:
     return delta
 
 
-def parity_step(
-    model: TransverseFieldIsingModel,
+def sector_step(
+    model: HamiltonianModel,
     psi: np.ndarray,
     r: int,
     Nr: int,
     Ns: int,
     dt: float,
 ) -> Callable[[np.ndarray], np.ndarray]:
-    """Return ``psi -> (1_R (x) exp(-i H_S dt)) psi`` within one parity sector.
+    """Return ``psi -> (1_R (x) exp(-i H_S dt)) psi`` within one symmetry sector.
 
     After ``R`` is measured with outcome ``r``, the system holds one charge
-    ``Q``, so its state lies in the sector of parity ``Q mod 2``. The TFIM
-    keeps that parity (``Z_i`` is diagonal, ``X_i X_j`` flips two bits) and
-    so do the Z measurements, so the system never leaves the sector. The
-    step evolves only the ``2**(Ns - 1)`` amplitudes of the sector, with
-    ``expm_multiply`` on the sector block of the sparse ``H_S``: half the
-    dimension of the full system (issue #201). With ``TFIM.basis=Z`` the
-    Hamiltonian conserves the X parity instead, so the whole space of the
-    system is evolved.
+    ``Q``. The sector of the model is the set of basis states its evolution
+    connects to that charge (:meth:`QELM.models.HamiltonianModel.sector`):
+    those of the parity of ``Q`` for the TFIM (``Z_i`` is diagonal,
+    ``X_i X_j`` flips two bits; with ``TFIM.basis=Z``, the whole space),
+    those of charge ``Q`` for the XXZ chain (issue #236). The Z
+    measurements keep it too, so the system never leaves the sector. The
+    step evolves only its amplitudes, with ``expm_multiply`` on the sector
+    block of the sparse ``H_S``: ``2**(Ns - 1)`` amplitudes for the TFIM
+    (issue #201), ``C(Ns, Q)`` for the XXZ chain. The block of ``H_S`` that
+    leaves the sector is checked to vanish, so the truncation is exact.
 
     Args:
-        model: The TFIM of the system, on ``Ns`` qubits.
+        model: The reservoir of the system, on ``Ns`` qubits.
         psi: State of ``R + S`` right after ``R`` is measured, ``(2**N,)``.
         r: Outcome of ``R``, ``+1`` (``|0>_R``) or ``-1`` (``|1>_R``).
         Nr: Number of ancilla qubits, the first sites.
@@ -409,23 +463,22 @@ def parity_step(
         The step, a function of a state vector of shape ``(2**N,)``.
 
     Raises:
-        ValueError: If the system state of ``psi`` is not in one parity
-            sector.
+        ValueError: If the system state of ``psi`` is not in one sector, or
+            the Hamiltonian couples the sector to the rest of the space.
     """
     row = 0 if r == 1 else 2**Nr - 1
     system = psi.reshape(2**Nr, 2**Ns)[row]
-    if model.basis == "X":
-        popcount = np.array([bin(b).count("1") for b in range(2**Ns)])
-        parity = popcount[int(np.argmax(np.abs(system)))] % 2
-        sector = np.flatnonzero(popcount % 2 == parity)
-    else:
-        # TFIM.basis=Z conserves the X parity, not the Z one: the whole
-        # space of the system is evolved.
-        sector = np.arange(2**Ns)
+    sector = model.sector(int(np.argmax(np.abs(system))))
     outside = np.delete(system, sector)
-    if not np.allclose(outside, 0.0, atol=1e-12):
-        raise ValueError("The system state is not in one parity sector.")
+    if not np.allclose(outside, 0.0, atol=SECTOR_ATOL):
+        raise ValueError("The system state is not in one symmetry sector.")
     H = model.hamiltonian()
+    rest = np.setdiff1d(np.arange(2**Ns), sector)
+    if rest.size and abs(H[rest][:, sector]).max() > SECTOR_ATOL:
+        raise ValueError(
+            f"The {model.name} Hamiltonian couples its sector to the rest of the "
+            "space: the evolution cannot be restricted to it."
+        )
     A = (-1j * dt) * H[sector][:, sector]
 
     def step(state: np.ndarray) -> np.ndarray:
@@ -435,6 +488,60 @@ def parity_step(
         return out
 
     return step
+
+
+def tracked_step(
+    step: np.ndarray | Callable[[np.ndarray], np.ndarray],
+    Q: int,
+    system: list[int],
+    leaks: list[float],
+) -> Callable[[np.ndarray], np.ndarray]:
+    """Wrap a step so that it records the charge leakage after each call.
+
+    Args:
+        step: A unitary of shape ``(2**N, 2**N)``, applied as
+            ``U rho U^dagger``, or a function of the state.
+        Q: Charge of the label of the sample.
+        system: The system qubits, which carry ``Q``.
+        leaks: List the weight outside the sector ``Q`` is appended to
+            after every step (:func:`QELM.physics.charge_leakage`).
+
+    Returns:
+        The step, as a function of the state.
+    """
+    if callable(step):
+        apply = step
+    else:
+        U, U_dag = step, step.conj().T
+
+        def apply(state: np.ndarray) -> np.ndarray:
+            return np.asarray(U @ state @ U_dag)
+
+    def wrapped(state: np.ndarray) -> np.ndarray:
+        out = apply(state)
+        leaks.append(charge_leakage(out, Q, system))
+        return out
+
+    return wrapped
+
+
+def contradicting_rounds(M: np.ndarray, charge: np.ndarray) -> np.ndarray:
+    """Return, per round, whether it contradicts the charge of its record.
+
+    A round contradicts ``Q`` when it finds more qubits at ``|1>`` than
+    ``Q``, or more at ``|0>`` than ``Ns - Q``: impossible when the charge
+    is conserved (issue #236).
+
+    Args:
+        M: Records of shape ``(n, rounds, Ns)``, ``+1``, ``-1`` or ``0``.
+        charge: Charge of each record, shape ``(n,)``.
+
+    Returns:
+        Boolean array of shape ``(n, rounds)``.
+    """
+    Ns = M.shape[2]
+    Q = np.asarray(charge, dtype=int)[:, None]
+    return np.asarray((np.sum(M == -1, axis=2) > Q) | (np.sum(M == 1, axis=2) > Ns - Q))
 
 
 def observable_features(rho: np.ndarray, system: list[int], name: str) -> np.ndarray:
@@ -479,7 +586,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Args:
         cfg: Composed config (``load_config`` or Hydra). Reads
             ``evolution.t``, ``samples.L``, ``samples.train_size``, ``seed``,
-            the TFIM, encoding, measurement and training blocks, and
+            the block of the model of ``models`` (TFIM or XXZ), the
+            encoding, measurement and training blocks, ``bayes_ridge.epsilon``
+            and ``bayes_ridge.local`` (issue #236), and
             ``projective_measurement.nbr_time_evolution`` (default 5) and
             ``projective_measurement.final_measurement`` (default ``False``)
             ``state_representation`` (default ``"density"``) and
@@ -501,7 +610,10 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         ``knn_covariance_cond`` (issue #213) and, for each set ``<name>`` of
         :data:`FEATURE_SETS` and :data:`RECORD_SETS`, ``features_<name>``
         (with the bias column),
-        ``accuracy_<name>``, ``balanced_accuracy_<name>`` and ``r2_<name>``.
+        ``accuracy_<name>``, ``balanced_accuracy_<name>`` and ``r2_<name>``;
+        the Bayes-Ridge scores, the charge checks ``charge_leak`` (per
+        sample), ``charge_leak_max`` and ``contradicting_rounds_fraction``,
+        and, with ``bayes_ridge.local``, the scores of :data:`LOCAL_METRICS`.
     """
     set_seed(cfg)
     rng = np.random.default_rng([int(cfg.seed), MEASUREMENT_STREAM])
@@ -539,14 +651,19 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     system = list(range(Nr, N))
     half = system[: Ns // 2]
 
-    # The TFIM block with the system size: R does not evolve (issue #104).
-    tfim = OmegaConf.to_container(cfg[TransverseFieldIsingModel.name], resolve=True)
-    assert isinstance(tfim, dict)
-    tfim_params = {**{str(k): v for k, v in tfim.items()}, "N": Ns}
+    # The block of the model with the system size: R does not evolve (#104).
+    model_cls = get_model(str(cfg.models))
+    block = OmegaConf.to_container(cfg[model_cls.name], resolve=True)
+    assert isinstance(block, dict)
+    model_params = {**{str(k): v for k, v in block.items()}, "N": Ns}
+    boundary = str(model_params.get("boundary", "open"))
+    epsilon = float(OmegaConf.select(cfg, EPSILON, default=DEFAULT_EPSILON))
+    local = bool(OmegaConf.select(cfg, LOCAL, default=True))
     identity_R = np.eye(2**Nr)
+    charge_leak = np.zeros(L)
 
     for i in tqdm(range(L)):
-        model = TransverseFieldIsingModel(tfim_params)
+        model = model_cls(model_params)
         U: np.ndarray | Callable[[np.ndarray], np.ndarray]
         if balanced:
             # Imposed instead of drawn: Q1, Q2, Q1, ... (issue #233).
@@ -556,16 +673,24 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             # The label first: R measured in Z fixes the charge sector of S.
             if not balanced:
                 rho, r = measure_projective_psi(state0, 0, N)
-            U = parity_step(model, rho, r, Nr, Ns, dt)
+            U = sector_step(model, rho, r, Nr, Ns, dt)
         else:
             U = np.kron(identity_R, model.propagator(dt=dt))
             if not balanced:
                 rho, r = measure_projective_rho(state0, 0, N)
         Y[i] = Q1 if r == 1 else Q2
         rounds: list[np.ndarray] = []
+        leaks: list[float] = []
         rho, n_measured[i] = evolve_with_measurements(
-            rho, U, nbr_time_evolution, P, rng, final, record=rounds
+            rho,
+            tracked_step(U, int(Y[i]), system, leaks),
+            nbr_time_evolution,
+            P,
+            rng,
+            final,
+            record=rounds,
         )
+        charge_leak[i] = max(leaks)
         # An unmeasured qubit counts as 0, as in exp_QELM_M (issue #91).
         if rounds:
             M[i] = np.nan_to_num(np.array(rounds), nan=0.0)
@@ -601,7 +726,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         sets[f"r2_{name}"] = R2(y_test, pred)
 
     # Bayes-Ridge on the record alone: log P(M | Q), then a ridge (#233).
-    log_lik = log_likelihood_features(M.astype(int), (Q1, Q2))
+    M_int = M.astype(int)
+    log_lik = log_likelihood_features(M_int, (Q1, Q2), epsilon)
     bayes_ridge = BayesRidge((Q1, Q2), alpha=solver.config_alpha)
     bayes_ridge.fit(log_lik[:train], y_train)
     pred = bayes_ridge.predict(log_lik[train:])
@@ -612,6 +738,32 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     sets[f"r2_{BAYES_RIDGE}"] = R2(y_test, pred)
     sets["accuracy_M_bayes"] = bayes_accuracy(log_lik[train:], y_test, (Q1, Q2))
     sets["log_likelihood_M"] = log_lik
+    exact = np.stack(
+        [scrambled_log_likelihood(M_int[train:], q, 0.0) for q in (Q1, Q2)], axis=1
+    )
+    sets["accuracy_M_bayes_exact"] = bayes_accuracy(exact, y_test, (Q1, Q2))
+
+    # The local SEP model keeps where and when each qubit was measured (#236).
+    if local:
+        lam, _ = fit_local_sep_rate(
+            M_int[:train], y_train, epsilon=epsilon, boundary=boundary
+        )
+        local_lik = local_log_likelihood_features(
+            M_int, (Q1, Q2), lam, epsilon, boundary
+        )
+        local_ridge = BayesRidge((Q1, Q2), alpha=solver.config_alpha)
+        local_ridge.fit(local_lik[:train], y_train)
+        pred = local_ridge.predict(local_lik[train:])
+        sets[f"accuracy_{LOCAL_BAYES_RIDGE}"] = accuracy(y_test, pred, threshold)
+        sets[f"balanced_accuracy_{LOCAL_BAYES_RIDGE}"] = balanced_accuracy(
+            y_test, pred, threshold
+        )
+        sets[f"r2_{LOCAL_BAYES_RIDGE}"] = R2(y_test, pred)
+        sets["accuracy_M_local_bayes"] = bayes_accuracy(
+            local_lik[train:], y_test, (Q1, Q2)
+        )
+        sets["local_sep_rate"] = lam
+        sets["local_log_likelihood_M"] = local_lik
 
     X = sets["features_Z"]
     solver.fit(X[:train], y_train)
@@ -655,6 +807,11 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "S_half_mean": float(np.mean(S_half)),
         "delta": delta,
         "n_measured_mean": float(np.mean(n_measured)),
+        "charge_leak": charge_leak,
+        "charge_leak_max": float(np.max(charge_leak)),
+        "contradicting_rounds_fraction": (
+            float(np.mean(contradicting_rounds(M_int, Y))) if n_rounds else 0.0
+        ),
         "bayes_estimate_qda": bayes["bayes_estimate_qda"],
         "bayes_estimate_gmm": bayes["bayes_estimate_gmm"],
         "bayes_estimate_knn": bayes["bayes_estimate_knn"],
@@ -674,6 +831,8 @@ def main(cfg: DictConfig) -> None:
     out_dir = Path(HydraConfig.get().runtime.output_dir)
     # delta, when set, goes to metrics.json next to n_samples = L (#201).
     extra = (*EXTRA_METRICS, "delta") if results["delta"] is not None else EXTRA_METRICS
+    if "local_sep_rate" in results:
+        extra = (*extra, *LOCAL_METRICS)
     save_results(results, out_dir, Path(__file__).stem, extra_metrics=extra)
     save_config(cfg, out_dir)
     print(f"X: {results['X'].shape}  Y: {results['Y'].shape}")
@@ -697,6 +856,19 @@ def main(cfg: DictConfig) -> None:
         print(f"accuracy on <{name}>: {results[f'accuracy_{name}']:.6g}")
     print(f"Bayes-Ridge accuracy on M: {results[f'accuracy_{BAYES_RIDGE}']:.6g}")
     print(f"Bayes rule (scrambled SEP) on M: {results['accuracy_M_bayes']:.6g}")
+    print(
+        "Bayes rule (scrambled SEP, epsilon = 0): "
+        f"{results['accuracy_M_bayes_exact']:.6g}"
+    )
+    if "local_sep_rate" in results:
+        print(
+            f"Bayes-Ridge accuracy on M, local SEP: "
+            f"{results[f'accuracy_{LOCAL_BAYES_RIDGE}']:.6g}"
+            f" (lam = {results['local_sep_rate']:.3g})"
+        )
+        print(f"Bayes rule (local SEP) on M: {results['accuracy_M_local_bayes']:.6g}")
+    print(f"charge leak (max): {results['charge_leak_max']:.3g}")
+    print(f"rounds contradicting Q: {results['contradicting_rounds_fraction']:.3g}")
     print(f"Saved to {out_dir}")
 
 

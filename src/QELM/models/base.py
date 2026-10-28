@@ -128,6 +128,22 @@ class HamiltonianModel:
         """
         raise NotImplementedError(f"{self.name} Hamiltonian is not implemented.")
 
+    def sector(self, b: int) -> np.ndarray:
+        """Return the basis states the evolution connects to ``|b>``.
+
+        A model with a conserved quantity diagonal in the Z basis overrides
+        it with the basis states of the same value (issue #236): the
+        evolution of a state in that sector can then be restricted to it.
+
+        Args:
+            b: Index of a basis state, site 0 the most significant bit.
+
+        Returns:
+            Sorted indices of basis states; here all ``dim`` of them, since
+            nothing is assumed to be conserved.
+        """
+        return np.arange(self.dim)
+
     def _cached_hamiltonian(self) -> sp.csr_matrix:
         """Return ``self._H``, building it on first use."""
         if self._H is None:

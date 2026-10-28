@@ -59,6 +59,25 @@ class TransverseFieldIsingModel(HamiltonianModel):
             -self.J / 2, self.J / 2, size=(self.N, self.N)
         )
 
+    def sector(self, b: int) -> np.ndarray:
+        """Return the basis states the evolution connects to ``|b>``.
+
+        With ``basis = "X"`` the TFIM conserves the Z parity (``Z_i`` is
+        diagonal, ``X_i X_j`` flips two bits): the basis states with the
+        parity of ``|b>``. With ``basis = "Z"`` it conserves the X parity
+        instead, which is not diagonal in the Z basis: every basis state.
+
+        Args:
+            b: Index of a basis state, site 0 the most significant bit.
+
+        Returns:
+            Sorted indices of basis states, ``2**(N - 1)`` or ``2**N``.
+        """
+        if self.basis != "X":
+            return np.arange(self.dim)
+        popcount = np.array([bin(c).count("1") for c in range(self.dim)])
+        return np.flatnonzero(popcount % 2 == bin(int(b)).count("1") % 2)
+
     def hamiltonian(self) -> sp.csr_matrix:
         """Build the Hamiltonian as a sparse CSR matrix.
 

@@ -1,0 +1,33 @@
+# @package _global_
+
+# Nearest-neighbour XXZ chain with a strict U(1) symmetry (issue #236):
+#   H = sum_<i,j> [J (X_i X_j + Y_i Y_j) + Delta Z_i Z_j] + sum_i h_i Z_i,
+# h_i uniform in [-h, h], drawn once per model. Delta = J is the Heisenberg
+# chain, Delta = 0 the XX chain. [Q, H] = 0 exactly, Q the number of qubits at
+# |1>, so the charge sectors of the ancilla encoding never leak; and a charge
+# moves one bond at a time, inside a light cone, unlike the all-to-all TFIM.
+# Selected with models=XXZ. ${mul:...}, ${div:...} are in src/QELM/resolvers.py.
+models: XXZ
+
+# Total number of qubits, ancilla included (N = Ns + Nr, see conf/config.yaml).
+# Override it with N=6, not XXZ.N=6.
+N: 10
+
+# Hamiltonian
+XXZ:
+  N: ${N} # number of qubits, always the top-level N
+  J: 1.0 # exchange, the energy unit
+  Delta: ${XXZ.J} # anisotropy, Delta = J the Heisenberg chain (XXZ.Delta=0.5)
+  h: 0.0 # width of the random fields h_i in [-h, h]; 0 is the clean chain
+  boundary: open # open or periodic (needs N >= 3)
+  RUNS: 10 # number of disorder realisations (with h > 0)
+
+# Unitary evolution. A spin wave of the Heisenberg chain moves at about
+# 2 pi J sites per unit time, so a step dt = 0.25 / J lets a charge move about
+# one or two sites between two measurement rounds: the record keeps a memory of
+# where the charge was. With the 5 steps of
+# projective_measurement.nbr_time_evolution, t = 1.25 / J.
+evolution:
+  t: ${div:1.25,${XXZ.J}} # total evolution time
+  n_steps: ${mul:4,${N}} # number of time cuts, as for the TFIM
+  dt: ${div:${evolution.t},${evolution.n_steps}} # step, dt = t / n_steps

@@ -53,19 +53,46 @@ the order of the charge leakage of the TFIM over one run; at ``N = 8`` the
 accuracy of the pipeline moves by less than 0.01 between ``1e-2`` and
 ``1e-3`` and drops by 0.02 at ``1e-6``, where the contradicting rounds
 become outliers of the least-squares fit.
+
+The scrambled model ignores where and when a qubit was measured: only the
+counts ``k`` and ``n`` of each round enter, as balls drawn from an urn. For
+a local reservoir with a strictly conserved charge (the XXZ chain of issue
+#236) a charge moves one bond at a time, so the positions carry information:
+a site found at ``|1>`` is likely still at ``|1>``, or next to a ``|1>``, one
+round later. :func:`local_sep_log_likelihood` keeps that memory: a hidden
+Markov model whose hidden state is the configuration of charge ``Q``, uniform
+at the start, which evolves between two rounds by the continuous-time
+symmetric exclusion process (each nearest-neighbour bond exchanges its two
+bits at rate ``gamma``) for a time ``dt``, and which each round observes
+exactly on the measured sites (with the same leak ``epsilon``, now a round
+whose outcomes are uniform and that leaves the configuration as it was). It
+has one parameter, ``lam = gamma * dt``, the number of exchanges per bond
+between two rounds: ``lam = 0`` freezes the configuration, and
+``lam -> inf`` relaxes it to the uniform distribution on charge ``Q`` before
+every round, which is exactly the scrambled model.
+:func:`fit_local_sep_rate` picks ``lam`` on the training records by maximum
+likelihood.
 """
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Sequence
 
 import numpy as np
+import scipy.linalg
+import scipy.sparse as sp
+from scipy.sparse.linalg import expm_multiply
 from scipy.special import erf, gammaln
 
 from QELM.training.regression.ridge import DEFAULT_ALPHA, RidgeReadout
 
 # Probability of a leak per round, see the module docstring.
 DEFAULT_EPSILON = 1e-3
+# Grid of lam = gamma * dt of fit_local_sep_rate, inf the scrambled limit.
+DEFAULT_LOCAL_RATES = (*np.geomspace(0.01, 10.0, 13).tolist(), np.inf)
+# Largest sector whose SEP propagator is formed as a dense matrix.
+_DENSE_SECTOR = 2048
 
 
 def _log_comb(n: np.ndarray, k: np.ndarray) -> np.ndarray:
@@ -118,6 +145,208 @@ def scrambled_log_likelihood(
         np.log1p(-epsilon) + log_h, np.log(epsilon) - k * np.log(2)
     )
     return np.asarray(per_round.sum(axis=1))
+
+
+def sector_configurations(Ns: int, Q: int) -> np.ndarray:
+    """Return the configurations of charge ``Q`` on ``Ns`` sites as ``z = +-1``.
+
+    Args:
+        Ns: Number of sites.
+        Q: Number of sites at ``|1>`` (``z = -1``).
+
+    Returns:
+        Array of shape ``(C(Ns, Q), Ns)``, ``+1`` for ``|0>`` and ``-1``
+        for ``|1>``, in the lexicographic order of the occupied sites.
+    """
+    if not 0 <= Q <= Ns:
+        raise ValueError(f"Q must be in [0, {Ns}], got {Q}.")
+    configs = np.ones((0, Ns), dtype=int)
+    rows = []
+    for occupied in itertools.combinations(range(Ns), Q):
+        z = np.ones(Ns, dtype=int)
+        z[list(occupied)] = -1
+        rows.append(z)
+    return np.array(rows, dtype=int) if rows else configs
+
+
+def sep_generator(configs: np.ndarray, boundary: str = "open") -> sp.csr_matrix:
+    """Return the generator of the symmetric exclusion process, rate 1 per bond.
+
+    ``G[a, b] = 1`` when ``a`` and ``b`` differ by the exchange of the two
+    bits of one nearest-neighbour bond, and ``G[b, b] = -`` the number of
+    such ``a``. ``G`` is symmetric and its columns sum to 0, so the
+    uniform distribution is stationary and ``expm(lam G)`` is a doubly
+    stochastic transition matrix.
+
+    Args:
+        configs: Configurations of one charge, shape ``(dim, Ns)``, as
+            :func:`sector_configurations` returns them.
+        boundary: ``"open"`` or ``"periodic"`` (adds the bond
+            ``(Ns - 1, 0)`` when ``Ns >= 3``).
+
+    Returns:
+        Real CSR matrix of shape ``(dim, dim)``.
+    """
+    if boundary not in ("open", "periodic"):
+        raise ValueError(f"boundary must be 'open' or 'periodic', got {boundary!r}.")
+    dim, Ns = configs.shape
+    bonds = [(i, i + 1) for i in range(Ns - 1)]
+    if boundary == "periodic" and Ns >= 3:
+        bonds.append((Ns - 1, 0))
+    index = {z.tobytes(): a for a, z in enumerate(configs)}
+    rows: list[int] = []
+    cols: list[int] = []
+    for a, z in enumerate(configs):
+        for i, j in bonds:
+            if z[i] != z[j]:
+                swapped = z.copy()
+                swapped[i], swapped[j] = z[j], z[i]
+                rows.append(index[swapped.tobytes()])
+                cols.append(a)
+    A = sp.csr_matrix(
+        (np.ones(len(rows)), (rows, cols)), shape=(dim, dim), dtype=np.float64
+    )
+    degree = np.asarray(A.sum(axis=0), dtype=np.float64).ravel()
+    return sp.csr_matrix(A - sp.diags_array(degree))
+
+
+def local_sep_log_likelihood(
+    M: np.ndarray,
+    Q: int,
+    lam: float,
+    epsilon: float = DEFAULT_EPSILON,
+    boundary: str = "open",
+) -> np.ndarray:
+    """Return ``log P(M | Q)`` of each record under the local SEP model.
+
+    The forward algorithm of the hidden Markov model of the module
+    docstring: the distribution ``pi`` of the configuration starts uniform
+    on charge ``Q``; before each round it is propagated by ``expm(lam G)``
+    (:func:`sep_generator`), then the round, which finds the measured sites
+    in the configurations ``c`` consistent with its outcomes, has the
+    probability ``P = (1 - epsilon) sum_c pi(c) + epsilon 2**-k`` and
+    updates ``pi`` to ``((1 - epsilon) pi 1_c + epsilon 2**-k pi) / P``.
+
+    Args:
+        M: Records of shape ``(n, rounds, Ns)``, ``+1``, ``-1`` or ``0``.
+        Q: Charge of the hypothesis, ``0 <= Q <= Ns``.
+        lam: ``gamma * dt >= 0``, exchanges per bond between two rounds;
+            ``inf`` gives :func:`scrambled_log_likelihood`.
+        epsilon: Probability of a leak per round, in ``[0, 1)``. With 0 a
+            round inconsistent with every configuration still reachable
+            gives ``-inf``.
+        boundary: Bonds of the SEP, ``"open"`` or ``"periodic"``.
+
+    Returns:
+        Array of shape ``(n,)``.
+
+    Raises:
+        ValueError: If an argument is out of range.
+    """
+    M = np.asarray(M)
+    if M.ndim != 3:
+        raise ValueError(f"M must have shape (n, rounds, Ns), got {M.shape}.")
+    if not np.all(np.isin(M, (-1, 0, 1))):
+        raise ValueError("M must hold only -1, 0 and +1.")
+    if not 0.0 <= epsilon < 1.0:
+        raise ValueError(f"epsilon must be in [0, 1), got {epsilon}.")
+    if not lam >= 0:
+        raise ValueError(f"lam must be >= 0, got {lam}.")
+    if np.isinf(lam):
+        return scrambled_log_likelihood(M, Q, epsilon)
+    n, rounds, Ns = M.shape
+    configs = sector_configurations(Ns, Q)
+    dim = configs.shape[0]
+    G = sep_generator(configs, boundary)
+    if lam == 0.0:
+
+        def propagate(pi: np.ndarray) -> np.ndarray:
+            return pi
+
+    elif dim <= _DENSE_SECTOR:
+        T = scipy.linalg.expm(lam * G.toarray())
+
+        def propagate(pi: np.ndarray) -> np.ndarray:
+            return np.asarray(T @ pi)
+
+    else:
+        A = lam * G
+
+        def propagate(pi: np.ndarray) -> np.ndarray:
+            return np.asarray(expm_multiply(A, pi))
+
+    pi = np.full((dim, n), 1.0 / dim)
+    log_p = np.zeros(n)
+    z = configs.astype(float)
+    for r in range(rounds):
+        pi = propagate(pi)
+        m = M[:, r, :].astype(float)  # (n, Ns)
+        k = np.sum(m != 0, axis=1)
+        # Number of measured sites where configuration c disagrees with m.
+        mismatches = (np.sum(np.abs(m), axis=1)[None, :] - z @ m.T) / 2
+        consistent = np.isclose(mismatches, 0.0)
+        p_model = np.sum(np.where(consistent, pi, 0.0), axis=0)
+        leak = epsilon * 2.0 ** (-k)
+        p_round = (1.0 - epsilon) * p_model + leak
+        with np.errstate(divide="ignore"):
+            log_p += np.log(p_round)
+        safe = np.where(p_round > 0, p_round, 1.0)
+        pi = ((1.0 - epsilon) * np.where(consistent, pi, 0.0) + leak * pi) / safe
+        # Rounding drifts the normalization over many rounds.
+        total = pi.sum(axis=0)
+        pi = pi / np.where(total > 0, total, 1.0)
+    return log_p
+
+
+def local_log_likelihood_features(
+    M: np.ndarray,
+    charges: Sequence[int],
+    lam: float,
+    epsilon: float = DEFAULT_EPSILON,
+    boundary: str = "open",
+) -> np.ndarray:
+    """Return :func:`local_sep_log_likelihood` for each candidate charge.
+
+    Returns:
+        Array of shape ``(n, len(charges))``, finite when ``epsilon > 0``.
+    """
+    return np.stack(
+        [local_sep_log_likelihood(M, int(q), lam, epsilon, boundary) for q in charges],
+        axis=1,
+    )
+
+
+def fit_local_sep_rate(
+    M: np.ndarray,
+    charge: np.ndarray,
+    rates: Sequence[float] = DEFAULT_LOCAL_RATES,
+    epsilon: float = DEFAULT_EPSILON,
+    boundary: str = "open",
+) -> tuple[float, np.ndarray]:
+    """Pick ``lam`` by maximum likelihood on labelled records.
+
+    Args:
+        M: Training records, shape ``(n, rounds, Ns)``.
+        charge: Their true charges, shape ``(n,)``.
+        rates: Candidate values of ``lam``, ``inf`` allowed.
+        epsilon: Probability of a leak per round, in ``(0, 1)``.
+        boundary: Bonds of the SEP.
+
+    Returns:
+        The best ``lam`` and the total log-likelihood
+        ``sum_i log P(M_i | Q_i)`` at every rate, shape ``(len(rates),)``.
+    """
+    charge = np.asarray(charge).astype(int)
+    totals = np.zeros(len(rates))
+    for a, lam in enumerate(rates):
+        for q in np.unique(charge):
+            rows = charge == q
+            totals[a] += float(
+                np.sum(
+                    local_sep_log_likelihood(M[rows], int(q), lam, epsilon, boundary)
+                )
+            )
+    return float(rates[int(np.argmax(totals))]), totals
 
 
 def log_likelihood_features(

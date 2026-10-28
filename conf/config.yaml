@@ -55,6 +55,17 @@ samples:
   train_fraction: 0.7
   train_size: ${int:${mul:${samples.train_fraction},${samples.L}}} # int(0.7 * L)
 
+# Generative models of the measurement record M in
+# experiments/QELM_Q/exp_QELM_Q.py (QELM.evaluation.bayes_ridge, issues #233 and
+# #236). epsilon: probability of a leak per round, which keeps every
+# log-likelihood finite when a round contradicts the charge (the TFIM conserves
+# it only approximately). local: also fit the local SEP model, whose hidden
+# configuration moves one bond at a time between rounds, so that where and when
+# a qubit was measured counts; false skips it (bayes_ridge.local=false).
+bayes_ridge:
+  epsilon: 1.0e-3
+  local: true
+
 # Observables on the final state (single_observable, double_observable) live in
 # conf/training/readout/, the projective measurement (projective_measurement) in
 # conf/training/measurements/, and the trainer (training) in

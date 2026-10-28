@@ -16,6 +16,7 @@ def test_conf_tree_mirrors_the_package() -> None:
     """Chaque groupe de conf/ correspond à un module de src/QELM/."""
     expected = {
         "models/TFIM.yaml",
+        "models/XXZ.yaml",
         "models/kitaev.yaml",
         "models/haar_circuit.yaml",
         "models/clifford_circuit.yaml",

@@ -109,3 +109,42 @@ def test_refuses_a_sweep_without_the_final_measurement(tmp_path: Path) -> None:
     _run(EXP_Q, "N=4", "samples.L=20", f"hydra.run.dir={tmp_path / 'run'}")
     with pytest.raises(ValueError, match="final_measurement"):
         _load().tfim_summary(tmp_path)
+
+
+def test_xxz_sweep_with_the_local_readout(tmp_path: Path) -> None:
+    """models=XXZ names the panels; the local readout gets its own (#236)."""
+    for N in (4, 5):
+        for p in (0.0, 0.5, 1.0):
+            _run(
+                EXP_Q,
+                "models=XXZ",
+                f"N={N}",
+                "samples.L=40",
+                "samples.balanced=true",
+                "projective_measurement.final_measurement=true",
+                f"projective_measurement.p={p}",
+                f"hydra.run.dir={tmp_path / 'xxz' / f'N{N}_p{p}'}",
+            )
+    module = _load()
+    rows = module.tfim_summary(tmp_path / "xxz")
+    assert {row["model"] for row in rows} == {"XXZ"}
+    assert "accuracy_M_local_bayes_ridge_mean" in rows[0]
+    out = tmp_path / "figures"
+    subprocess.run(
+        [sys.executable, str(SCRIPT), str(tmp_path / "xxz"), "--out", str(out)],
+        check=True,
+        capture_output=True,
+    )
+    data = json.loads((out / "bayes_ridge_asymptotics.json").read_text())["extra"]
+    assert set(data) == {"XXZ Bayes-Ridge", "XXZ local Bayes-Ridge"}
+    assert data["XXZ local Bayes-Ridge"]["metric"] == "accuracy_M_local_bayes_ridge"
+
+
+def test_reservoir_curves_skip_a_missing_local_readout() -> None:
+    module = _load()
+    assert module.reservoir_curves([{"accuracy_M_local_bayes_ridge": 0.6}, {}]) == (
+        module.TFIM_CURVES
+    )
+    assert module.reservoir_name([{"model": None}]) == "TFIM"
+    with pytest.raises(ValueError, match="mixes"):
+        module.reservoir_name([{"model": "TFIM"}, {"model": "XXZ"}])

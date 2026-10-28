@@ -33,6 +33,14 @@ the TFIM sweep folder (or ``--out``):
   tend to a smooth limit, and grows with ``N`` if they sharpen into a step,
   the signature of a transition at a ``p_c`` where the curves cross.
 
+The reservoir is read from ``models`` in the configs of the runs: the TFIM
+of issue #233 or the XXZ chain of issue #236 (``MODEL=XXZ``), and the titles
+name it. When the runs hold the local readout of issue #236
+(``accuracy_M_local_bayes_ridge``, the SEP likelihood that keeps where and
+when each qubit was measured), it is drawn too (dash-dotted), and gets its
+own panel in the collapse and asymptotics figures: an accuracy above the
+scrambled curve ``Phi(d' / 2)`` is information the urn model throws away.
+
 ``bayes_ridge_fss.json`` (extra) holds the per-``(N, p)`` means and errors,
 and ``bayes_ridge_asymptotics.json`` the fits, their ``chi2`` per degree of
 freedom, the successive gaps ``A_{N'} - A_N`` with their errors, and the
@@ -67,6 +75,7 @@ from QELM.utils.plots import (
 )
 
 TFIM_KEYS = (
+    ("model", "models"),
     ("N", "N"),
     ("seed", "seed"),
     ("p", "projective_measurement.p"),
@@ -88,7 +97,27 @@ TFIM_CURVES = (
     ("accuracy_M_bayes", "Bayes rule (scrambled SEP) on $M$", "--"),
     ("accuracy_M", "ridge on raw $M$", ":"),
 )
+# The local SEP readout of issue #236, drawn when the runs hold it.
+LOCAL_CURVE = ("accuracy_M_local_bayes_ridge", "local Bayes-Ridge on $M$", "-.")
 MAIN = TFIM_CURVES[0][0]
+LOCAL = LOCAL_CURVE[0]
+
+
+def reservoir_curves(
+    rows: Sequence[dict[str, Any]],
+) -> tuple[tuple[str, str, str], ...]:
+    """Return the curves of the reservoir panel, the local one if every run has it."""
+    if rows and all(LOCAL in row for row in rows):
+        return (*TFIM_CURVES, LOCAL_CURVE)
+    return TFIM_CURVES
+
+
+def reservoir_name(rows: Sequence[dict[str, Any]]) -> str:
+    """Return the reservoir of the runs (``models``), ``TFIM`` when not recorded."""
+    names = {str(row.get("model") or "TFIM") for row in rows}
+    if len(names) != 1:
+        raise ValueError(f"The sweep mixes reservoirs: {sorted(names)}.")
+    return names.pop()
 
 
 def fit_inverse_size(
@@ -173,7 +202,10 @@ def crossings(
 
 
 def tfim_summary(sweep: Path) -> list[dict[str, Any]]:
-    """Average the TFIM runs of ``sweep`` over the seeds, one row per ``(N, p)``."""
+    """Average the reservoir runs of ``sweep`` over the seeds, one row per ``(N, p)``.
+
+    Each row also holds ``model``, the reservoir of the runs.
+    """
     rows = load_sweep(sweep, TFIM_KEYS)
     for row in rows:
         if row["final"] is not True:
@@ -181,7 +213,8 @@ def tfim_summary(sweep: Path) -> list[dict[str, Any]]:
                 f"{row['run']}: issue #233 needs final_measurement=true, "
                 f"got {row['final']!r}."
             )
-    metrics = [m for m, _, _ in TFIM_CURVES]
+    metrics = [m for m, _, _ in reservoir_curves(rows)]
+    model = reservoir_name(rows)
     summary = summarize(rows, by=("N", "p"), metrics=metrics)
     n_test = {(r["N"], r["p"]): r["n_test"] for r in rows}
     steps = {(r["N"], r["p"]): r["steps"] for r in rows}
@@ -198,6 +231,7 @@ def tfim_summary(sweep: Path) -> list[dict[str, Any]]:
                 row[f"{m}_sem"] = max(row[f"{m}_sem"], binomial)
         # final_measurement=true: one round after each step.
         row["rounds"] = int(steps[(row["N"], row["p"])])
+        row["model"] = model
     return summary
 
 
@@ -230,8 +264,9 @@ def draw_fss(
     fig, axes = subplots(1, 1 + len(seps), figsize=(7 * (1 + len(seps)), 5.5))
     axes = np.atleast_1d(axes)
     ax = axes[0]
+    curves = reservoir_curves(tfim)
     for n in Ns:
-        for metric, label, style in TFIM_CURVES:
+        for metric, label, style in curves:
             curve = sweep_curve(tfim, n, "p", metric)
             draw_curve(
                 ax,
@@ -240,10 +275,10 @@ def draw_fss(
                 label=f"N = {n}, {label}" if style == "-" else None,
                 linestyle=style,
             )
-    for _, label, style in TFIM_CURVES:
+    for _, label, style in curves:
         ax.plot([], [], color="0.4", linestyle=style, label=label)
     ax.axhline(0.5, color="0.6", linestyle=":", lw=1)
-    ax.set_title("TFIM reservoir, final measurement, $Q$ from $M$ only")
+    ax.set_title(f"{tfim[0]['model']} reservoir, final measurement, $Q$ from $M$ only")
     ax.set_xlabel("measurement probability $p$")
     ax.set_ylabel("test accuracy on $Q$")
     ax.legend(fontsize=8)
@@ -431,6 +466,7 @@ def main() -> None:
     args = parser.parse_args()
     out = args.out or args.sweep
     tfim = tfim_summary(args.sweep)
+    model = tfim[0]["model"]
     seps = []
     for folder in args.sep:
         rows = load_sweep(folder, SEP_KEYS)
@@ -438,9 +474,12 @@ def main() -> None:
     fig, extra = draw_fss(tfim, seps)
     print(f"Wrote {save_figure(fig, out, 'bayes_ridge_fss', extra)}")
     plt.close(fig)
-    results = [("TFIM Bayes-Ridge", asymptotics(tfim, MAIN))]
+    mains = [(f"{model} Bayes-Ridge", MAIN)]
+    if f"{LOCAL}_mean" in tfim[0]:
+        mains.append((f"{model} local Bayes-Ridge", LOCAL))
+    results = [(title, asymptotics(tfim, metric)) for title, metric in mains]
     results += [(title, asymptotics(rows, "accuracy")) for title, rows in seps]
-    panels = [("TFIM Bayes-Ridge", tfim, MAIN)]
+    panels = [(title, tfim, metric) for title, metric in mains]
     panels += [(title, rows, "accuracy") for title, rows in seps]
     fig, extra = draw_collapse(panels)
     print(f"Wrote {save_figure(fig, out, 'bayes_ridge_collapse', extra)}")
