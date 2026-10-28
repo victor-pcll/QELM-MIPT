@@ -879,6 +879,62 @@ several sizes `N` cross at `p_success ~ 0.2` in the paper. The figure is
 `outputs/learnability_fig2c/<date_time>/` with `FIGURES=2c`, and plots
 Fig. 2c.
 
+## Check the chaos and the locality of the reservoirs (issue #243)
+
+```bash
+uv run python experiments/diagnostics/diagnostics_physiques.py
+```
+
+A measurement-induced transition needs a chaotic unitary dynamics (to keep a
+volume law at `p > 0`) and a local one (a light cone, for the competition
+between the spreading and the measurements). The script measures both on five
+reservoirs, with the diagnostics of `QELM.evaluation.chaos_locality`:
+
+| key | reservoir | step |
+| --- | --- | --- |
+| `tfim_all_to_all` | TFIM of `conf/models/TFIM.yaml`, `h = 10` (`--tfim-h`) | `exp(-i H 0.25)` |
+| `ising_hz0` | open Ising chain of #241, `h_x = 1.05`, `h_z = 0`, `J_i` in `[0.5, 1.5]` | `exp(-i H 0.3)` |
+| `ising_hz05` | the same chain with `h_z = 0.5`, the reservoir of #241 | `exp(-i H 0.3)` |
+| `xxz` | clean Heisenberg chain of #236, `J = Delta = 1`, `h = 0` | `exp(-i H 0.1)` |
+| `floquet` | Floquet Ising chain of Skinner et al. (2019), #239 | one half-layer |
+
+The 1D Hamiltonians and the Floquet bricks are rebuilt in
+`QELM.evaluation.chaos_locality` with the conventions of their pull requests
+(#238, #240, #242), so that the diagnostics run on `main`. It writes five
+figures, each with its JSON, and `summary.json`, in
+`outputs/diagnostics_physiques/<date_time>/` (`--out` to change it):
+
+- `level_spacing.png` (part A): histogram of the unfolded level spacings of
+  the central third of every symmetry sector (parities, charge, reflection),
+  pooled over `--realisations` disorder draws, against Poisson `exp(-s)`, the
+  GOE `(pi/2) s exp(-pi s^2/4)` and the GUE. The mean gap ratio `<r>` in each
+  title reads without unfolding: 0.386 for Poisson, 0.531 for the GOE, 0.600
+  for the GUE.
+- `entropy_growth.png` (part B1): half-chain `S_A(t)` at `p = 0` from the
+  Néel state (top row) and from `|+y>^N` (bottom row), one curve per `N`
+  (`--N-growth`). `|+y>^N` has zero energy for the TFIM and the Ising chains
+  (infinite temperature), so `S_A` saturates near the Page value; the Néel
+  state is an extreme of the `- J Z Z` couplings and saturates lower. A local
+  model grows linearly at a rate that does not depend on `N` (`max_rate` in
+  the JSON).
+- `otoc.png` (part B2): `C(x, t) = (1/2) <|[Z_x(t), Z_x0]|^2>` at infinite
+  temperature, `x0 = N/2`: a "V" for a local model.
+- `reference_qubit_delta.png` (part B3a): a reference qubit `R` in a Bell pair
+  with `x0`, the rest of the chain in the Néel state; the mean entropy
+  `-<Delta S_Q(x, t)>` that one extra measurement at `(x, t)` would remove from
+  `R` (averaged over its outcome, not applied), at `--p-volume` and
+  `--p-area`. It is exactly zero until the information on `R` reaches `x`.
+- `reference_qubit_cutoff.png` (part B3b): `<S_Q(t)>` when the outcomes of
+  the measurements at `|x - x0| > l` are not recorded (the state is averaged
+  over them), for `l` in `--cutoffs` (`-1`: nothing recorded, `S_Q = 1`).
+
+The default sizes (`N = 12` for the spectra, 6 to 12 for the growth, 10 for
+the OTOC, 8 for the reference qubit) take about half an hour; `--quick` runs
+tiny sizes in seconds, `--models ising_hz05 floquet` a subset of the
+reservoirs and `--parts spectra growth otoc reference` a subset of the
+diagnostics (each part has its own random generator, so a part run alone
+gives the same figure as in the full run).
+
 ## Write your own
 
 1. Copy the test script and make the copy executable:
