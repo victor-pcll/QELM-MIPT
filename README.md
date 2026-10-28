@@ -29,11 +29,11 @@ uv sync
 | `src/QELM/encoding/` | Initial-state encodings (renamed from `embedding/`, issue #197) (`Encoding` base, ancilla + charge-sector state, angle encoding `RotationEncoding` of a static input, and the product encodings of issue #196: `AngleEncoding`, `DenseAngleEncoding`, `UniformBlochEncoding`, `GeneralEncoding`) |
 | `src/QELM/datasets/` | Static classification datasets: MNIST and scikit-learn's 8x8 digits as a task between a few chosen digits, and their PCA to rotation angles (`AngleEncoder`) |
 | `src/QELM/training/` | Measurements, feature extraction and readout fitting (`LinearReadout` scaffold, `RidgeReadout` closed-form ridge regression, `alpha = 0` for the unregularized minimum-norm fit) |
-| `src/QELM/evaluation/` | Metrics, entropies, the learnability and charge-sharpening statistics, the double-descent sweep (`double_descent.py`), plot scaffolds |
+| `src/QELM/evaluation/` | Metrics, entropies, the learnability and charge-sharpening statistics, the double-descent sweep (`double_descent.py`), the scores of the entropy-prediction task (`entropy_regression.py`, issue #230), plot scaffolds |
 | `src/QELM/utils/plots/` | Plotting helpers shared by the scripts and the notebooks: one style (no grid, closed box, large titles), sweep curves, reference overlays, `save_figure` (figure and its data in the run's output folder) |
 | `notebooks/benchmarks/` | Benchmark notebooks: reproductions of published figures (learnability, Barratt et al. 2022, Fig. 2b and 2c; charge sharpening, Agrawal et al. 2024, Fig. 7) |
 | `notebooks/results/` | Notebooks producing new results (TFIM reservoir, QELM on the measurement record M, double descent on MNIST) |
-| `experiments/` | One folder per experiment, each with its Python script and its bash launcher: `example/` (the `run_experiment.py` template and `test_experiment.sh`), `projective/`, `QELM_Z/`, `QELM_M/`, `QELM_Q/`, `charge_sharpening/` (benchmark against Agrawal et al. 2024, Fig. 7), `double_descent/` (double descent of the QELM on MNIST digits, with confusion matrices); `scratch/` for local outputs (gitignored) |
+| `experiments/` | One folder per experiment, each with its Python script and its bash launcher: `example/` (the `run_experiment.py` template and `test_experiment.sh`), `projective/`, `QELM_Z/`, `QELM_M/`, `QELM_Q/`, `charge_sharpening/` (benchmark against Agrawal et al. 2024, Fig. 7), `double_descent/` (double descent of the QELM on MNIST digits, with confusion matrices); `QELM_S/` (prediction of the half-chain entanglement entropy across the MIPT from local measurements, issue #230); `scratch/` for local outputs (gitignored) |
 | `main.py` | Entrypoint. Routes `models` → model → training → evaluation |
 
 ## Run the pipeline

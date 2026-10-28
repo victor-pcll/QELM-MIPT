@@ -5,8 +5,8 @@ parameters, calls the Hydra entry point once per combination, and writes every
 run to its own folder under `outputs/`, which git ignores (see `.gitignore`).
 
 Next to `metrics.json`, every Python experiment script (`projective/`,
-`QELM_Z/`, `QELM_M/`, `QELM_Q/`, `charge_sharpening/`, `learnability/`,
-`double_descent/`) writes
+`QELM_Z/`, `QELM_M/`, `QELM_Q/`, `QELM_S/`, `charge_sharpening/`,
+`learnability/`, `double_descent/`) writes
 `resolved_config.json`, the config of the run with every interpolation
 evaluated (`QELM.utils.save_config`, issue #85). `.hydra/config.yaml` keeps the
 formulas as written in `conf/`, such as `depth: ${int:${div:${Ns},2}}`;
@@ -568,6 +568,56 @@ per `h`: a ceiling must have saturated in `K`), `gmm_vs_p.png` (every
 accuracy against `p`, one panel per `h`) and the table
 `gmm_phase_diagram.json`. `--N`, `--t`, `--final` pick one setting of a
 sweep that holds several.
+
+## Run the entanglement-entropy prediction (issue #230)
+
+Can a linear readout of local measurements predict a global, nonlinear
+quantity, the half-chain entanglement entropy, across the
+measurement-induced transition? `experiments/QELM_S/exp_QELM_S.py` simulates,
+for every `p` of `entropy_task.p_values` (`conf/QELM_S.yaml`),
+`entropy_task.samples_per_p` trajectories of `N` qubits without ancilla
+(`Nr=0`): the Néel state, then `2 N` rounds (`entropy_task.n_rounds`) of a
+unitary step (Haar or Clifford brickwork, or the TFIM with
+`entropy_task.dt`) followed by a measurement in Z of each qubit with
+probability `p`. The target is the von Neumann entropy `S` (bits) of the
+first `N // 2` qubits of the final state. All `p` are pooled into one
+dataset and split with the same training share at each `p`.
+
+A ridge readout is fitted on each feature set: the record `M`, the final
+`<Z_k>` (`Z`), one single-shot measurement of each qubit (`Zshot`), their
+concatenations, and two baselines, the indicators of `p` (`p`, the training
+mean of `S` at each `p`) and the number of measurements (`n_meas`). `S`
+depends mostly on `p`, which can be read from `M`, so a pooled `R2` alone
+can mean that the readout only guessed `p`. Each set therefore also gets
+`r2_within_<set>`, the `R2` at fixed `p`: about 0 for the `p` baseline,
+positive only when the features carry the trajectory-to-trajectory
+fluctuations of the entanglement. A readout without the indicators of `p`
+also pays there for its offset errors at each `p`, so the sets
+`p_n_meas`, `p_absM`, `p_M_Z` and `p_M_Z_even` put the indicators of `p`
+next to the features: their `r2_within` is what the features add to `p`. `S` is even in the signs of the outcomes
+and a linear readout of `M` is odd, so `M_Z_even` adds the squares (`|M|`,
+`<Z_k>**2`), and `absM` keeps only where the measurements happened. A K-NN
+regression on the same features is reported too (`r2_knn_<set>`); with
+hundreds of features, most of them random signs, it does worse than the
+ridge readout, so it is not a ceiling here.
+With `entropy_task.p_c` set, a ridge classifier of the phase label (+1 below
+`p_c`, -1 above) is fitted too (`accuracy_phase_<set>`); the label is a
+function of `p`, so the `p` baseline reaches 1.
+
+```bash
+uv run python experiments/QELM_S/exp_QELM_S.py models=haar_circuit N=8 entropy_task.p_c=0.17
+MAX_JOBS=4 ./experiments/QELM_S/exp_QELM_S.sh   # haar_circuit and TFIM, N = 6 8 10
+uv run python experiments/QELM_S/plot_QELM_S.py outputs/exp_QELM_S/<date_time>
+```
+
+The launcher sweeps `MODELS`, `N_VALUES` and `SEEDS` (`PER_P`, `P_VALUES`,
+`P_C_HAAR=0.17`, `P_C_TFIM`, `ALPHA`, `MAX_JOBS` change the defaults) and
+writes one folder per run, `<model>_N<N>_seed<seed>/`. The plot script
+writes `entropy_vs_p` (`S / (N/2)` against `p`, one curve per `N`, to locate
+the transition), `r2_summary` (pooled and fixed-`p` `R2` of every set),
+`r2_within_vs_p` and `predicted_vs_exact` (test trajectories colored by
+`p`), each with its JSON. The TFIM at `N = 10` builds a dense `exp(-i H dt)`
+per trajectory and is the slow part of the sweep.
 
 ## Run the double-descent experiment on MNIST (issue #181)
 
