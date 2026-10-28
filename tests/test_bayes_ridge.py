@@ -12,6 +12,8 @@ from QELM.evaluation.bayes_ridge import (
     BayesRidge,
     bayes_accuracy,
     log_likelihood_features,
+    scrambled_accuracy,
+    scrambled_discriminability,
     scrambled_log_likelihood,
 )
 from QELM.evaluation.learnability import UNMEASURED, sep_log_likelihood
@@ -161,3 +163,53 @@ def test_bayes_ridge_checks_its_inputs() -> None:
         BayesRidge((3, 2)).fit(np.zeros((4, 3)), np.array([3, 2, 3, 2]))
     with pytest.raises(RuntimeError):
         BayesRidge((3, 2)).predict(np.zeros((1, 2)))
+
+
+def _scrambled_records(
+    Ns: int, Q: int, p: float, n_rounds: int, n: int, rng: np.random.Generator
+) -> np.ndarray:
+    """Draw records from the scrambled model: a fresh uniform charge-Q
+    configuration before every round, each qubit measured with probability p."""
+    M = np.zeros((n, n_rounds, Ns), dtype=int)
+    for i in range(n):
+        for r in range(n_rounds):
+            bits = np.zeros(Ns, dtype=int)
+            bits[rng.choice(Ns, Q, replace=False)] = 1
+            measured = rng.random(Ns) < p
+            M[i, r] = np.where(measured, 1 - 2 * bits, 0)
+    return M
+
+
+@pytest.mark.parametrize(("Ns", "p"), [(7, 0.3), (11, 0.3), (11, 0.45)])
+def test_scrambled_accuracy_matches_its_own_bayes_rule(Ns: int, p: float) -> None:
+    """Records drawn from the model itself: the Bayes rule scores the
+    Gaussian prediction Phi(d' / 2) within the sampling noise."""
+    rng = np.random.default_rng(3)
+    charges = (Ns // 2, Ns // 2 - 1)
+    n = 2000
+    M = np.concatenate([_scrambled_records(Ns, q, p, 5, n // 2, rng) for q in charges])
+    charge = np.repeat(charges, n // 2)
+    measured = bayes_accuracy(log_likelihood_features(M, charges), charge, charges)
+    assert measured == pytest.approx(scrambled_accuracy(Ns, p, 5, charges), abs=0.03)
+
+
+def test_scrambled_accuracy_limits_and_scaling() -> None:
+    charges = (5, 4)
+    assert scrambled_accuracy(11, 0.0, 5, charges) == 0.5
+    assert scrambled_accuracy(11, 1.0, 5, charges) == 1.0
+    assert scrambled_accuracy(11, 0.3, 0, charges) == 0.5
+    # Fixed rounds: falls toward 1/2 as Ns grows.
+    acc = [scrambled_accuracy(ns, 0.3, 5, (ns // 2, ns // 2 - 1)) for ns in (5, 11, 41)]
+    assert acc[0] > acc[1] > acc[2] > 0.5
+    # d'^2 ~ 4 R p / ((1 - p) Ns) at half filling and large Ns.
+    d = scrambled_discriminability(1001, 0.3, 5, (501, 500))
+    assert d**2 == pytest.approx(4 * 5 * 0.3 / (0.7 * 1001), rel=0.01)
+    # Rounds growing like Ns: a limit in (1/2, 1).
+    grow = [
+        scrambled_accuracy(ns, 0.1, 2 * ns, (ns // 2, ns // 2 - 1)) for ns in (21, 201)
+    ]
+    assert grow[0] == pytest.approx(grow[1], abs=0.01)
+    with pytest.raises(ValueError):
+        scrambled_discriminability(11, 1.0, 5, charges)
+    with pytest.raises(ValueError):
+        scrambled_discriminability(11, 0.3, 5, (4, 4))

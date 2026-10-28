@@ -60,7 +60,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import numpy as np
-from scipy.special import gammaln
+from scipy.special import erf, gammaln
 
 from QELM.training.regression.ridge import DEFAULT_ALPHA, RidgeReadout
 
@@ -171,6 +171,85 @@ def bayes_accuracy(
     ties = np.isclose(ll, best[:, None], rtol=0.0, atol=1e-9)
     won = np.isclose(true, best, rtol=0.0, atol=1e-9)
     return float(np.mean(np.where(won, 1.0 / ties.sum(axis=1), 0.0)))
+
+
+def scrambled_discriminability(
+    Ns: int, p: float, n_rounds: int, charges: Sequence[int]
+) -> float:
+    """Return the discriminability ``d'`` of two charges under the scrambled model.
+
+    Under the model, the number ``n`` of qubits found at ``|1>`` among the
+    ``k`` measured in a round is hypergeometric: mean ``k Q / Ns``, variance
+    ``k rho (1 - rho) (Ns - k) / (Ns - 1)`` with ``rho = Q / Ns``. The two
+    charges shift the mean by ``k |Q0 - Q1| / Ns``; in the Gaussian
+    approximation, with ``k = p Ns`` and ``rho`` at the middle of the two
+    charges, the rounds add up to
+
+        d'^2 = n_rounds (k dQ / Ns)^2 (Ns - 1) / (k rho (1 - rho) (Ns - k)),
+
+    which is ``~ 4 n_rounds p / ((1 - p) Ns)`` at half filling: the scaling
+    variable of the accuracy is ``n_rounds p / ((1 - p) Ns)``.
+
+    Args:
+        Ns: Number of system qubits, at least 2.
+        p: Measurement probability per qubit and round, in ``[0, 1)``.
+        n_rounds: Number of measurement rounds, at least 0.
+        charges: The two charges.
+
+    Returns:
+        ``d' >= 0``, 0 at ``p = 0``.
+
+    Raises:
+        ValueError: If an argument is out of range (``p = 1`` gives an
+            infinite ``d'``: a fully measured round reads the charge).
+    """
+    if Ns < 2 or not 0.0 <= p < 1.0 or n_rounds < 0:
+        raise ValueError(
+            f"Need Ns >= 2, 0 <= p < 1, n_rounds >= 0; got {Ns}, {p}, {n_rounds}."
+        )
+    q0, q1 = (int(q) for q in charges)
+    if q0 == q1:
+        raise ValueError(f"Need two distinct charges, got {charges}.")
+    if p == 0.0 or n_rounds == 0:
+        return 0.0
+    k = p * Ns
+    rho = (q0 + q1) / (2 * Ns)
+    d2 = n_rounds * (k * abs(q0 - q1) / Ns) ** 2 * (Ns - 1)
+    d2 /= k * rho * (1 - rho) * (Ns - k)
+    return float(np.sqrt(d2))
+
+
+def scrambled_accuracy(
+    Ns: int, p: float, n_rounds: int, charges: Sequence[int]
+) -> float:
+    """Return the Bayes accuracy predicted by the scrambled model, two charges.
+
+    The Bayes rule between two equal-variance Gaussians at distance ``d'``
+    (:func:`scrambled_discriminability`) is right with probability
+    ``Phi(d' / 2)``. So at a fixed number of rounds the accuracy falls to
+    1/2 as ``N`` grows, as ``N**-1/2``, for every ``p < 1``; it keeps a
+    limit in ``(1/2, 1)`` only when ``n_rounds`` grows like ``N``
+    (``t_f = N`` in Barratt et al. 2022).
+
+    The Gaussian approximation holds within the sampling noise up to
+    ``d' / 2 ~ 0.7``, against the Bayes rule on records drawn from the
+    model itself (``tests/test_bayes_ridge.py``); above, it ignores the
+    discreteness of the counts and the spread of ``k``, and comes out low:
+    0.79 instead of 0.82 at ``Ns = 11``, ``p = 0.6``, 5 rounds.
+
+    Args:
+        Ns: Number of system qubits, at least 2.
+        p: Measurement probability per qubit and round, in ``[0, 1]``.
+        n_rounds: Number of measurement rounds, at least 0.
+        charges: The two charges.
+
+    Returns:
+        The predicted accuracy, 1/2 at ``p = 0`` and 1 at ``p = 1``.
+    """
+    if p == 1.0 and n_rounds > 0:
+        return 1.0
+    d = scrambled_discriminability(Ns, p, n_rounds, charges)
+    return float(0.5 * (1 + erf(d / (2 * np.sqrt(2)))))
 
 
 class BayesRidge:

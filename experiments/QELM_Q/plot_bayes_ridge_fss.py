@@ -9,7 +9,7 @@ averages over the seeds and, when ``--sep`` points to sweeps of
 symmetric exclusion process (SEP) on random U(1) circuits of the same
 number of system qubits ``Ns = N - 1`` and the same two charges.
 
-Two figures, each with its data (:func:`QELM.utils.plots.save_figure`), in
+Three figures, each with its data (:func:`QELM.utils.plots.save_figure`), in
 the TFIM sweep folder (or ``--out``):
 
 - ``bayes_ridge_fss.png``: against ``p``, one color per ``N``. Left, the
@@ -18,6 +18,12 @@ the TFIM sweep folder (or ``--out``):
   ``accuracy_M_bayes`` (dashed) and, for reference, the ridge on the raw
   record ``accuracy_M`` (dotted). Right, one panel per ``--sep`` sweep:
   the SEP Bayes accuracy of the U(1) circuit, colored by the same ``N``.
+- ``bayes_ridge_collapse.png``: the accuracy against ``d' / 2``, the
+  discriminability of the two charges under the scrambled model
+  (:func:`draw_collapse`), with the prediction ``Phi(d' / 2)`` of that
+  model: if the points of every ``N`` fall on one curve, the accuracy
+  depends on ``R p / ((1 - p) Ns)`` alone (``R`` the number of rounds),
+  and at a fixed ``R`` goes to 1/2 as ``N`` grows.
 - ``bayes_ridge_asymptotics.png``: the test of an asymptotic behavior in
   ``N``. Left, the accuracy at each ``p`` against ``1 / N``, with the fit
   ``A_N = A_inf + c / N`` (:func:`fit_inverse_size`); a straight line
@@ -49,6 +55,7 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 
+from QELM.evaluation.bayes_ridge import scrambled_discriminability
 from QELM.utils import load_sweep, summarize
 from QELM.utils.plots import (
     color_map,
@@ -66,6 +73,7 @@ TFIM_KEYS = (
     ("L", "samples.L"),
     ("final", "projective_measurement.final_measurement"),
     ("balanced", "samples.balanced"),
+    ("steps", "projective_measurement.nbr_time_evolution"),
 )
 SEP_KEYS = (
     ("N", "N"),
@@ -176,13 +184,20 @@ def tfim_summary(sweep: Path) -> list[dict[str, Any]]:
     metrics = [m for m, _, _ in TFIM_CURVES]
     summary = summarize(rows, by=("N", "p"), metrics=metrics)
     n_test = {(r["N"], r["p"]): r["n_test"] for r in rows}
+    steps = {(r["N"], r["p"]): r["steps"] for r in rows}
     for row in summary:
-        # One seed: the binomial error of its test set.
+        # The binomial error of the pooled test sets: the error of one seed,
+        # and a floor for the standard error over a few seeds, which two
+        # seeds that happen to agree make far too small.
+        pooled = n_test[(row["N"], row["p"])] * row["n_runs"]
         for m in metrics:
             a = row[f"{m}_mean"]
-            row[f"{m}_err_mean"] = float(
-                np.sqrt(max(a * (1 - a), 0.0) / n_test[(row["N"], row["p"])])
-            )
+            binomial = float(np.sqrt(max(a * (1 - a), 0.0) / pooled))
+            row[f"{m}_err_mean"] = binomial
+            if np.isfinite(row[f"{m}_sem"]):
+                row[f"{m}_sem"] = max(row[f"{m}_sem"], binomial)
+        # final_measurement=true: one round after each step.
+        row["rounds"] = int(steps[(row["N"], row["p"])])
     return summary
 
 
@@ -191,7 +206,12 @@ def sep_summary(sweep: Path) -> list[dict[str, Any]]:
     rows = load_sweep(sweep, SEP_KEYS)
     for row in rows:
         row["N"] = int(row["N"]) + 1
-    return summarize(rows, by=("N", "p"), metrics=("accuracy", "accuracy_err"))
+    summary = summarize(rows, by=("N", "p"), metrics=("accuracy", "accuracy_err"))
+    first = rows[0]
+    per_step = 2 if first["measure_every"] == "layer" else 1
+    for row in summary:
+        row["rounds"] = per_step * int(first["depth"])
+    return summary
 
 
 def _sep_title(rows: Sequence[dict[str, Any]]) -> str:
@@ -242,6 +262,71 @@ def draw_fss(
         extra[title] = rows
     for ax in axes:
         ax.set_ylim(0.45, 1.02)
+    fig.tight_layout()
+    return fig, extra
+
+
+def draw_collapse(
+    datasets: Sequence[tuple[str, list[dict[str, Any]], str]],
+) -> tuple[Any, dict[str, Any]]:
+    """Draw ``bayes_ridge_collapse.png``: accuracy against ``d' / 2``.
+
+    ``d'`` is the discriminability of the two charges under the scrambled
+    model (:func:`QELM.evaluation.bayes_ridge.scrambled_discriminability`),
+    ``~ 2 sqrt(rounds p / ((1 - p) Ns))``. If the scrambled model holds,
+    every ``(N, p)`` falls on ``Phi(d' / 2)``, whatever ``N``: the
+    accuracy is a function of ``rounds p / ((1 - p) Ns)`` alone, and goes
+    to 1/2 at fixed ``rounds`` as ``N`` grows. ``p = 0`` and ``p = 1`` are
+    left out (``d' = 0`` and infinite).
+
+    Args:
+        datasets: ``(title, summary, metric)`` per panel; each summary row
+            has ``rounds``.
+
+    Returns:
+        The figure and its extra data, the points of every panel.
+    """
+    from scipy.special import erf
+
+    fig, axes = subplots(1, len(datasets), figsize=(6.5 * len(datasets), 5.5))
+    axes = np.atleast_1d(axes)
+    x = np.linspace(0, 3, 200)
+    extra: dict[str, Any] = {}
+    for ax, (title, rows, metric) in zip(axes, datasets, strict=True):
+        Ns = sizes(rows)
+        colors = color_map([str(n) for n in Ns])
+        points = []
+        for n in Ns:
+            curve = sweep_curve(rows, n, "p", metric)
+            ns = n - 1
+            charges = (ns // 2, ns // 2 - 1)
+            keep = (curve.x > 0) & (curve.x < 1)
+            half_d = [
+                scrambled_discriminability(ns, float(p), int(r["rounds"]), charges) / 2
+                for p, r in zip(curve.x[keep], np.array(curve.rows)[keep], strict=True)
+            ]
+            ax.errorbar(
+                half_d,
+                curve.mean[keep],
+                yerr=curve.err[keep],
+                color=colors[str(n)],
+                marker="o",
+                ls="",
+                label=f"N = {n}",
+            )
+            points += [
+                {"N": n, "p": float(p), "half_d": h, "A": float(a)}
+                for p, h, a in zip(curve.x[keep], half_d, curve.mean[keep], strict=True)
+            ]
+        ax.plot(
+            x, 0.5 * (1 + erf(x / np.sqrt(2))), color="k", lw=1, label=r"$\Phi(d'/2)$"
+        )
+        ax.set_xlabel(r"$d'/2 \approx \sqrt{R\,p / ((1-p) N_s)}$")
+        ax.set_ylabel("accuracy")
+        ax.set_title(title)
+        ax.set_ylim(0.45, 1.02)
+        ax.legend(fontsize=8)
+        extra[title] = points
     fig.tight_layout()
     return fig, extra
 
@@ -328,7 +413,7 @@ def draw_asymptotics(
         ax_slope.plot(res["N"], slopes, marker="o", color="k")
         ax_slope.set_xlabel("$N$")
         ax_slope.set_ylabel(r"$\max_p \, dA / dp$")
-        ax_slope.set_title(f"{title}: steepest slope of the curve")
+        ax_slope.set_title("steepest slope of the curve")
     fig.tight_layout()
     return fig
 
@@ -355,6 +440,11 @@ def main() -> None:
     plt.close(fig)
     results = [("TFIM Bayes-Ridge", asymptotics(tfim, MAIN))]
     results += [(title, asymptotics(rows, "accuracy")) for title, rows in seps]
+    panels = [("TFIM Bayes-Ridge", tfim, MAIN)]
+    panels += [(title, rows, "accuracy") for title, rows in seps]
+    fig, extra = draw_collapse(panels)
+    print(f"Wrote {save_figure(fig, out, 'bayes_ridge_collapse', extra)}")
+    plt.close(fig)
     fig = draw_asymptotics(results)
     data = {title: res for title, res in results}
     print(f"Wrote {save_figure(fig, out, 'bayes_ridge_asymptotics', data)}")
