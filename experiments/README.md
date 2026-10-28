@@ -914,7 +914,8 @@ figures, each with its JSON, and `summary.json`, in
   Néel state (top row) and from `|+y>^N` (bottom row), one curve per `N`
   (`--N-growth`). `|+y>^N` has zero energy for the TFIM and the Ising chains
   (infinite temperature), so `S_A` saturates near the Page value; the Néel
-  state is an extreme of the `- J Z Z` couplings and saturates lower. A local
+  state is an extreme of the `- J Z Z` couplings and saturates lower; for the
+  SU(2)-symmetric XXZ chain `|+y>^N` is an eigenstate and nothing grows. A local
   model grows linearly at a rate that does not depend on `N` (`max_rate` in
   the JSON).
 - `otoc.png` (part B2): `C(x, t) = (1/2) <|[Z_x(t), Z_x0]|^2>` at infinite
@@ -923,7 +924,8 @@ figures, each with its JSON, and `summary.json`, in
   with `x0`, the rest of the chain in the Néel state; the mean entropy
   `-<Delta S_Q(x, t)>` that one extra measurement at `(x, t)` would remove from
   `R` (averaged over its outcome, not applied), at `--p-volume` and
-  `--p-area`. It is exactly zero until the information on `R` reaches `x`.
+  `--p-area`, on a log color scale. It is exactly zero until the information
+  on `R` reaches `x`.
 - `reference_qubit_cutoff.png` (part B3b): `<S_Q(t)>` when the outcomes of
   the measurements at `|x - x0| > l` are not recorded (the state is averaged
   over them), for `l` in `--cutoffs` (`-1`: nothing recorded, `S_Q = 1`).

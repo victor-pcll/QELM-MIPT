@@ -61,6 +61,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.sparse as sp
+from matplotlib.colors import LogNorm
 
 from QELM.evaluation.chaos_locality import (
     R_GOE,
@@ -308,9 +309,21 @@ def run_entropy_growth(
                     color=COLORS[k % len(COLORS)],
                     label=f"{model.key} {name} N={N}",
                 )
-        for i, (label, _) in enumerate(states.values()):
+        for i, (name, (label, _)) in enumerate(states.items()):
             axes[i, j].set_title(f"{model.label}, {label}")
             axes[i, j].set_xlabel(model.time_unit)
+            runs = summary[model.key][name].values()
+            if max(abs(run["max_rate"]) for run in runs) < 1e-6:
+                # |+y>^N is fully polarized: an eigenstate of the SU(2)
+                # symmetric Heisenberg chain, so nothing grows.
+                axes[i, j].set_ylim(-0.05, 1)
+                axes[i, j].text(
+                    0.5,
+                    0.5,
+                    "eigenstate of H:\n$S_A = 0$",
+                    ha="center",
+                    transform=axes[i, j].transAxes,
+                )
     for i in range(len(states)):
         axes[i, 0].set_ylabel("$S_A$ (bits), $A$ = left half")
         axes[i, 0].legend(
@@ -404,9 +417,11 @@ def run_reference_qubit(
             mesh = ax.pcolormesh(
                 x_edges,
                 t_edges,
-                -result.delta_S_Q,
-                vmin=0,
-                vmax=1,
+                # Log scale: the light cone is the edge of the faint values,
+                # far below the -1 of a measurement of x0 at t = 0. Zeros
+                # (outside the cone) are drawn in the lowest color.
+                np.clip(-result.delta_S_Q, 1e-4, 1),
+                norm=LogNorm(vmin=1e-4, vmax=1),
                 cmap="viridis",
                 label=f"{model.key} p={p:g}",
             )
