@@ -106,8 +106,12 @@ LOCAL = LOCAL_CURVE[0]
 def reservoir_curves(
     rows: Sequence[dict[str, Any]],
 ) -> tuple[tuple[str, str, str], ...]:
-    """Return the curves of the reservoir panel, the local one if every run has it."""
-    if rows and all(LOCAL in row for row in rows):
+    """Return the curves of the reservoir panel, the local one if every row has it.
+
+    ``rows`` are runs (``load_sweep``) or their averages (:func:`tfim_summary`,
+    where the metric is ``<name>_mean``).
+    """
+    if rows and all(LOCAL in row or f"{LOCAL}_mean" in row for row in rows):
         return (*TFIM_CURVES, LOCAL_CURVE)
     return TFIM_CURVES
 

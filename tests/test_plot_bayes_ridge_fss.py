@@ -129,6 +129,8 @@ def test_xxz_sweep_with_the_local_readout(tmp_path: Path) -> None:
     rows = module.tfim_summary(tmp_path / "xxz")
     assert {row["model"] for row in rows} == {"XXZ"}
     assert "accuracy_M_local_bayes_ridge_mean" in rows[0]
+    # The averaged rows draw the local curve too.
+    assert module.LOCAL_CURVE in module.reservoir_curves(rows)
     out = tmp_path / "figures"
     subprocess.run(
         [sys.executable, str(SCRIPT), str(tmp_path / "xxz"), "--out", str(out)],
