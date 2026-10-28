@@ -89,6 +89,27 @@ charge is in ``<Z_k>``, but not linearly).
 accuracy, with the QDA and mixture densities and the ridge and K-NN decision
 regions on the PCA plane.
 
+A last readout of the record, the Bayes-Ridge pipeline (issue #233,
+:mod:`QELM.evaluation.bayes_ridge`), reads ``M`` and nothing else: for each
+charge the log-likelihood ``log P(M | Q)`` of a generative model, the fully
+scrambled limit of the symmetric exclusion process of Barratt et al. 2022
+(before each round the configuration is uniform on charge ``Q``), then a
+ridge on these two log-likelihoods, standardized, with a bias column. It
+gets ``accuracy_M_bayes_ridge``, ``balanced_accuracy_M_bayes_ridge`` and
+``r2_M_bayes_ridge``; ``accuracy_M_bayes`` is the Bayes rule of the model
+alone, ``argmax_Q log P(M | Q)``, on the same test samples, and
+``log_likelihood_M`` (``(L, 2)``, columns ``Q1``, ``Q2``) goes to the
+``.npz``. Use it with ``projective_measurement.final_measurement=true``, so
+that the record ends on a collapse after the last step.
+
+With ``samples.balanced=true`` (issue #233) the outcome of ``R`` is no
+longer drawn: sample ``i`` is projected on ``|0>_R`` (``Q1``) for an even
+``i`` and on ``|1>_R`` (``Q2``) for an odd one, so that ``samples.L`` even
+gives exactly ``L / 2`` samples per sector, and an even
+``samples.train_size`` the same in the training set. The global NumPy state
+then no longer draws the labels, so the disorder of a seed differs from the
+default run.
+
 The state is simulated as a density matrix by default
 (``state_representation=density``). It stays pure all along: ``R`` is
 measured first, the evolution is unitary and a projective measurement maps
@@ -169,6 +190,11 @@ from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
 from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.evaluation import von_neumann_entropy
 from QELM.evaluation.bayes_optimal import evaluate_bayes_optimal_limit
+from QELM.evaluation.bayes_ridge import (
+    BayesRidge,
+    bayes_accuracy,
+    log_likelihood_features,
+)
 from QELM.evaluation.knn import CustomKNN
 from QELM.evaluation.metrics import (
     NMSE,
@@ -196,6 +222,8 @@ FEATURE_SETS = ("X", "Y", "Z", "XX", "YY", "ZZ", "XY")
 # Readouts on the measurement record M, alone or next to the observables of
 # a feature set, phi = [M, X] (issue #179): name -> sets of FEATURE_SETS.
 RECORD_SETS: dict[str, tuple[str, ...]] = {"M": (), "M_Z": ("Z",), "M_XX": ("XX",)}
+# Bayes-Ridge readout of the record alone (issue #233).
+BAYES_RIDGE = "M_bayes_ridge"
 # Scalars written to metrics.json besides nmse, nmse_err and r2.
 EXTRA_METRICS = (
     "accuracy",
@@ -212,9 +240,10 @@ EXTRA_METRICS = (
     "knn_covariance_cond",
     *(
         f"{score}_{name}"
-        for name in (*FEATURE_SETS, *RECORD_SETS)
+        for name in (*FEATURE_SETS, *RECORD_SETS, BAYES_RIDGE)
         for score in ("accuracy", "balanced_accuracy", "r2")
     ),
+    "accuracy_M_bayes",
 )
 # Number of time-evolution steps (issue #132).
 NBR_TIME_EVOLUTION = "projective_measurement.nbr_time_evolution"
@@ -227,6 +256,41 @@ SAMPLE_RATIO = "samples.delta"
 # Simulated object: "density" (rho) or "vector" (psi), issue #183.
 STATE_REPRESENTATION = "state_representation"
 STATE_REPRESENTATIONS = ("density", "vector")
+# Labels alternate Q1, Q2 instead of the Born draw of R (issue #233).
+BALANCED = "samples.balanced"
+
+
+def project_ancilla(state: np.ndarray, r: int, N: int) -> np.ndarray:
+    """Project the ancilla ``R`` (qubit 0) on ``|0>`` (``r = +1``) or ``|1>``.
+
+    The outcome is imposed instead of drawn, for balanced labels (issue
+    #233). For :class:`AncillaChargeSectorEncoding` each outcome has
+    probability 1/2, so the state left is the one :func:`measure_projective_psi`
+    or :func:`measure_projective_rho` returns for that outcome.
+
+    Args:
+        state: State vector ``(2**N,)`` or density matrix ``(2**N, 2**N)``.
+        r: ``+1`` or ``-1``.
+        N: Number of qubits.
+
+    Returns:
+        The normalized projected state, of the shape of ``state``.
+
+    Raises:
+        ValueError: If ``r`` is not ``+-1`` or the outcome has probability 0.
+    """
+    if r not in (1, -1):
+        raise ValueError(f"r must be +1 or -1, got {r}.")
+    keep = ((np.arange(2**N) >> (N - 1)) & 1) == (0 if r == 1 else 1)
+    if state.ndim == 1:
+        out = np.where(keep, state, 0.0)
+        norm = float(np.linalg.norm(out)) ** 2
+    else:
+        out = state * np.outer(keep, keep)
+        norm = float(np.real(np.trace(out)))
+    if norm <= 0:
+        raise ValueError(f"The outcome r={r} has probability 0.")
+    return np.asarray(out / (np.sqrt(norm) if state.ndim == 1 else norm))
 
 
 def evolve_with_measurements(
@@ -421,7 +485,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             ``state_representation`` (default ``"density"``) and
             ``samples.delta`` (default ``None``): when set, ``samples.L`` is
             replaced in ``cfg`` by ``int(delta * N)``, and
-            ``samples.train_size`` follows (issue #201).
+            ``samples.train_size`` follows (issue #201), and
+            ``samples.balanced`` (default ``False``, issue #233).
 
     Returns:
         The arrays and metrics of the run: ``X`` (with the bias column),
@@ -463,6 +528,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     delta = sample_ratio(cfg, N)
     P = ProjectiveMeasurement.from_config(cfg)
     Q1, Q2 = sector.Q1, sector.Q2
+    balanced = bool(OmegaConf.select(cfg, BALANCED, default=False))
 
     L = int(cfg.samples.L)
     features: dict[str, list[np.ndarray]] = {name: [] for name in FEATURE_SETS}
@@ -482,13 +548,19 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     for i in tqdm(range(L)):
         model = TransverseFieldIsingModel(tfim_params)
         U: np.ndarray | Callable[[np.ndarray], np.ndarray]
+        if balanced:
+            # Imposed instead of drawn: Q1, Q2, Q1, ... (issue #233).
+            r = 1 if i % 2 == 0 else -1
+            rho = project_ancilla(state0, r, N)
         if vector:
             # The label first: R measured in Z fixes the charge sector of S.
-            rho, r = measure_projective_psi(state0, 0, N)
+            if not balanced:
+                rho, r = measure_projective_psi(state0, 0, N)
             U = parity_step(model, rho, r, Nr, Ns, dt)
         else:
             U = np.kron(identity_R, model.propagator(dt=dt))
-            rho, r = measure_projective_rho(state0, 0, N)
+            if not balanced:
+                rho, r = measure_projective_rho(state0, 0, N)
         Y[i] = Q1 if r == 1 else Q2
         rounds: list[np.ndarray] = []
         rho, n_measured[i] = evolve_with_measurements(
@@ -527,6 +599,19 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         sets[f"accuracy_{name}"] = accuracy(y_test, pred, threshold)
         sets[f"balanced_accuracy_{name}"] = balanced_accuracy(y_test, pred, threshold)
         sets[f"r2_{name}"] = R2(y_test, pred)
+
+    # Bayes-Ridge on the record alone: log P(M | Q), then a ridge (#233).
+    log_lik = log_likelihood_features(M.astype(int), (Q1, Q2))
+    bayes_ridge = BayesRidge((Q1, Q2), alpha=solver.config_alpha)
+    bayes_ridge.fit(log_lik[:train], y_train)
+    pred = bayes_ridge.predict(log_lik[train:])
+    sets[f"accuracy_{BAYES_RIDGE}"] = accuracy(y_test, pred, threshold)
+    sets[f"balanced_accuracy_{BAYES_RIDGE}"] = balanced_accuracy(
+        y_test, pred, threshold
+    )
+    sets[f"r2_{BAYES_RIDGE}"] = R2(y_test, pred)
+    sets["accuracy_M_bayes"] = bayes_accuracy(log_lik[train:], y_test, (Q1, Q2))
+    sets["log_likelihood_M"] = log_lik
 
     X = sets["features_Z"]
     solver.fit(X[:train], y_train)
@@ -610,6 +695,8 @@ def main(cfg: DictConfig) -> None:
     )
     for name in (*FEATURE_SETS, *RECORD_SETS):
         print(f"accuracy on <{name}>: {results[f'accuracy_{name}']:.6g}")
+    print(f"Bayes-Ridge accuracy on M: {results[f'accuracy_{BAYES_RIDGE}']:.6g}")
+    print(f"Bayes rule (scrambled SEP) on M: {results['accuracy_M_bayes']:.6g}")
     print(f"Saved to {out_dir}")
 
 

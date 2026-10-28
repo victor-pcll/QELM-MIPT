@@ -25,6 +25,8 @@
 #     SEEDS="42 43 44"        seeds (one disorder and measurement draw each)
 #     P_VALUES="0 0.5 1.0"    measurement probabilities
 #     FINAL_VALUES="false true"  without / with a round after the last step
+#     BALANCED=true           exactly L / 2 samples per charge sector
+#                             (samples.balanced, issue #233)
 #     STATE=vector            simulate the state vector (state_representation,
 #                             issue #183), much faster from N = 8 on
 #     MAX_JOBS=4              runs at once (default 1), one core each; the
@@ -65,6 +67,7 @@ L="${L:-200}"                               # samples per run (samples.L)
 read -r -a SEEDS <<< "${SEEDS:-42}"
 read -r -a P_VALUES <<< "${P_VALUES:-0.0 0.2 0.5 0.8 1.0}"
 read -r -a FINAL_VALUES <<< "${FINAL_VALUES:-false}"
+# BALANCED, when set, overrides samples.balanced (false by default, #233).
 # STATE, when set, overrides state_representation (density by default,
 # issue #183).
 # MAX_JOBS: runs at once (default 1). JOBS, its former name (#183), still
@@ -155,6 +158,7 @@ run_one() {
     "projective_measurement.p=$p" \
     "projective_measurement.final_measurement=$FINAL" \
     ${STATE:+"state_representation=$STATE"} \
+    ${BALANCED:+"samples.balanced=$BALANCED"} \
     "hydra.run.dir=$RUN_DIR"
   status=$?
   if (( status != 0 )); then
@@ -167,7 +171,7 @@ run_one() {
   fi
 }
 export -f run_one
-export OUT_DIR MODEL L FAILED_LOG DELTA ALPHA STATE
+export OUT_DIR MODEL L FAILED_LOG DELTA ALPHA STATE BALANCED
 
 # A bounded queue: xargs starts the runs in order and keeps at most MAX_JOBS
 # of them alive (issue #199). A failed run does not stop the others; xargs

@@ -48,6 +48,10 @@ samples:
   # replaces L by int(delta * N), so that the data grow with the number of
   # features of the readout. Override with samples.delta=200.
   delta: null
+  # balanced: true imposes the outcome of the ancilla, Q1, Q2, Q1, ..., so that
+  # each charge sector gets exactly half of the samples (issue #233), instead
+  # of drawing it with the Born rule (false, probability 1/2 each).
+  balanced: false
   train_fraction: 0.7
   train_size: ${int:${mul:${samples.train_fraction},${samples.L}}} # int(0.7 * L)
 

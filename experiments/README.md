@@ -299,6 +299,63 @@ OMP_NUM_THREADS=1 N_VALUES="4 6 8" H_VALUES=1 FINAL_VALUES="false true" \
 uv run python experiments/QELM_Q/plot_knn.py outputs/exp_QELM_Q/<date_time>
 ```
 
+### Bayes-Ridge on the record `M`, finite-size scaling (issue #233)
+
+Every run of `exp_QELM_Q.py` also reads the charge from the record `M` alone
+with a two-step pipeline (`QELM.evaluation.bayes_ridge`): for each charge the
+log-likelihood `log P(M | Q)` of a generative model, the fully scrambled limit
+of the symmetric exclusion process of Barratt et al. 2022 (before each round
+the configuration is uniform on charge `Q`, with a leak `epsilon = 1e-3` per
+round), then a ridge on the two log-likelihoods. It logs
+`accuracy_M_bayes_ridge` (with its balanced accuracy and R2) and
+`accuracy_M_bayes`, the Bayes rule of the model alone on the same test
+samples. `BALANCED=true` (`samples.balanced=true`) imposes the outcome of the
+ancilla, `Q1, Q2, Q1, ...`, so that each sector gets exactly half of the
+samples. `experiments/QELM_Q/plot_bayes_ridge_fss.py` draws the accuracy
+against `p` for every `N`, next to the SEP Bayes accuracy of the random U(1)
+circuit of `experiments/learnability/` at the same `Ns = N - 1`, and tests an
+asymptotic behavior in `N` (fits `A_N = A_inf + c / N`, gaps between sizes,
+crossings of the curves, steepest slope against `N`). The figures of the PR
+come from:
+
+```bash
+OMP_NUM_THREADS=1 OUT_DIR=outputs/fss233/tfim N_VALUES="12 10 8 6" \
+  SEEDS="42 43" P_VALUES="0.0 0.05 0.1 0.2 0.3 0.4 0.6 0.8 1.0" \
+  FINAL_VALUES=true BALANCED=true STATE=vector L=2000 MAX_JOBS=4 \
+  ./experiments/QELM_Q/exp_QELM_Q.sh
+# The SEP reference at Ns = N - 1, with the 5 rounds of the TFIM run
+# (sep_matched) and with the t_f = Ns steps of the paper (sep_paper).
+for NS in 5 7 9 11; do for P in 0.0 0.05 0.1 0.2 0.3 0.4 0.6 0.8 1.0; do
+  uv run python experiments/learnability/learnability.py N=$NS samples.L=8000 learnability.n_boot=50 \
+    learnability.p=$P learnability.depth=5 learnability.measure_every=period \
+    hydra.run.dir=outputs/fss233/sep_matched/N${NS}_p$P
+  uv run python experiments/learnability/learnability.py N=$NS samples.L=8000 learnability.n_boot=50 \
+    learnability.p=$P hydra.run.dir=outputs/fss233/sep_paper/N${NS}_p$P
+done; done
+uv run python experiments/QELM_Q/plot_bayes_ridge_fss.py outputs/fss233/tfim \
+  --sep outputs/fss233/sep_matched outputs/fss233/sep_paper
+```
+
+With 5 rounds at every `N` the accuracy falls toward 1/2 as `N` grows, as
+`N**-1/2`: the scrambled model predicts `d'^2 ~ 4 R p / ((1 - p) Ns)`. With
+`R = Ns` rounds at a fixed step `dt = 2 / J` (so `evolution.t = 2 Ns`),
+`d'` no longer depends on `N` and the accuracy reaches a limit,
+`Phi(sqrt(p / (1 - p)))`; the follow-up sweep of the PR:
+
+```bash
+for N in 12 10 8 6; do NS=$((N - 1)); for SEED in 42 43; do
+  for P in 0.0 0.05 0.1 0.2 0.3 0.4 0.6 0.8 1.0; do
+    uv run python experiments/QELM_Q/exp_QELM_Q.py N=$N seed=$SEED \
+      samples.L=2000 samples.balanced=true \
+      projective_measurement.final_measurement=true \
+      projective_measurement.p=$P projective_measurement.nbr_time_evolution=$NS \
+      TFIM.h=10 evolution.t=$((2 * NS)) state_representation=vector \
+      hydra.run.dir=outputs/fss233/tfim_rN/N${N}_seed${SEED}_p$P
+done; done; done   # seed 42 only at N = 12, for time
+uv run python experiments/QELM_Q/plot_bayes_ridge_fss.py outputs/fss233/tfim_rN \
+  --sep outputs/fss233/sep_paper --out outputs/fss233/figures_rN
+```
+
 ### Run many runs at once: `MAX_JOBS` (issue #199)
 
 By default the launcher runs one run after the other. `MAX_JOBS=n` puts the
