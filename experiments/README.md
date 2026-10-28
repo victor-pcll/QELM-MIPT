@@ -336,6 +336,26 @@ uv run python experiments/QELM_Q/plot_bayes_ridge_fss.py outputs/fss233/tfim \
   --sep outputs/fss233/sep_matched outputs/fss233/sep_paper
 ```
 
+With 5 rounds at every `N` the accuracy falls toward 1/2 as `N` grows, as
+`N**-1/2`: the scrambled model predicts `d'^2 ~ 4 R p / ((1 - p) Ns)`. With
+`R = Ns` rounds at a fixed step `dt = 2 / J` (so `evolution.t = 2 Ns`),
+`d'` no longer depends on `N` and the accuracy reaches a limit,
+`Phi(sqrt(p / (1 - p)))`; the follow-up sweep of the PR:
+
+```bash
+for N in 12 10 8 6; do NS=$((N - 1)); for SEED in 42 43; do
+  for P in 0.0 0.05 0.1 0.2 0.3 0.4 0.6 0.8 1.0; do
+    uv run python experiments/QELM_Q/exp_QELM_Q.py N=$N seed=$SEED \
+      samples.L=2000 samples.balanced=true \
+      projective_measurement.final_measurement=true \
+      projective_measurement.p=$P projective_measurement.nbr_time_evolution=$NS \
+      TFIM.h=10 evolution.t=$((2 * NS)) state_representation=vector \
+      hydra.run.dir=outputs/fss233/tfim_rN/N${N}_seed${SEED}_p$P
+done; done; done   # seed 42 only at N = 12, for time
+uv run python experiments/QELM_Q/plot_bayes_ridge_fss.py outputs/fss233/tfim_rN \
+  --sep outputs/fss233/sep_paper --out outputs/fss233/figures_rN
+```
+
 ### Run many runs at once: `MAX_JOBS` (issue #199)
 
 By default the launcher runs one run after the other. `MAX_JOBS=n` puts the
