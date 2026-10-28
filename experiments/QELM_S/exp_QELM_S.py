@@ -14,7 +14,12 @@ probability ``p`` of ``entropy_task.p_values`` and each of its
    or ``U1_circuit``, ``layers_per_step`` layers per step), or the fixed
    Floquet Ising chain of Skinner et al. (2019) (``models=floquet_circuit``,
    issue #239, whose layer is a half-layer of bricks, the time step of the
-   paper).
+   paper), or the Ising chain in a tilted field in continuous time
+   (``models=continuous_tfim_1d``, issue #241: windows of length ``tau``
+   under ``exp(-i H dt)``, with Z measurements as a Poisson process of rate
+   ``gamma = -ln(1 - p) / tau``, so that a qubit is measured at least once in
+   a window with probability ``p``; row ``j`` of ``M`` holds the last outcome
+   of each qubit in window ``j``).
 2. Run ``n_rounds`` rounds (``entropy_task.n_rounds``, default ``2 N``, and
    about ``4 N`` half-layers, ``2 N`` periods, for ``floquet_circuit``,
    :func:`floquet_rounds`) of a
@@ -118,7 +123,9 @@ from QELM.models.circuits.base import BrickworkCircuit
 from QELM.models.circuits.clifford import CliffordBrickworkCircuit
 from QELM.models.circuits.floquet import FloquetBrickworkCircuit
 from QELM.models.circuits.haar import HaarBrickworkCircuit, U1BrickworkCircuit
+from QELM.models.continuous_tfim_1d import ContinuousTFIMChain
 from QELM.training import RidgeReadout
+from QELM.training.measurements.poisson import poisson_monitored_batch
 from QELM.training.measurements.projective import measure_projective_psi
 from QELM.utils import save_config, save_results
 
@@ -222,6 +229,58 @@ def _circuit_sampler(cfg: DictConfig, n_rounds: int) -> Callable[[], Step]:
         return step
 
     return draw
+
+
+def _continuous_trajectories(
+    cfg: DictConfig,
+    N: int,
+    p: np.ndarray,
+    n_windows: int,
+    psi0: np.ndarray,
+    rng: np.random.Generator,
+    M: np.ndarray,
+) -> np.ndarray:
+    """Run every trajectory of the continuous-time chain (issue #241).
+
+    ``n_disorder`` chains are drawn (couplings ``J_i``, from the global NumPy
+    state); trajectory ``i`` evolves under chain ``i % n_disorder``, so that
+    each chain gets every ``p``. The trajectories of one chain run as one
+    batch (:func:`QELM.training.measurements.poisson.poisson_monitored_batch`)
+    under ``U(dt) = exp(-i H dt)``, ``dt = tau / n_sub``, built from the
+    eigenvectors of ``H``.
+
+    Args:
+        M: The record, ``(L, n_windows, N)``, filled in place.
+
+    Returns:
+        The final states, ``(2**N, L)``.
+
+    Raises:
+        ValueError: If ``tau <= 0``, ``n_sub < 1`` or ``n_disorder < 1``.
+    """
+    block = OmegaConf.to_container(cfg[ContinuousTFIMChain.name], resolve=True)
+    assert isinstance(block, dict)
+    params = {**{str(k): v for k, v in block.items()}, "N": N}
+    tau = float(params.get("tau", 0.3))
+    n_sub = int(params.get("n_sub", 3))
+    n_disorder = int(params.get("n_disorder", 12))
+    if tau <= 0 or n_sub < 1 or n_disorder < 1:
+        raise ValueError(
+            "continuous_tfim_1d needs tau > 0, n_sub >= 1 and n_disorder >= 1, got "
+            f"{tau}, {n_sub}, {n_disorder}."
+        )
+    finals = np.zeros((psi0.shape[0], p.size), dtype=complex)
+    for b in tqdm(range(n_disorder)):
+        H = ContinuousTFIMChain(params).hamiltonian().toarray().real
+        E, V = np.linalg.eigh(H)
+        U_dt = (V * np.exp(-1j * E * tau / n_sub)) @ V.T
+        idx = np.arange(b, p.size, n_disorder)
+        if idx.size == 0:
+            continue
+        M[idx], finals[:, idx] = poisson_monitored_batch(
+            U_dt, psi0, p[idx], n_windows, n_sub, rng
+        )
+    return finals
 
 
 def floquet_rounds(N: int) -> int:
@@ -348,17 +407,23 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         n_rounds = int(task.n_rounds)
     elif model_name == FloquetBrickworkCircuit.name:
         n_rounds = floquet_rounds(N)
+    elif model_name == ContinuousTFIMChain.name:
+        # 4 N windows of length tau, as the 4 N half-layers of the Floquet chain.
+        n_rounds = 4 * N
     else:
         n_rounds = 2 * N
     if n_rounds < 1:
         raise ValueError(f"entropy_task.n_rounds must be >= 1, got {n_rounds}.")
 
+    draw_evolution: Callable[[], Step] | None = None
     if model_name == TransverseFieldIsingModel.name:
         draw_evolution = _tfim_sampler(cfg, N, float(task.dt))
     elif model_name in CIRCUITS:
         draw_evolution = _circuit_sampler(cfg, n_rounds)
-    else:
-        known = ", ".join([TransverseFieldIsingModel.name, *CIRCUITS])
+    elif model_name != ContinuousTFIMChain.name:
+        known = ", ".join(
+            [TransverseFieldIsingModel.name, *CIRCUITS, ContinuousTFIMChain.name]
+        )
         raise ValueError(f"models={model_name} is not supported here. Known: {known}.")
 
     # The dynamics come from the global NumPy state (set_seed), the
@@ -375,12 +440,21 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Z = np.zeros((L, N))
     Zshot = np.zeros((L, N))
     S = np.zeros(L)
+    finals = (
+        None
+        if draw_evolution is not None
+        else _continuous_trajectories(cfg, N, p, n_rounds, psi0, rng, M)
+    )
     for i in tqdm(range(L)):
-        evolve = draw_evolution()
-        psi = psi0
-        for j in range(n_rounds):
-            psi = evolve(psi, j)
-            psi, M[i, j] = measure_round(psi, float(p[i]), rng)
+        if finals is not None:
+            psi = finals[:, i]
+        else:
+            assert draw_evolution is not None
+            evolve = draw_evolution()
+            psi = psi0
+            for j in range(n_rounds):
+                psi = evolve(psi, j)
+                psi, M[i, j] = measure_round(psi, float(p[i]), rng)
         S[i] = von_neumann_entropy(psi, half)
         Z[i] = z_expectations(psi)
         Zshot[i] = single_shot(psi, rng)

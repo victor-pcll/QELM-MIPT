@@ -1,12 +1,19 @@
 """Measurement schemes: the :class:`Readout` parent and one module per scheme.
 
 ``projective.py``: strong Z measurement with probability ``p``;
-``weak.py``: weak charge measurement of strength ``gamma`` (issue #137).
+``weak.py``: weak charge measurement of strength ``gamma`` (issue #137);
+``poisson.py``: Z measurements as a Poisson process in continuous time
+(issue #241).
 """
 
 from __future__ import annotations
 
 from QELM.training.measurements.base import Readout, ReadoutResult
+from QELM.training.measurements.poisson import (
+    micro_step_probability,
+    poisson_monitored_batch,
+    poisson_rate,
+)
 from QELM.training.measurements.projective import (
     ProjectiveMeasurement,
     measure_projective_psi,
@@ -22,5 +29,8 @@ __all__ = [
     "measure_projective_psi",
     "measure_projective_rho",
     "measure_weak",
+    "micro_step_probability",
+    "poisson_monitored_batch",
+    "poisson_rate",
     "weak_kraus",
 ]
