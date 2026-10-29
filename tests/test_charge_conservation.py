@@ -96,9 +96,9 @@ def test_density_matrix_and_column_agree_with_the_vector() -> None:
 
 
 def test_sharp_charge() -> None:
-    """La charge de Eq. (B1) sur R + S vaut Ns // 2 ; |+>^N n'en a pas."""
+    """La charge de Eq. (B1) sur R + S vaut N // 2 ; |+>^N n'en a pas."""
     for initial in ("uniform", "product"):
-        psi = AncillaChargeSectorEncoding({"N": 7, "initial": initial}).state()
+        psi = AncillaChargeSectorEncoding({"N": 6, "initial": initial}).state()
         assert sharp_charge(psi) == 3
     with pytest.raises(ValueError, match="sharp"):
         sharp_charge(np.full(8, 8**-0.5))
@@ -120,10 +120,10 @@ def test_u1_dynamics_conserves_the_charge_exactly() -> None:
     """Portes U(1), brouillage et mesure faible : fuite exactement nulle."""
     rng = np.random.default_rng(1)
     circuit = U1BrickworkCircuit(
-        {"N": 7, "Nr": 1, "depth": 3, "scrambling_layers": 5}, rng
+        {"N": 6, "Nr": 1, "depth": 3, "scrambling_layers": 5}, rng
     )
     measurement = WeakMeasurement({"gamma": 0.5, "Nr": 1})
-    psi = AncillaChargeSectorEncoding({"N": 7, "initial": "product"}).state()
+    psi = AncillaChargeSectorEncoding({"N": 6, "initial": "product"}).state()
     Q = sharp_charge(psi)
     psi = circuit.scramble(psi)
     assert charge_leakage(psi, Q) == 0.0
@@ -236,7 +236,7 @@ def _break_every_other_trajectory(
         if t == 0:
             calls["n"] += 1
             if calls["n"] % 2 == 0:
-                state = get_site_operator(X, 1, self.N) @ state
+                state = get_site_operator(X, 1, self.N_total) @ state
         return state
 
     monkeypatch.setattr(module.U1BrickworkCircuit, "apply_layer", apply_layer)

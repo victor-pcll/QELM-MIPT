@@ -319,7 +319,8 @@ def test_ancilla_entropy_of_the_encoding() -> None:
         von_neumann_entropy(rho, [0])
     )
     # Same answer for the complement, since the global state is pure.
-    assert von_neumann_entropy(emb.state(), [1, 2, 3, 4]) == pytest.approx(1.0)
+    # N = 5 system qubits, sites 1 .. 5 after the ancilla (issue #235).
+    assert von_neumann_entropy(emb.state(), [1, 2, 3, 4, 5]) == pytest.approx(1.0)
 
 
 # ---- mean single-qubit entropy (issue #124) -----------------------------------

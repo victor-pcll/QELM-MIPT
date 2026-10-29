@@ -27,9 +27,9 @@ takes that limit at every round: just before a round the configuration is
 uniform on charge ``Q``, whatever was measured before. A round that measures
 ``k`` qubits and finds ``n`` of them at ``|1>`` then has the probability
 
-    P(m_r | Q) = C(Ns - k, Q - n) / C(Ns, Q),
+    P(m_r | Q) = C(N - k, Q - n) / C(N, Q),
 
-that of fixing those ``k`` sites in a uniform ``Q``-subset of ``Ns`` sites,
+that of fixing those ``k`` sites in a uniform ``Q``-subset of ``N`` sites,
 and ``log P(M | Q) = sum_r log P(m_r | Q)``. The model forgets the memory
 the dynamics keeps between two rounds (a qubit measured twice in a row
 likely gives the same outcome): it over-counts the evidence of correlated
@@ -45,7 +45,7 @@ So each round is a mixture: with probability ``1 - epsilon`` the scrambled
 model, with probability ``epsilon`` a leak that makes the ``k`` outcomes
 uniform, ``2**-k``:
 
-    P(m_r | Q) = (1 - epsilon) C(Ns - k, Q - n) / C(Ns, Q) + epsilon 2**-k.
+    P(m_r | Q) = (1 - epsilon) C(N - k, Q - n) / C(N, Q) + epsilon 2**-k.
 
 Every log-likelihood is then finite, and a round that contradicts ``Q``
 costs about ``log(epsilon) - k log 2``. ``epsilon = 1e-3`` (the default) is
@@ -83,14 +83,14 @@ def scrambled_log_likelihood(
     """Return ``log P(M | Q)`` of each record under the fully scrambled model.
 
     Args:
-        M: Records of shape ``(n, rounds, Ns)``: ``+1`` (``|0>``), ``-1``
+        M: Records of shape ``(n, rounds, N)``: ``+1`` (``|0>``), ``-1``
             (``|1>``) or ``0`` (not measured), as ``exp_QELM_Q`` saves them.
         Q: Charge of the hypothesis, the number of qubits at ``|1>``,
-            ``0 <= Q <= Ns``.
+            ``0 <= Q <= N``.
         epsilon: Probability of a leak per round, in ``[0, 1)``. With 0 the
             model is the pure scrambled limit, ``-inf`` where a round finds
             more qubits at ``|1>`` than ``Q`` or more at ``|0>`` than
-            ``Ns - Q``.
+            ``N - Q``.
 
     Returns:
         Array of shape ``(n,)``, finite when ``epsilon > 0``.
@@ -101,17 +101,17 @@ def scrambled_log_likelihood(
     """
     M = np.asarray(M)
     if M.ndim != 3:
-        raise ValueError(f"M must have shape (n, rounds, Ns), got {M.shape}.")
+        raise ValueError(f"M must have shape (n, rounds, N), got {M.shape}.")
     if not np.all(np.isin(M, (-1, 0, 1))):
         raise ValueError("M must hold only -1, 0 and +1.")
-    Ns = M.shape[2]
-    if not 0 <= Q <= Ns:
-        raise ValueError(f"Q must be in [0, {Ns}], got {Q}.")
+    N = M.shape[2]
+    if not 0 <= Q <= N:
+        raise ValueError(f"Q must be in [0, {N}], got {Q}.")
     if not 0.0 <= epsilon < 1.0:
         raise ValueError(f"epsilon must be in [0, 1), got {epsilon}.")
     k = np.sum(M != 0, axis=2)
     ones = np.sum(M == -1, axis=2)
-    log_h = _log_comb(Ns - k, Q - ones) - _log_comb(np.array(Ns), np.array(Q))
+    log_h = _log_comb(N - k, Q - ones) - _log_comb(np.array(N), np.array(Q))
     if epsilon == 0.0:
         return np.asarray(log_h.sum(axis=1))
     per_round = np.logaddexp(
@@ -126,7 +126,7 @@ def log_likelihood_features(
     """Return ``log P(M | Q)`` of each record for each candidate charge.
 
     Args:
-        M: Records of shape ``(n, rounds, Ns)``, see
+        M: Records of shape ``(n, rounds, N)``, see
             :func:`scrambled_log_likelihood`.
         charges: The candidate charges.
         epsilon: Probability of a leak per round, in ``(0, 1)``, so that
@@ -174,24 +174,24 @@ def bayes_accuracy(
 
 
 def scrambled_discriminability(
-    Ns: int, p: float, n_rounds: int, charges: Sequence[int]
+    N: int, p: float, n_rounds: int, charges: Sequence[int]
 ) -> float:
     """Return the discriminability ``d'`` of two charges under the scrambled model.
 
     Under the model, the number ``n`` of qubits found at ``|1>`` among the
-    ``k`` measured in a round is hypergeometric: mean ``k Q / Ns``, variance
-    ``k rho (1 - rho) (Ns - k) / (Ns - 1)`` with ``rho = Q / Ns``. The two
-    charges shift the mean by ``k |Q0 - Q1| / Ns``; in the Gaussian
-    approximation, with ``k = p Ns`` and ``rho`` at the middle of the two
+    ``k`` measured in a round is hypergeometric: mean ``k Q / N``, variance
+    ``k rho (1 - rho) (N - k) / (N - 1)`` with ``rho = Q / N``. The two
+    charges shift the mean by ``k |Q0 - Q1| / N``; in the Gaussian
+    approximation, with ``k = p N`` and ``rho`` at the middle of the two
     charges, the rounds add up to
 
-        d'^2 = n_rounds (k dQ / Ns)^2 (Ns - 1) / (k rho (1 - rho) (Ns - k)),
+        d'^2 = n_rounds (k dQ / N)^2 (N - 1) / (k rho (1 - rho) (N - k)),
 
-    which is ``~ 4 n_rounds p / ((1 - p) Ns)`` at half filling: the scaling
-    variable of the accuracy is ``n_rounds p / ((1 - p) Ns)``.
+    which is ``~ 4 n_rounds p / ((1 - p) N)`` at half filling: the scaling
+    variable of the accuracy is ``n_rounds p / ((1 - p) N)``.
 
     Args:
-        Ns: Number of system qubits, at least 2.
+        N: Number of system qubits, at least 2.
         p: Measurement probability per qubit and round, in ``[0, 1)``.
         n_rounds: Number of measurement rounds, at least 0.
         charges: The two charges.
@@ -203,24 +203,24 @@ def scrambled_discriminability(
         ValueError: If an argument is out of range (``p = 1`` gives an
             infinite ``d'``: a fully measured round reads the charge).
     """
-    if Ns < 2 or not 0.0 <= p < 1.0 or n_rounds < 0:
+    if N < 2 or not 0.0 <= p < 1.0 or n_rounds < 0:
         raise ValueError(
-            f"Need Ns >= 2, 0 <= p < 1, n_rounds >= 0; got {Ns}, {p}, {n_rounds}."
+            f"Need N >= 2, 0 <= p < 1, n_rounds >= 0; got {N}, {p}, {n_rounds}."
         )
     q0, q1 = (int(q) for q in charges)
     if q0 == q1:
         raise ValueError(f"Need two distinct charges, got {charges}.")
     if p == 0.0 or n_rounds == 0:
         return 0.0
-    k = p * Ns
-    rho = (q0 + q1) / (2 * Ns)
-    d2 = n_rounds * (k * abs(q0 - q1) / Ns) ** 2 * (Ns - 1)
-    d2 /= k * rho * (1 - rho) * (Ns - k)
+    k = p * N
+    rho = (q0 + q1) / (2 * N)
+    d2 = n_rounds * (k * abs(q0 - q1) / N) ** 2 * (N - 1)
+    d2 /= k * rho * (1 - rho) * (N - k)
     return float(np.sqrt(d2))
 
 
 def scrambled_accuracy(
-    Ns: int, p: float, n_rounds: int, charges: Sequence[int]
+    N: int, p: float, n_rounds: int, charges: Sequence[int]
 ) -> float:
     """Return the Bayes accuracy predicted by the scrambled model, two charges.
 
@@ -235,10 +235,10 @@ def scrambled_accuracy(
     ``d' / 2 ~ 0.7``, against the Bayes rule on records drawn from the
     model itself (``tests/test_bayes_ridge.py``); above, it ignores the
     discreteness of the counts and the spread of ``k``, and comes out low:
-    0.79 instead of 0.82 at ``Ns = 11``, ``p = 0.6``, 5 rounds.
+    0.79 instead of 0.82 at ``N = 11``, ``p = 0.6``, 5 rounds.
 
     Args:
-        Ns: Number of system qubits, at least 2.
+        N: Number of system qubits, at least 2.
         p: Measurement probability per qubit and round, in ``[0, 1]``.
         n_rounds: Number of measurement rounds, at least 0.
         charges: The two charges.
@@ -248,7 +248,7 @@ def scrambled_accuracy(
     """
     if p == 1.0 and n_rounds > 0:
         return 1.0
-    d = scrambled_discriminability(Ns, p, n_rounds, charges)
+    d = scrambled_discriminability(N, p, n_rounds, charges)
     return float(0.5 * (1 + erf(d / (2 * np.sqrt(2)))))
 
 

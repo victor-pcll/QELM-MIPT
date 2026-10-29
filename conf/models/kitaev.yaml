@@ -3,7 +3,7 @@
 # Scaffold so the dispatcher can route to the Kitaev model.
 # N is required by every model. Other Hamiltonian parameters are not implemented yet.
 models: kitaev
-N: 4 # total number of qubits, override with N=...
+N: 4 # number of system qubits, ancilla excluded, override with N=...
 kitaev:
   N: ${N}
 

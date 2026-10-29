@@ -103,14 +103,14 @@ def fake_learnability_sweep(sweep_dir: Path) -> Path:
 
 
 def fake_charge_sharpening_sweep(sweep_dir: Path) -> Path:
-    """One N = 7 run per reference abscissa of Fig. 7."""
+    """One N = 6 run (6 sites + the ancilla) per reference abscissa of Fig. 7."""
     grid, values = _on_union_grid(charge_sharpening_reference())
     for k, gamma in enumerate(grid):
         metrics = {m: float(v[k]) for m, v in values.items()}
         metrics.update({f"{m}_err": 0.001 for m in list(metrics)})
         _write_run(
-            sweep_dir / f"N7_seed0_g{k}",
-            f"N: 7\nNs: 6\nseed: 0\nsamples:\n  L: 100\n"
+            sweep_dir / f"N6_seed0_g{k}",
+            f"N: 6\nNr: 1\nN_total: 7\nseed: 0\nsamples:\n  L: 100\n"
             f"weak_measurement:\n  gamma: {float(gamma)!r}\n",
             metrics,
         )

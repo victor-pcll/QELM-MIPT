@@ -8,7 +8,7 @@ defaults:
   - config
   - _self_
 
-# The chain of the paper: L = Ns = N sites, no ancilla (Nr = 0). Eve learns
+# The chain of the paper: L = N sites, no ancilla (Nr = 0). Eve learns
 # the charge from the measurement record, not from an ancilla.
 N: 6
 Nr: 0
@@ -33,9 +33,9 @@ samples:
 # n_boot: bootstrap resamples for the error bars.
 # batch: records simulated at once; memory grows as batch * 2**L.
 learnability:
-  L: ${Ns}
+  L: ${N}
   p: 0.2
-  depth: ${Ns}
+  depth: ${N}
   charges: null
   boundary: open
   measure_every: layer

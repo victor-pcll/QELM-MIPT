@@ -26,7 +26,7 @@ from scipy import stats
 
 
 def linear_observables(
-    X: ArrayLike, labels: Sequence[str], Ns: int, *, bias: bool = True
+    X: ArrayLike, labels: Sequence[str], N: int, *, bias: bool = True
 ) -> dict[str, np.ndarray]:
     """Split the feature matrix of ``exp_QELM_Z`` into one block per Pauli.
 
@@ -35,13 +35,13 @@ def linear_observables(
     column of ones.
 
     Args:
-        X: Feature matrix of shape ``(L, len(labels) * Ns + bias)``.
+        X: Feature matrix of shape ``(L, len(labels) * N + bias)``.
         labels: Pauli labels of ``experiment.observables``, in order.
-        Ns: Number of system qubits.
+        N: Number of system qubits.
         bias: Whether the last column is the bias column, which is dropped.
 
     Returns:
-        ``{label: values}``, ``values`` of shape ``(L, Ns)``: column ``k`` is
+        ``{label: values}``, ``values`` of shape ``(L, N)``: column ``k`` is
         ``<O>`` on system qubit ``k`` (chain site ``k + Nr``).
 
     Raises:
@@ -49,16 +49,16 @@ def linear_observables(
             is not all ones.
     """
     X = np.asarray(X, dtype=float)
-    n_linear = len(labels) * Ns
+    n_linear = len(labels) * N
     expected = n_linear + int(bias)
     if X.ndim != 2 or X.shape[1] != expected:
         raise ValueError(
             f"X must have shape (L, {expected}) for {len(labels)} observables on "
-            f"Ns={Ns} qubits{' and a bias column' if bias else ''}, got {X.shape}."
+            f"N={N} qubits{' and a bias column' if bias else ''}, got {X.shape}."
         )
     if bias and not np.all(X[:, -1] == 1.0):
         raise ValueError("The last column of X is not the bias column of ones.")
-    blocks = X[:, :n_linear].reshape(X.shape[0], len(labels), Ns)
+    blocks = X[:, :n_linear].reshape(X.shape[0], len(labels), N)
     return {label: blocks[:, i] for i, label in enumerate(labels)}
 
 

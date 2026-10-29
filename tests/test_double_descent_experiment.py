@@ -52,7 +52,7 @@ def _cfg(*overrides: str):  # noqa: ANN202
 
 def test_config_composes() -> None:
     cfg = load_config(config_name="double_descent")
-    assert (cfg.N, cfg.Ns, cfg.Nr) == (8, 8, 0)
+    assert (cfg.N, cfg.Nr, cfg.N_total) == (8, 0, 8)
     assert cfg.training.name == "ridge"
     assert cfg.training.alpha == 0.0
     assert cfg.TFIM.h == cfg.TFIM.J == 1.0

@@ -35,7 +35,7 @@ unset VIRTUAL_ENV
 # ---- Parameters -------------------------------------------------------------
 EXPERIMENT="test_experiment"
 MODEL="TFIM"
-N_VALUES=(4 6)   # number of qubits, ancilla included
+N_VALUES=(4 6)   # system qubits, ancilla excluded (issue #235)
 SEEDS=(0 1)      # one run per seed and per N
 # -----------------------------------------------------------------------------
 

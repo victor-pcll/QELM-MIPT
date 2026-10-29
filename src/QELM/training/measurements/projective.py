@@ -158,7 +158,8 @@ class ProjectiveMeasurement(Readout):
 
     Attributes:
         qubits: Measured qubits in order, from ``params["qubits"]``, or
-            ``None`` to measure every system qubit ``Nr .. N-1``.
+            ``None`` to measure every system qubit, sites
+            ``Nr .. N_total - 1``.
         Nr: Number of ancilla qubits at the start of the chain (most
             significant bits), from ``params["Nr"]``, 0 by default.
             They are skipped when ``qubits`` is ``None``, so the ancillas
@@ -200,8 +201,9 @@ class ProjectiveMeasurement(Readout):
     ) -> ReadoutResult:
         """Measure each target qubit projectively with probability ``p``.
 
-        The targets are ``self.qubits`` when set, otherwise the system qubits
-        ``Nr .. N-1``: the ancillas are left unmeasured. Each target
+        The targets are ``self.qubits`` when set, otherwise the ``N`` system
+        qubits, sites ``Nr .. N_total - 1`` of a state of ``N_total``
+        qubits: the ancillas are left unmeasured. Each target
         qubit, in order, is measured with probability ``p`` and left
         untouched otherwise. With ``p = 1`` every target is measured and
         no extra random number is drawn, so the outcomes are the same as
@@ -210,8 +212,8 @@ class ProjectiveMeasurement(Readout):
         if it is) draws the outcome.
 
         Args:
-            rho: Density matrix of shape ``(2**N, 2**N)``, or a pure state
-                vector of shape ``(2**N,)``, measured with
+            rho: Density matrix of shape ``(2**N_total, 2**N_total)``, or a
+                pure state vector of shape ``(2**N_total,)``, measured with
                 :func:`measure_projective_psi` and the same random draws
                 (issue #183).
             p: Probability of measuring each target qubit, in ``[0, 1]``.
@@ -236,22 +238,22 @@ class ProjectiveMeasurement(Readout):
         rho = np.asarray(rho)
         collapse: Callable[..., tuple[np.ndarray, int]]
         if rho.ndim == 1:
-            N = _vector_qubits(rho)
-            if N < self.Nr:
+            N_total = _vector_qubits(rho)
+            if N_total < self.Nr:
                 raise ValueError(
-                    f"Total qubits ({N}) cannot be less than ancilla qubits "
+                    f"Total qubits ({N_total}) cannot be less than ancilla qubits "
                     f"({self.Nr})."
                 )
             collapse = measure_projective_psi
         else:
-            N, _, _ = qubit_counts(rho, self.Nr)
+            N_total = qubit_counts(rho, self.Nr).N_total
             collapse = measure_projective_rho
-        qubits = list(range(self.Nr, N)) if self.qubits is None else self.qubits
+        qubits = list(range(self.Nr, N_total)) if self.qubits is None else self.qubits
         outcomes = np.full(len(qubits), np.nan, dtype=np.float64)
         for k, q in enumerate(qubits):
             if p < 1:
                 u = rng.random() if rng is not None else np.random.random()
                 if u >= p:
                     continue
-            rho, outcomes[k] = collapse(rho, q, N, rng)
+            rho, outcomes[k] = collapse(rho, q, N_total, rng)
         return ReadoutResult(outcomes=outcomes, rho=rho)

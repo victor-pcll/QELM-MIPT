@@ -15,16 +15,19 @@ defaults:
 # Scalar seed applied once at startup. Override with seed=0 on the command line.
 seed: 42
 
-# Qubit counts (issue #88). N is the total number of qubits, ancilla included;
-# it is set by the selected model file (conf/models/) and overridden with N=6.
-# Nr is the number of ancilla (readout) qubits, the first sites of the chain.
-# Ns, the number of system qubits, is never set by hand: Ns = N - Nr.
+# Qubit counts (issue #235, which replaces the convention of issue #88).
+# N is the number of system qubits, the size of the studied system, ancilla
+# excluded; it is set by the selected model file (conf/models/) and
+# overridden with N=6. Nr is the number of ancilla (readout) qubits, the
+# first sites of the chain. N_total, the number of qubits of the simulated
+# state, is never set by hand: N_total = N + Nr.
 # Every block that needs a qubit count interpolates these three keys, and
 # load_config and the scripts check that they agree (QELM.config).
 Nr: 1
-Ns: ${int:${sub:${N},${Nr}}}
+N_total: ${int:${add:${N},${Nr}}}
 
-# Initial state of the reservoir (QELM.encoding), on all N qubits.
+# Initial state of the reservoir (QELM.encoding): N system qubits next to
+# the Nr ancillas, N_total qubits in all.
 ancilla_charge_sector:
   N: ${N}
 
@@ -44,9 +47,9 @@ state_representation: density
 # Samples. Not read by the pipeline yet.
 samples:
   L: 10000 # number of samples
-  # Ratio of samples to qubits (issue #201): when set, experiments/QELM_Q
-  # replaces L by int(delta * N), so that the data grow with the number of
-  # features of the readout. Override with samples.delta=200.
+  # Ratio of samples to system qubits (issue #201): when set,
+  # experiments/QELM_Q replaces L by int(delta * N), so that the data grow
+  # with the number of features of the readout. Override with samples.delta=200.
   delta: null
   # balanced: true imposes the outcome of the ancilla, Q1, Q2, Q1, ..., so that
   # each charge sector gets exactly half of the samples (issue #233), instead
