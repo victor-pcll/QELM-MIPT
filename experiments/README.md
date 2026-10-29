@@ -909,7 +909,7 @@ Floquet version: one draw of the gates of a period, repeated in time.
 
 The 1D Hamiltonians and the Floquet bricks are rebuilt in
 `QELM.evaluation.chaos_locality` with the conventions of their pull requests
-(#238, #240, #242), so that the diagnostics run on `main`. It writes five
+(#238, #240, #242), so that the diagnostics run on `main`. It writes six
 figures per family, each with its JSON, in
 `outputs/diagnostics_physiques/<date_time>/<family>/`, and `summary.json`
 (`--out` to change the folder):
@@ -939,12 +939,21 @@ figures per family, each with its JSON, in
 - `reference_qubit_cutoff.png` (part B3b): `<S_Q(t)>` when the outcomes of
   the measurements at `|x - x0| > l` are not recorded (the state is averaged
   over them), for `l` in `--cutoffs` (`-1`: nothing recorded, `S_Q = 1`).
+- `velocities.png` (part B2b, local models only): the entanglement velocity
+  `v_E`, slope of the half-chain `S_A(t) ~ v_E t` (`N = 12`) from random
+  product states (infinite temperature, 1 bit per site at equilibrium),
+  averaged over `--velocity-draws` states (`--velocity-circuit-draws` draws
+  of a random circuit); the butterfly velocity `v_B`, slope
+  of the front `C(r, t*) = 0.5` of the spreading of `Z_0(t)` from the edge of
+  the chain (`N = 11`); and the Lieb-Robinson velocity `v_LR`, 1 site per
+  half-layer for a circuit and the Nachtergaele-Sims bound `7.57 ||h_bond||`
+  for a Hamiltonian. A chaotic local model has `v_E <= v_B <= v_LR`.
 
 The default sizes (`N = 12` for the continuous spectra and 10 for the
 quasi-energies, 6 to 12 for the growth, 10 for the OTOC, 8 for the reference
 qubit) take about an hour; `--quick` runs tiny sizes in seconds,
 `--models ising_hz05 haar` a subset of the reservoirs and `--parts spectra
-growth otoc reference` a subset of the diagnostics (each part of each family
+growth otoc reference velocities` a subset of the diagnostics (each part of each family
 has its own random generator, so a part run alone gives the same figure as in
 the full run).
 

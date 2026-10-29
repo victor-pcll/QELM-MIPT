@@ -62,6 +62,12 @@ Figures, in ``outputs/diagnostics_physiques/<date_time>/<family>/``
    outcomes of the measurements at ``|x - x0| <= l`` are kept, at the same
    two ``p``.
 
+6. ``velocities.png`` (part B2b, the local models): the entanglement
+   velocity ``v_E`` (slope of ``S_A(t)`` from random product states), the
+   butterfly velocity ``v_B`` (front of ``C(x, t)`` from the edge of the
+   chain) and the Lieb-Robinson velocity ``v_LR``, against ``v_E <= v_B <=
+   v_LR``.
+
 ``--families``, ``--models`` and ``--parts`` run a subset; ``--quick`` runs
 tiny sizes in a few seconds (tests).
 
@@ -89,16 +95,20 @@ from QELM.evaluation.chaos_locality import (
     R_POISSON,
     Step,
     brickwork_bonds,
+    butterfly_velocity,
     charge_operator,
     dense_operator,
     entanglement_growth,
+    entanglement_velocity,
     floquet_ising_gate,
     gate_layer_operator,
     goe_pdf,
     gue_pdf,
     ising_chain_hamiltonian,
     level_statistics,
+    lieb_robinson_velocity,
     neel_state,
+    operator_spreading,
     otoc_map,
     parity_operator,
     poisson_pdf,
@@ -106,6 +116,7 @@ from QELM.evaluation.chaos_locality import (
     quasienergies,
     random_brickwork_steps,
     random_floquet_layers,
+    random_product_state,
     reference_qubit_cutoff,
     reference_qubit_trajectories,
     reflection_operator,
@@ -153,6 +164,10 @@ class Reservoir:
         disordered: Whether two draws differ (averaged over in part A).
         random_gates: For a random circuit, the draw of one gate: its
             dynamics has new gates at every step.
+        bond_norm: Largest norm of a two-site term of a local Hamiltonian
+            (its Lieb-Robinson velocity), ``None`` for a circuit or a
+            non-local model.
+        velocity_tau: Time step of the velocity part, finer than ``tau``.
     """
 
     key: str
@@ -163,15 +178,34 @@ class Reservoir:
     tau: float = 1.0
     disordered: bool = False
     random_gates: Callable[[np.random.Generator], np.ndarray] | None = None
+    bond_norm: float | None = None
+    velocity_tau: float = 1.0
+
+    @property
+    def lieb_robinson(self) -> float | None:
+        """``v_LR``: 1 site per half-layer for a brickwork circuit, the bound
+        of :func:`lieb_robinson_velocity` for a local Hamiltonian, ``None``
+        without a light cone."""
+        if self.family == "discrete":
+            return 1.0
+        if self.bond_norm is None:
+            return None
+        return lieb_robinson_velocity(self.bond_norm)
 
     def steps(
-        self, N: int, n_steps: int, rng: np.random.Generator, sparse: bool = False
+        self,
+        N: int,
+        n_steps: int,
+        rng: np.random.Generator,
+        sparse: bool = False,
+        tau: float | None = None,
     ) -> list[Step]:
         """Draw the time steps of the dynamics, cycled by the diagnostics.
 
         A Hamiltonian gives ``[exp(-i H tau)]``, dense or applied from the
         sparse ``H`` (``sparse=True``), the Floquet chain its two
         half-layers, a random circuit ``n_steps`` half-layers of new gates.
+        ``tau`` replaces the time step of a Hamiltonian.
         """
         if self.random_gates is not None:
             return list(random_brickwork_steps(N, n_steps, self.random_gates, rng))
@@ -179,9 +213,10 @@ class Reservoir:
         if instance.layers is not None:
             return instance.layers
         assert instance.H is not None
+        tau = self.tau if tau is None else tau
         if sparse:
-            return [propagator_operator(instance.H, self.tau)]
-        return [step_unitary(instance.H, self.tau)]
+            return [propagator_operator(instance.H, tau)]
+        return [step_unitary(instance.H, tau)]
 
 
 def reservoirs(tfim_h: float = 10.0, xxz_h: float = 1.0) -> list[Reservoir]:
@@ -237,8 +272,17 @@ def reservoirs(tfim_h: float = 10.0, xxz_h: float = 1.0) -> list[Reservoir]:
             tau=0.25,
             disordered=True,
         ),
+        # J_i <= 1.5: bond norm 1.5. XXZ: ||XX + YY + ZZ|| = 3.
         Reservoir(
-            "ising_hz0", "Ising 1D $h_z=0$", hamiltonian, "$tJ$", ising(0.0), 0.3, True
+            "ising_hz0",
+            "Ising 1D $h_z=0$",
+            hamiltonian,
+            "$tJ$",
+            ising(0.0),
+            0.3,
+            True,
+            bond_norm=1.5,
+            velocity_tau=0.1,
         ),
         Reservoir(
             "ising_hz05",
@@ -248,8 +292,19 @@ def reservoirs(tfim_h: float = 10.0, xxz_h: float = 1.0) -> list[Reservoir]:
             ising(0.5),
             0.3,
             True,
+            bond_norm=1.5,
+            velocity_tau=0.1,
         ),
-        Reservoir("xxz", "XXZ 1D clean", hamiltonian, "$tJ$", xxz, tau=0.1),
+        Reservoir(
+            "xxz",
+            "XXZ 1D clean",
+            hamiltonian,
+            "$tJ$",
+            xxz,
+            tau=0.1,
+            bond_norm=3.0,
+            velocity_tau=0.05,
+        ),
         Reservoir(
             "xxz_disorder",
             f"XXZ 1D, $h_i\\in[-{xxz_h:g},{xxz_h:g}]$",
@@ -258,6 +313,8 @@ def reservoirs(tfim_h: float = 10.0, xxz_h: float = 1.0) -> list[Reservoir]:
             xxz_disorder,
             tau=0.1,
             disordered=True,
+            bond_norm=3.0,
+            velocity_tau=0.05,
         ),
         Reservoir("floquet", "Floquet (Skinner)", "discrete", "half-layers", floquet),
         Reservoir(
@@ -476,6 +533,155 @@ def _front(C: np.ndarray, t: np.ndarray, x0: int, threshold: float = 0.1) -> dic
 
 
 # ---------------------------------------------------------------------------
+# Part B2b
+
+
+def run_velocities(
+    models: Sequence[Reservoir],
+    N_otoc: int,
+    N_entropy: int,
+    n_steps: int,
+    draws: int,
+    circuit_draws: int,
+    thresholds: Sequence[float],
+    rng: np.random.Generator,
+    out_dir: Path,
+) -> dict[str, Any]:
+    """Draw ``velocities.png``: ``v_E``, ``v_B`` and ``v_LR`` of the local models.
+
+    - ``v_B``: front of ``C(x, t) = (1/2) <|[Z_0(t), Z_x]|^2>`` from the edge
+      ``x0 = 0`` (:func:`operator_spreading`, ``N_otoc`` sites, distances up
+      to ``N_otoc - 1``), at the level ``thresholds[0]``; the other levels
+      are in the JSON.
+    - ``v_E``: slope of the half-chain ``S_A(t)`` (``N_entropy`` sites) from
+      random product states, infinite temperature (``s_eq`` = 1 bit per
+      site).
+    - ``v_LR``: 1 site per half-layer for a circuit, the Lieb-Robinson bound
+      for a Hamiltonian.
+
+    A disordered model is averaged over ``draws`` draws (the OTOC map and
+    ``S_A(t)``, one random product state per draw), a random circuit over
+    ``circuit_draws`` draws (its single-draw OTOC is noisy: 0 or 2 on every
+    site for a Clifford circuit); the clean models use ``draws`` product
+    states for ``S_A(t)``.
+    """
+    local = [m for m in models if m.lieb_robinson is not None]
+    summary: dict[str, Any] = {}
+    if not local:
+        return summary
+    fig, axes = subplots(1, 3, figsize=(15, 4.4), squeeze=False)
+    ax_front, ax_growth, ax_bars = axes[0]
+    for k, model in enumerate(local):
+        color = COLORS[k % len(COLORS)]
+        tau = model.velocity_tau
+        t = np.arange(n_steps + 1) * tau
+        model_draws = circuit_draws if model.random_gates is not None else draws
+        otoc_draws = model_draws if model.disordered else 1
+        C = np.mean(
+            [
+                operator_spreading(
+                    model.steps(N_otoc, n_steps, rng, tau=tau), 0, n_steps
+                )
+                for _ in range(otoc_draws)
+            ],
+            axis=0,
+        )
+        fronts = {th: butterfly_velocity(C, t, 0, th) for th in thresholds}
+        S = np.mean(
+            [
+                entanglement_growth(
+                    model.steps(N_entropy, n_steps, rng, sparse=True, tau=tau),
+                    random_product_state(N_entropy, rng),
+                    n_steps,
+                )
+                for _ in range(model_draws)
+            ],
+            axis=0,
+        )
+        growth = entanglement_velocity(t, S)
+        v_B = fronts[thresholds[0]]
+        v_LR = model.lieb_robinson
+        assert v_LR is not None
+        summary[model.key] = {
+            "v_E": growth.velocity,
+            "v_B": v_B.velocity,
+            "v_LR": v_LR,
+            "v_B_by_threshold": {str(th): f.velocity for th, f in fronts.items()},
+            "front_times": [float(x) for x in v_B.t],
+            "front_distances": [float(r) for r in v_B.y],
+            "S_max": float(S.max()),
+            "otoc_draws": otoc_draws,
+            "entropy_draws": model_draws,
+        }
+        ax_front.plot(v_B.t, v_B.y, "o", color=color, label=model.key)
+        ax_front.plot(
+            v_B.t,
+            v_B.velocity * v_B.t + v_B.intercept,
+            "-",
+            color=color,
+            label=f"{model.label}: $v_B$ = {v_B.velocity:.2f}",
+        )
+        ax_growth.plot(
+            t, S, color=color, label=f"{model.label}: $v_E$ = {growth.velocity:.2f}"
+        )
+        ax_growth.plot(
+            growth.t,
+            growth.velocity * growth.t + growth.intercept,
+            "--",
+            color="black",
+            linewidth=1,
+            label=f"{model.key} fit",
+        )
+    time_unit = local[0].time_unit
+    ax_front.set_xlabel(f"front time $t^*(r)$ ({time_unit})")
+    ax_front.set_ylabel("distance $r$ from $x_0 = 0$ (sites)")
+    ax_front.set_title(f"(a) OTOC front, $C(r, t^*) = {thresholds[0]:g}$, N = {N_otoc}")
+    ax_front.legend(
+        [line for line in ax_front.get_lines() if line.get_linestyle() == "-"],
+        [f"{m.label}: $v_B$ = {summary[m.key]['v_B']:.2f}" for m in local],
+        fontsize=8,
+    )
+    ax_growth.set_xlabel(time_unit)
+    ax_growth.set_ylabel("$S_A$ (bits), $A$ = left half")
+    ax_growth.set_title(f"(b) $S_A(t)$ from random product states, N = {N_entropy}")
+    ax_growth.legend(
+        [line for line in ax_growth.get_lines() if line.get_linestyle() == "-"],
+        [f"{m.label}: $v_E$ = {summary[m.key]['v_E']:.2f}" for m in local],
+        fontsize=8,
+    )
+    x = np.arange(len(local))
+    width = 0.27
+    for i, (name, label) in enumerate(
+        (("v_E", "$v_E$"), ("v_B", "$v_B$"), ("v_LR", "$v_{LR}$"))
+    ):
+        values = [summary[m.key][name] for m in local]
+        bars = ax_bars.bar(
+            x + (i - 1) * width, values, width, color=COLORS[i], label=label
+        )
+        ax_bars.bar_label(bars, fmt="%.2f", fontsize=7)
+    ax_bars.set_xticks(x, [m.key for m in local], rotation=20)
+    ax_bars.set_yscale("log")
+    ax_bars.set_ylabel(f"velocity (sites per {time_unit})")
+    ax_bars.set_title("(c) $v_E \\leq v_B \\leq v_{LR}$")
+    ax_bars.legend(fontsize=8)
+    fig.suptitle("Entanglement, butterfly and Lieb-Robinson velocities")
+    save_figure(
+        fig,
+        out_dir,
+        "velocities",
+        {
+            "N_otoc": N_otoc,
+            "N_entropy": N_entropy,
+            "n_steps": n_steps,
+            "thresholds": list(thresholds),
+            "models": summary,
+        },
+    )
+    plt.close(fig)
+    return summary
+
+
+# ---------------------------------------------------------------------------
 # Part B3
 
 
@@ -620,7 +826,7 @@ def run_reference_qubit(
 
 # Each part draws from its own generator, spawned from --seed, so that a part
 # run alone (--parts) gives the same figure as in the full run.
-PARTS = ("spectra", "growth", "otoc", "reference")
+PARTS = ("spectra", "growth", "otoc", "reference", "velocities")
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -638,6 +844,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--growth-steps", type=int, default=40)
     parser.add_argument("--N-otoc", type=int, default=10)
     parser.add_argument("--otoc-steps", type=int, default=24)
+    parser.add_argument("--N-velocity-otoc", type=int, default=11)
+    parser.add_argument("--N-velocity-entropy", type=int, default=12)
+    parser.add_argument("--velocity-steps", type=int, default=80, help="continuous")
+    parser.add_argument("--velocity-steps-discrete", type=int, default=50)
+    parser.add_argument("--velocity-draws", type=int, default=6)
+    parser.add_argument("--velocity-circuit-draws", type=int, default=16)
+    parser.add_argument("--front-thresholds", type=float, nargs="+", default=[0.5, 0.2])
     parser.add_argument("--N-ref", type=int, default=8)
     parser.add_argument("--ref-steps", type=int, default=24)
     parser.add_argument("--p-volume", type=float, default=0.05)
@@ -662,6 +875,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         args.N_growth, args.growth_steps = [4, 6], 4
         args.N_otoc, args.otoc_steps = 4, 3
         args.N_ref, args.ref_steps = 4, 3
+        args.N_velocity_otoc, args.N_velocity_entropy = 6, 6
+        args.velocity_steps, args.velocity_steps_discrete = 12, 12
+        args.velocity_draws, args.velocity_circuit_draws = 2, 2
         args.cutoffs = [-1, 0, 4]
         args.trajectories, args.cutoff_trajectories = 2, 2
     return args
@@ -675,6 +891,9 @@ def run_family(
     seed = [args.seed, FAMILIES.index(family)]
     rngs = dict(zip(PARTS, np.random.default_rng(seed).spawn(len(PARTS))))
     N_spectra = args.N_spectra if family == "continuous" else args.N_spectra_discrete
+    velocity_steps = (
+        args.velocity_steps if family == "continuous" else args.velocity_steps_discrete
+    )
     runs: dict[str, Callable[[], dict[str, Any]]] = {
         "spectra": lambda: run_level_spacing(
             models, N_spectra, args.realisations, rngs["spectra"], folder
@@ -700,6 +919,17 @@ def run_family(
             args.cutoff_trajectories,
             args.circuit_draws,
             rngs["reference"],
+            folder,
+        ),
+        "velocities": lambda: run_velocities(
+            models,
+            args.N_velocity_otoc,
+            args.N_velocity_entropy,
+            velocity_steps,
+            args.velocity_draws,
+            args.velocity_circuit_draws,
+            args.front_thresholds,
+            rngs["velocities"],
             folder,
         ),
     }

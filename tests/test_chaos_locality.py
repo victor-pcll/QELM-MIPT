@@ -20,10 +20,12 @@ from QELM.evaluation.chaos_locality import (
     bell_reference_state,
     brickwork_bonds,
     brickwork_layers,
+    butterfly_velocity,
     central_window,
     charge_operator,
     dense_operator,
     entanglement_growth,
+    entanglement_velocity,
     floquet_ising_gate,
     gap_ratios,
     gate_layer_operator,
@@ -31,7 +33,9 @@ from QELM.evaluation.chaos_locality import (
     gue_pdf,
     ising_chain_hamiltonian,
     level_statistics,
+    lieb_robinson_velocity,
     neel_state,
+    operator_spreading,
     otoc_map,
     parity_operator,
     poisson_pdf,
@@ -39,6 +43,7 @@ from QELM.evaluation.chaos_locality import (
     quasienergies,
     random_brickwork_steps,
     random_floquet_layers,
+    random_product_state,
     reference_entropy,
     reference_qubit_cutoff,
     reference_qubit_trajectories,
@@ -378,6 +383,69 @@ def test_otoc_vanishes_for_commuting_dynamics() -> None:
     np.testing.assert_allclose(C, 0, atol=1e-12)
 
 
+# --- velocities -----------------------------------------------------------------
+
+
+def test_operator_spreading_matches_the_otoc_of_a_real_hamiltonian() -> None:
+    # A real H is time-reversal symmetric: evolving Z_x or Z_x0 is the same.
+    H = ising_chain_hamiltonian([1.0, 0.8, 1.2, 0.9], h_x=1.05, h_z=0.5)
+    U = step_unitary(H, 0.4)
+    np.testing.assert_allclose(
+        operator_spreading([U], 1, 5), otoc_map([U], 1, 5), atol=1e-10
+    )
+
+
+def test_operator_spreading_from_the_edge_has_a_strict_light_cone() -> None:
+    N = 7
+    steps = random_brickwork_steps(N, 6, haar_gate, np.random.default_rng(21))
+    C = operator_spreading(steps, 0, 6)
+    for t in range(7):
+        # From the edge, one half-layer moves the operator by one site.
+        assert np.all(C[t, t + 1 :] < 1e-12), t
+        if 0 < t <= N:
+            # W^dagger Z_0 W meets the last half-layer first, which misses
+            # site 0 when it is odd: the front is at t or t - 1.
+            assert C[t, t - 1] > 1e-6, t
+
+
+def test_butterfly_velocity_of_a_ballistic_front() -> None:
+    times = np.arange(0, 20, 0.1)
+    x = np.arange(12)
+    C = np.clip(0.7 * times[:, None] - x[None, :] + 1, 0, 1)
+    fit = butterfly_velocity(C, times, 0, threshold=0.5)
+    assert fit.velocity == pytest.approx(0.7, rel=1e-6)
+    np.testing.assert_array_equal(fit.y, np.arange(2, 11))
+    assert math.isnan(butterfly_velocity(C[:5], times[:5], 0).velocity)
+
+
+def test_entanglement_velocity_of_a_linear_ramp() -> None:
+    t = np.arange(0, 10, 0.1)
+    S = np.minimum(1.3 * t, 5.0)
+    assert entanglement_velocity(t, S).velocity == pytest.approx(1.3)
+    assert entanglement_velocity(t, S, s_eq=0.5).velocity == pytest.approx(2.6)
+
+
+def test_lieb_robinson_velocity() -> None:
+    assert lieb_robinson_velocity(1.0) == pytest.approx(7.574, abs=1e-3)
+    assert lieb_robinson_velocity(3.0) == pytest.approx(3 * lieb_robinson_velocity(1))
+
+
+def test_butterfly_velocity_of_free_fermions_is_their_maximal_group_velocity() -> None:
+    # -sum ZZ - h sum X, h > J: quasi-particles faster than 2 J do not exist.
+    N, tau = 8, 0.1
+    H = ising_chain_hamiltonian(np.ones(N - 1), h_x=1.05, h_z=0.0)
+    C = operator_spreading([step_unitary(H, tau)], 0, 50)
+    v_B = butterfly_velocity(C, tau * np.arange(51), 0, threshold=0.2).velocity
+    assert v_B == pytest.approx(2.0, abs=0.15)
+    assert v_B < lieb_robinson_velocity(1.0)
+
+
+def test_random_product_state() -> None:
+    psi = random_product_state(5, np.random.default_rng(4))
+    assert np.linalg.norm(psi) == pytest.approx(1)
+    assert von_neumann_entropy(psi, [0, 1]) == pytest.approx(0, abs=1e-10)
+
+
 # --- reference qubit ------------------------------------------------------------
 
 
@@ -476,8 +544,12 @@ def test_script_writes_every_figure_of_both_families(tmp_path: Path) -> None:
             assert (out / family / f"{name}.png").is_file()
             data = json.loads((out / family / f"{name}.json").read_text())
             assert len(data["panels"]) >= len(keys)
+        assert (out / family / "velocities.png").is_file()
         assert set(summary[family]["spectra"]) == keys
         assert set(summary[family]["otoc"]) == keys
+        # The all-to-all TFIM has no light cone, hence no velocities.
+        assert set(summary[family]["velocities"]) == keys - {"tfim_all_to_all"}
+    assert summary["discrete"]["velocities"]["haar"]["v_LR"] == 1.0
     assert set(summary["continuous"]["growth"]["ising_hz05"]) == {"neel", "y"}
     assert summary["discrete"]["otoc"]["haar"]["draws"] == 2
     assert summary["discrete"]["otoc"]["floquet"]["draws"] == 1

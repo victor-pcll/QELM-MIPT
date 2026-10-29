@@ -41,7 +41,14 @@ uniform on the circle, so the unfolding is a division by ``2 pi / dim``.
    t)`` would cause, zero outside the light cone of ``x0``;
    :func:`reference_qubit_cutoff` keeps only the outcomes of the
    measurements at ``|x - x0| <= l`` and shows how far from ``x0`` the
-   purification of the area-law phase reaches.
+   purification of the area-law phase reaches;
+4. three velocities order the spreading, ``v_E <= v_B <= v_LR`` in a
+   chaotic local model (Mezei and Stanford, JHEP 2017, 65): the
+   entanglement velocity ``v_E`` of the linear growth ``S_A ~ s_eq v_E t``
+   (:func:`entanglement_velocity`), the butterfly velocity ``v_B`` of the
+   front of ``C(x, t)`` (:func:`operator_spreading`,
+   :func:`butterfly_velocity`) and the Lieb-Robinson velocity ``v_LR``
+   (:func:`lieb_robinson_velocity`), an upper bound on every front.
 
 The dynamics is a list of dense unitaries ``steps`` on the ``N`` system
 qubits, applied in turn and cycled (one ``exp(-i H tau)`` for a Hamiltonian,
@@ -60,6 +67,7 @@ from typing import cast
 
 import numpy as np
 import scipy.linalg
+import scipy.optimize
 import scipy.sparse as sp
 from scipy.sparse.linalg import LinearOperator, expm_multiply
 
@@ -744,6 +752,190 @@ def otoc_map(steps: Sequence[Step], x0: int, n_steps: int) -> np.ndarray:
             A = W.conj().T @ (z[:, x][:, None] * W)
             out[t, x] = 1.0 - float(b @ (np.abs(A) ** 2) @ b) / dim
     return np.clip(out, 0.0, None)
+
+
+# ---------------------------------------------------------------------------
+# Part B2b: velocities v_E <= v_B <= v_LR
+
+
+def operator_spreading(steps: Sequence[Step], x0: int, n_steps: int) -> np.ndarray:
+    """Return ``C(x, t) = (1/2) <|[Z_x0(t), Z_x]|^2>`` at infinite temperature.
+
+    The spreading of the one operator ``Z_x0(t) = W^dagger Z_x0 W``, probed by
+    ``Z_x`` on every site: one product of ``2**N x 2**N`` matrices per step,
+    against ``N`` for :func:`otoc_map`, which evolves ``Z_x`` instead. The two
+    maps coincide for a real Hamiltonian (time-reversal symmetry).
+
+    Args:
+        steps: Unitaries applied in turn and cycled, dense or as operators.
+        x0: Site of the evolved operator ``Z_x0``.
+        n_steps: Number of steps.
+
+    Returns:
+        Array of shape ``(n_steps + 1, N)``, ``C[t, x]``.
+    """
+    dim = steps[0].shape[0]
+    N = int(round(math.log2(dim)))
+    z = z_values(N).astype(float)
+    W = np.eye(dim, dtype=complex)
+    out = np.zeros((n_steps + 1, N))
+    for t in range(n_steps + 1):
+        if t > 0:
+            W = steps[(t - 1) % len(steps)] @ W
+        A2 = np.abs(W.conj().T @ (z[:, x0][:, None] * W)) ** 2
+        # sum_ij z_ix z_jx |A_ij|^2, for every x at once
+        out[t] = 1.0 - np.einsum("ix,ij,jx->x", z, A2, z) / dim
+    return np.clip(out, 0.0, None)
+
+
+def random_product_state(N: int, rng: np.random.Generator) -> np.ndarray:
+    """Return a product of ``N`` single-qubit states drawn uniformly on the sphere.
+
+    Its mean energy is zero for any traceless local ``H``: an infinite
+    temperature state, whose entropy density at equilibrium is 1 bit per
+    site.
+    """
+    psi = np.ones(1, dtype=complex)
+    for _ in range(N):
+        q = rng.normal(size=2) + 1j * rng.normal(size=2)
+        psi = np.kron(psi, q / np.linalg.norm(q))
+    return psi
+
+
+@dataclass
+class VelocityFit:
+    """Linear fit ``y = velocity * t + intercept`` of a front or a growth.
+
+    Attributes:
+        velocity: The slope, ``nan`` with fewer than 3 points.
+        intercept: The intercept.
+        t: Times of the fitted points.
+        y: Fitted values (distances for a front, entropies for a growth).
+    """
+
+    velocity: float
+    intercept: float
+    t: np.ndarray
+    y: np.ndarray
+
+
+def _linear_fit(t: np.ndarray, y: np.ndarray) -> VelocityFit:
+    if t.size < 3:
+        return VelocityFit(math.nan, math.nan, t, y)
+    slope, intercept = np.polyfit(t, y, 1)
+    return VelocityFit(float(slope), float(intercept), t, y)
+
+
+def front_times(C: np.ndarray, times: np.ndarray, threshold: float) -> np.ndarray:
+    """First time at which ``C[:, x]`` reaches ``threshold``, per site ``x``.
+
+    Linear interpolation between the two steps around the crossing; ``nan``
+    for a site never reached.
+    """
+    out = np.full(C.shape[1], np.nan)
+    for x in range(C.shape[1]):
+        above = np.flatnonzero(C[:, x] >= threshold)
+        if above.size == 0:
+            continue
+        k = int(above[0])
+        if k == 0:
+            out[x] = times[0]
+            continue
+        c0, c1 = C[k - 1, x], C[k, x]
+        out[x] = times[k - 1] + (threshold - c0) / (c1 - c0) * (times[k] - times[k - 1])
+    return out
+
+
+def butterfly_velocity(
+    C: np.ndarray,
+    times: np.ndarray,
+    x0: int,
+    threshold: float = 0.5,
+    r_min: int = 2,
+    r_max: int | None = None,
+) -> VelocityFit:
+    """Fit the butterfly velocity ``v_B`` on the front of an OTOC map.
+
+    The front ``t*(r)`` is the first time at which ``C`` reaches
+    ``threshold`` at the distance ``r = |x - x0|`` (:func:`front_times`);
+    ``v_B`` is the slope of ``r`` against ``t*``, fitted on ``r_min <= r <=
+    r_max`` (the first sites feel the initial transient, the last ones the
+    edge of the chain).
+
+    Args:
+        C: ``C[t, x]``, from :func:`operator_spreading` or :func:`otoc_map`.
+        times: Times of the rows of ``C``.
+        x0: Site of the evolved operator.
+        threshold: Level that defines the front.
+        r_min: Smallest fitted distance.
+        r_max: Largest fitted distance; ``N - 2`` from an edge, else the
+            largest distance minus one.
+
+    Returns:
+        The fit, ``t`` the front times and ``y`` the distances.
+    """
+    N = C.shape[1]
+    r = np.abs(np.arange(N) - x0)
+    if r_max is None:
+        r_max = int(r.max()) - 1
+    t_front = front_times(C, times, threshold)
+    keep = (r >= r_min) & (r <= r_max) & np.isfinite(t_front)
+    return _linear_fit(t_front[keep], r[keep].astype(float))
+
+
+def entanglement_velocity(
+    times: np.ndarray,
+    S: np.ndarray,
+    s_eq: float = 1.0,
+    window: tuple[float, float] = (0.2, 0.6),
+) -> VelocityFit:
+    """Fit the entanglement velocity ``v_E`` on ``S_A(t)`` after a quench.
+
+    Across one cut, ``S_A(t) ~ s_eq v_E t`` in the linear regime (Kim and
+    Huse, PRL 111, 127205 (2013)), ``s_eq`` the equilibrium entropy density:
+    1 bit per site at infinite temperature. The slope is fitted from the
+    first time ``S_A`` reaches ``window[0]`` times its maximum to the first
+    time it reaches ``window[1]`` times it, after the early ``t^2`` regime
+    and before the saturation.
+
+    Returns:
+        The fit, with ``velocity = slope / s_eq`` (sites per unit time),
+        ``t`` and ``y`` the fitted points of ``S_A``.
+    """
+    S_max = float(np.max(S))
+    start = int(np.argmax(S >= window[0] * S_max))
+    stop = int(np.argmax(S >= window[1] * S_max))
+    fit = _linear_fit(times[start : stop + 1], S[start : stop + 1])
+    return VelocityFit(fit.velocity / s_eq, fit.intercept, fit.t, fit.y)
+
+
+def _lieb_robinson_ratio() -> float:
+    def exponent(u: float) -> float:
+        return 0.5 + math.sqrt(u * u + 1) - u * math.asinh(u)
+
+    return 4 * float(scipy.optimize.brentq(exponent, 1.0, 3.0))
+
+
+def lieb_robinson_velocity(bond_norm: float) -> float:
+    """Lieb-Robinson velocity of a nearest-neighbour chain, ``7.57 ||h||``.
+
+    The bound of Nachtergaele and Sims (CMP 265, 119 (2006)), ``||[A(t),
+    B]|| <= 2 ||A|| ||B|| (exp(2 t M))_{XY}`` with ``M_{ZZ'} = ||h_Z'||``
+    when the bonds ``Z, Z'`` overlap, gives on a chain ``exp(2 h t) I_r(4 h
+    t)`` at distance ``r`` (``I_r`` the modified Bessel function, ``h =
+    bond_norm``). It stays small outside ``r = v_LR t``, ``v_LR = 4 u h``
+    with ``1/2 + sqrt(1 + u^2) = u asinh(u)``, ``u = 1.893``.
+
+    The on-site terms do not count: in the interaction picture they rotate
+    each site without moving any support. ``bond_norm`` is the largest
+    spectral norm of a two-site term (``J`` for ``J Z Z``, ``2 J + |Delta|``
+    for ``J (XX + YY) + Delta ZZ``). The bound is rigorous but not tight:
+    the measured fronts move several times slower.
+    """
+    return _LIEB_ROBINSON_RATIO * bond_norm
+
+
+_LIEB_ROBINSON_RATIO = _lieb_robinson_ratio()
 
 
 # ---------------------------------------------------------------------------
