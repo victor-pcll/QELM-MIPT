@@ -892,6 +892,90 @@ several sizes `N` cross at `p_success ~ 0.2` in the paper. The figure is
 `outputs/learnability_fig2c/<date_time>/` with `FIGURES=2c`, and plots
 Fig. 2c.
 
+## Check the chaos and the locality of the reservoirs (issue #243)
+
+```bash
+uv run python experiments/diagnostics/diagnostics_physiques.py
+```
+
+A measurement-induced transition needs a chaotic unitary dynamics (to keep a
+volume law at `p > 0`) and a local one (a light cone, for the competition
+between the spreading and the measurements). The script measures both, with
+the diagnostics of `QELM.evaluation.chaos_locality`, on two families of
+reservoirs (`--families`):
+
+| family | key | reservoir | step |
+| --- | --- | --- | --- |
+| continuous | `tfim_all_to_all` | TFIM of `conf/models/TFIM.yaml`, `h = 10` (`--tfim-h`) | `exp(-i H 0.25)` |
+| continuous | `ising_hz0` | open Ising chain of #241, `h_x = 1.05`, `h_z = 0`, `J_i` in `[0.5, 1.5]` | `exp(-i H 0.3)` |
+| continuous | `ising_hz05` | the same chain with `h_z = 0.5`, the reservoir of #241 | `exp(-i H 0.3)` |
+| continuous | `xxz` | clean Heisenberg chain of #236, `J = Delta = 1`, `h = 0` | `exp(-i H 0.1)` |
+| continuous | `xxz_disorder` | the same chain with fields `h_i` in `[-1, 1]` (`--xxz-h`) | `exp(-i H 0.1)` |
+| discrete | `floquet` | Floquet Ising chain of Skinner et al. (2019), #239 | one half-layer |
+| discrete | `haar` | Haar-random two-qubit gates, as `haar_circuit` | one half-layer |
+| discrete | `clifford` | random two-qubit Clifford gates, as `clifford_circuit` | one half-layer |
+
+The Haar and Clifford circuits draw new gates at every step, as in the
+experiments, and their dynamics is averaged over `--circuit-draws` draws. A
+circuit with new gates at every step has no spectrum, so part A uses their
+Floquet version: one draw of the gates of a period, repeated in time.
+
+The 1D Hamiltonians and the Floquet bricks are rebuilt in
+`QELM.evaluation.chaos_locality` with the conventions of their pull requests
+(#238, #240, #242), so that the diagnostics run on `main`. It writes seven
+figures per family, each with its JSON, in
+`outputs/diagnostics_physiques/<date_time>/<family>/`, and `summary.json`
+(`--out` to change the folder):
+
+- `level_spacing.png` (part A): histogram of the unfolded level spacings of
+  the central third of every symmetry sector (parities, charge, reflection),
+  pooled over `--realisations` disorder draws, against Poisson `exp(-s)`, the
+  GOE `(pi/2) s exp(-pi s^2/4)` and the GUE. The mean gap ratio `<r>` in each
+  title reads without unfolding: 0.386 for Poisson, 0.531 for the GOE, 0.600
+  for the GUE.
+- `entropy_growth.png` (part B1): half-chain `S_A(t)` at `p = 0` from the
+  Néel state (top row) and from `|+y>^N` (bottom row), one curve per `N`
+  (`--N-growth`). `|+y>^N` has zero energy for the TFIM and the Ising chains
+  (infinite temperature), so `S_A` saturates near the Page value; the Néel
+  state is an extreme of the `- J Z Z` couplings and saturates lower; for the
+  SU(2)-symmetric XXZ chain `|+y>^N` is an eigenstate and nothing grows. A local
+  model grows linearly at a rate that does not depend on `N` (`max_rate` in
+  the JSON).
+- `otoc.png` (part B2): `C(x, t) = (1/2) <|[Z_x(t), Z_x0]|^2>` at infinite
+  temperature, `x0 = N/2`: a "V" for a local model.
+- `reference_qubit_delta.png` (part B3a): a reference qubit `R` in a Bell pair
+  with `x0`, the rest of the chain in the Néel state; the mean entropy
+  `-<Delta S_Q(x, t)>` that one extra measurement at `(x, t)` would remove from
+  `R` (averaged over its outcome, not applied), at `--p-volume` and
+  `--p-area`, on a log color scale. It is exactly zero until the information
+  on `R` reaches `x`.
+- `reference_qubit_cutoff.png` (part B3b): `<S_Q(t)>` when the outcomes of
+  the measurements at `|x - x0| > l` are not recorded (the state is averaged
+  over them), for `l` in `--cutoffs` (`-1`: nothing recorded, `S_Q = 1`).
+- `velocities.png` (part B2b, local models only): the entanglement velocity
+  `v_E`, slope of the half-chain `S_A(t) ~ v_E t` (`N = 12`) from random
+  product states (infinite temperature, 1 bit per site at equilibrium),
+  averaged over `--velocity-draws` states (`--velocity-circuit-draws` draws
+  of a random circuit); the butterfly velocity `v_B`, slope
+  of the front `C(r, t*) = 0.5` of the spreading of `Z_0(t)` from the edge of
+  the chain (`N = 11`); and the Lieb-Robinson velocity `v_LR`, 1 site per
+  half-layer for a circuit and the Nachtergaele-Sims bound `7.57 ||h_bond||`
+  for a Hamiltonian. A chaotic local model has `v_E <= v_B <= v_LR`.
+- `scrambling.png` (part B2c, every model): the scrambling time at fixed
+  `N = 11` (`--N-scrambling`). `Z_x0` starts at the centre, and the time is
+  the first one at which `C(x, t) = (1/2) <|[Z_x0(t), Z_x]|^2>` reaches
+  `0.5` (`--scrambling-threshold`) on every site: `~ (N/2) / v_B` for a local
+  model.
+
+The default sizes (`N = 12` for the continuous spectra and 10 for the
+quasi-energies, 6 to 12 for the growth, 10 for the OTOC, 8 for the reference
+qubit, 11 and 12 for the velocities, 11 for the scrambling time) take about
+two hours; `--quick` runs tiny sizes in seconds, `--models ising_hz05 haar` a
+subset of the reservoirs and `--parts spectra growth otoc reference
+velocities scrambling` a subset of the diagnostics (each part of each family
+has its own random generator, so a part run alone gives the same figure as in
+the full run).
+
 ## Write your own
 
 1. Copy the test script and make the copy executable:
