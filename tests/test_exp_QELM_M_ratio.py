@@ -19,9 +19,9 @@ from QELM.training import RidgeReadout
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "experiments" / "QELM_M" / "exp_QELM_M_ratio.py"
 BASH_SCRIPT = SCRIPT.with_suffix(".sh")
-N, N_TEST = 4, 20
-# 5 measurement steps (the default) x (N - 1) system qubits + the bias.
-N_PARAMS = 5 * (N - 1) + 1
+N, N_TEST = 3, 20
+# 5 measurement steps (the default) x N system qubits + the bias.
+N_PARAMS = 5 * N + 1
 OVERRIDES = ["models=TFIM", f"N={N}", f"experiment.n_test={N_TEST}"]
 
 
@@ -56,7 +56,7 @@ def test_sample_sizes_reject_bad_input(
         _load_script().sample_sizes(ratio, n_features, n_test)
 
 
-@pytest.mark.parametrize(("n", "steps"), [(3, 5), (4, 5), (4, 2)])
+@pytest.mark.parametrize(("n", "steps"), [(2, 5), (3, 5), (3, 2)])
 def test_n_params_matches_the_features(n: int, steps: int) -> None:
     """The weight count computed from the config is the column count of X."""
     module = _load_script()
@@ -70,7 +70,7 @@ def test_n_params_matches_the_features(n: int, steps: int) -> None:
         ],
         config_name="QELM_M_ratio",
     )
-    expected = steps * (n - 1) + 1
+    expected = steps * n + 1
     assert module.n_params(cfg) == expected
     out = module.run(cfg)
     assert out["X"].shape == (expected + 5, expected)
@@ -198,7 +198,7 @@ def test_bash_launcher_dry_run(tmp_path: Path) -> None:
         env={
             **os.environ,
             "OUT_ROOT": str(tmp_path),
-            "N_VALUES": "3",
+            "N_VALUES": "2",
             "N_TEST": "10",
             "ALPHA_RATIOS": "0.5 2.0",
             "VIRTUAL_ENV": str(tmp_path / "other-project" / ".venv"),
@@ -210,10 +210,10 @@ def test_bash_launcher_dry_run(tmp_path: Path) -> None:
     assert "Done: 1 x 1 x 1 x 2 runs" in result.stdout
     runs = sorted(tmp_path.glob("exp_QELM_M_ratio/*/*"))
     assert [run.name for run in runs] == [
-        "N3_seed42_p1.0_a0.5",
-        "N3_seed42_p1.0_a2.0",
+        "N2_seed42_p1.0_a0.5",
+        "N2_seed42_p1.0_a2.0",
     ]
-    # N = 3: 5 steps x 2 system qubits + 1 = 11 weights.
+    # N = 2: 5 steps x 2 system qubits + 1 = 11 weights.
     for run, train in zip(runs, (6, 22), strict=True):
         metrics = json.loads((run / "metrics.json").read_text())
         assert metrics["n_features"] == metrics["n_params"] == 11

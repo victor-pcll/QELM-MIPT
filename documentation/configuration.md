@@ -57,12 +57,16 @@ cp .env.example .env
 
 `.env.example` only lists `WANDB_API_KEY`. `main.py` calls `load_secrets()`, which runs `load_dotenv()`. A missing `.env` is ignored. The pipeline does not read the key and does not upload a run.
 
-## Qubit counts: N, Ns, Nr
+## Qubit counts: N, Nr, N_total
 
-Three top-level keys name the qubit counts everywhere (issue #88):
+Three top-level keys name the qubit counts everywhere (issue #235, which replaces the convention of issue #88):
 
-- `N`: the **total** number of qubits, ancilla included. Each model file sets its default (`conf/models/TFIM.yaml`: 10); override it with `N=6`.
-- `Nr`: the number of **ancilla** (readout) qubits, the first sites of the chain. Default 1 (`conf/config.yaml`), which matches `AncillaChargeSectorEncoding`.
-- `Ns`: the number of **system** qubits, never set by hand: `Ns: ${int:${sub:${N},${Nr}}}`, so `N = Ns + Nr` always holds.
+- `N`: the number of **system** qubits, the size of the studied system, ancilla **excluded**: the `N` of finite-size scaling and of the papers (their `L`). Each model file sets its default (`conf/models/TFIM.yaml`: 10); override it with `N=6`.
+- `Nr`: the number of **ancilla** (reference) qubits, the first sites of the chain. Default 1 (`conf/config.yaml`), which matches `AncillaChargeSectorEncoding`; 0 in the configs without ancilla (`conf/learnability.yaml`, `conf/QELM_S.yaml`, `conf/double_descent.yaml`).
+- `N_total`: the number of qubits of the **simulated state**, never set by hand: `N_total: ${int:${add:${N},${Nr}}}`, so `N_total = N + Nr` always holds. A density matrix is `2**N_total x 2**N_total`.
 
-The model block (`TFIM.N`), the encoding (`ancilla_charge_sector.N`), the readouts (`single_observable.N`, `double_observable.N`) and the projective measurement (`projective_measurement.Nr`) only interpolate these keys. `load_config` and the experiment scripts call `QELM.check_qubit_counts(cfg)`, which returns `(N, Ns, Nr)` and raises `ValueError` when a copy disagrees with its source, for example after `TFIM.N=6` instead of `N=6`. Scripts take the counts from it, never from a model or an encoding. In Python, `Ns` and `Nr` are also the attribute names (`Encoding.Ns`, `ProjectiveMeasurement.Nr`), and `QELM.physics.qubit_counts(rho, Nr)` returns `(N, Ns, Nr)` for a density matrix.
+The model block (`TFIM.N`, the size of the Hamiltonian or circuit of the system) and the encoding (`ancilla_charge_sector.N`) interpolate `N`, the projective and weak measurements (`projective_measurement.Nr`) `Nr`, and the readouts, which act on the whole state, `N_total` (`single_observable.n_qubits`, `double_observable.n_qubits`). `load_config` and the experiment scripts call `QELM.check_qubit_counts(cfg)`, which returns `(N, Nr, N_total)` (a named tuple, so `check_qubit_counts(cfg).N` works too) and raises `ValueError` when a copy disagrees with its source, for example after `TFIM.N=6` instead of `N=6`, or after `N_total=7`. Scripts take the counts from it, never from a model or an encoding. In Python, `N`, `Nr` and `N_total` are also the attribute names (`Encoding.N`, `Encoding.N_total`, `BrickworkCircuit.N_total`, `ProjectiveMeasurement.Nr`), and `QELM.physics.qubit_counts(rho, Nr)` returns `(N, Nr, N_total)` for a density matrix. The low-level helpers of `QELM.physics` (`get_site_operator(op, site, N)`, the partial trace, the entropies) keep taking `N` as the number of qubits of the operator or state they act on, whatever their role.
+
+### Runs written before issue #235
+
+Before issue #235, `N` counted the ancilla too (`N = Ns + Nr`) and a top-level `Ns` held the system size. A run folder of that time is recognized by that `Ns` key in its `.hydra/config.yaml`. `QELM.utils.load_sweep`, behind every plot script, reads such a run in the new convention (`QELM.config.upgrade_legacy_counts`): its row `N` is its number of system qubits, so an old run named `N10_...` shows up as `N = 9`. The folder names, the `.npz` and the `metrics.json` of an old run are not rewritten: a script that reads the size from a folder name, or a figure already saved, still carries the old `N`. To compare an old sweep with a new one at the same system size, pass `N` one less than before (`N=9` instead of `N=10` with one ancilla), or regenerate the old sweep.

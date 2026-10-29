@@ -16,7 +16,7 @@
 #     OUT_ROOT=/tmp/qelm          write under /tmp/qelm instead of outputs
 #     OUT_DIR=path/to/sweep       write the sweep exactly there (issue #151)
 #     L=10000                     trajectories per run (samples.L)
-#     N_VALUES="7"                total qubits, ancilla included (L_paper = N - 1)
+#     N_VALUES="6"                system qubits, ancilla excluded (L_paper = N)
 #     SEEDS="0 1 2 3 4"           one circuit instance per seed
 #     GAMMA_VALUES="0.0 0.5 1.0"  measurement strengths
 #     FIXED_INSTANCE=false        new gates for every trajectory
@@ -40,7 +40,7 @@ unset VIRTUAL_ENV
 
 # ---- Parameters -------------------------------------------------------------
 EXPERIMENT="charge_sharpening"
-read -r -a N_VALUES <<< "${N_VALUES:-7}"   # paper's L = 6 system qubits + R
+read -r -a N_VALUES <<< "${N_VALUES:-6}"   # paper's L = 6 system qubits, plus R
 L="${L:-10000}"                            # trajectories per run, as in the paper
 read -r -a SEEDS <<< "${SEEDS:-0}"
 read -r -a GAMMA_VALUES <<< "${GAMMA_VALUES:-0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0}"

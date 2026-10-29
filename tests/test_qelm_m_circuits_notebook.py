@@ -32,7 +32,7 @@ def test_notebook_runs_the_three_sweeps_and_plots(
     monkeypatch.setattr(plt, "show", lambda *args, **kwargs: shows.append(args))
     for key, value in {
         "MODELS": " ".join(MODELS),
-        "N_VALUES": "3",
+        "N_VALUES": "2",
         "SEEDS": "42 43",
         "P_VALUES": "0.0 1.0",
         "ALPHA_RATIOS": "0.5 2.0",
@@ -58,7 +58,7 @@ def test_notebook_runs_the_three_sweeps_and_plots(
     tables = namespace["tables"]
     assert list(tables) == list(MODELS)
     for model in MODELS:
-        assert len(list((sweep_dir / model).glob("N3_*"))) == 8
+        assert len(list((sweep_dir / model).glob("N2_*"))) == 8
         table = tables[model]
         assert [(r["p"], r["n_runs"]) for r in table] == [(0.0, 2)] * 2 + [(1.0, 2)] * 2
         # p = 0: the record is empty, the ancilla stays maximally mixed.
@@ -73,10 +73,10 @@ def test_notebook_runs_the_three_sweeps_and_plots(
     assert namespace["axes_maps"].shape == (3, 4)
     for row, model in zip(namespace["axes"], MODELS, strict=True):
         for ax in row:
-            assert ax.get_title().endswith(f"{model}, N = 3")
+            assert ax.get_title().endswith(f"{model}, N = 2")
             assert ax.get_xscale() == "log"
     for model in MODELS:
-        grid = namespace["grids"][(model, 3, "balanced_accuracy")]
+        grid = namespace["grids"][(model, 2, "balanced_accuracy")]
         np.testing.assert_allclose(grid.x, [6 / 11, 2.0])
         np.testing.assert_array_equal(grid.y, [0.0, 1.0])
         assert np.all(np.isfinite(grid.mean))
@@ -93,7 +93,7 @@ def test_notebook_runs_the_three_sweeps_and_plots(
     for name in ("metrics_vs_alpha_ratio", "heatmaps_p_alpha_ratio"):
         assert (sweep_dir / f"{name}.png").is_file()
     data = json.loads((sweep_dir / "comparison_models.json").read_text())
-    assert set(data["extra"]["comparison"]) == {f"{m} N=3" for m in MODELS}
+    assert set(data["extra"]["comparison"]) == {f"{m} N=2" for m in MODELS}
 
     # Fixed circuit: one subfolder per circuit, every run with
     # fixed_instance=true (read back and checked by the notebook), and the
@@ -101,7 +101,7 @@ def test_notebook_runs_the_three_sweeps_and_plots(
     fixed = namespace["tables_fixed"]
     assert list(fixed) == ["haar_circuit", "clifford_circuit"]
     for model in fixed:
-        runs = sorted((sweep_dir / f"{model}_fixed").glob("N3_*"))
+        runs = sorted((sweep_dir / f"{model}_fixed").glob("N2_*"))
         assert len(runs) == 8
         for run in runs:
             assert "fixed_instance: true" in (run / "config_used.yaml").read_text()
@@ -109,7 +109,7 @@ def test_notebook_runs_the_three_sweeps_and_plots(
     assert namespace["axes_fixed"].shape == (2, 3)
     assert namespace["axes_maps_fixed"].shape == (2, 4)
     assert (
-        namespace["axes_maps_fixed"][0, 0].get_title().endswith("haar_circuit, N = 3")
+        namespace["axes_maps_fixed"][0, 0].get_title().endswith("haar_circuit, N = 2")
     )
     # Error-bar containers carry the labels; lines[0] is the data line.
     styles = {
@@ -119,7 +119,7 @@ def test_notebook_runs_the_three_sweeps_and_plots(
     assert styles["clifford_circuit"] == "-"
     assert styles["clifford_circuit, fixed"] == "--"
     data = json.loads((sweep_dir / "comparison_fixed_circuit.json").read_text())
-    assert set(data["extra"]["comparison"]) == {f"{m} N=3" for m in MODELS} | {
-        f"{m}, fixed N=3" for m in fixed
+    assert set(data["extra"]["comparison"]) == {f"{m} N=2" for m in MODELS} | {
+        f"{m}, fixed N=2" for m in fixed
     }
     os.chdir(REPO_ROOT)

@@ -307,7 +307,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             probability is outside ``[0, 1]`` or a count is too small.
     """
     set_seed(cfg)
-    N, Ns, Nr = check_qubit_counts(cfg)
+    N, Nr, _ = check_qubit_counts(cfg)
     if Nr != 0:
         raise ValueError(f"exp_QELM_S runs without ancilla: set Nr=0, got Nr={Nr}.")
     task = cfg.entropy_task

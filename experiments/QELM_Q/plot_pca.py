@@ -6,14 +6,14 @@ charge sectors apart along a direction of the feature space. This script
 shows how the geometry of three feature spaces changes with the measurement
 probability ``p``, for one size ``N`` (default 8):
 
-- ``M``: the record of the intermediate measurements, ``(n_rounds * Ns)``
+- ``M``: the record of the intermediate measurements, ``(n_rounds * N)``
   entries, +-1 for a measured qubit and 0 for an unmeasured one
   (``features_M`` of ``exp_QELM_Q.npz``). At ``p = 0`` nothing is measured
   and the record is all zeros: the panel says so instead of drawing
   arbitrary axes (:mod:`QELM.evaluation.pca`).
 - ``M_Z``: the record next to the final ``<Z_k>``, ``phi = [M, Z]``
   (``features_M_Z``).
-- ``Z``: the final ``<Z_k>`` of the ``Ns`` system qubits (``features_Z``).
+- ``Z``: the final ``<Z_k>`` of the ``N`` system qubits (``features_Z``).
 
 For each run the principal axes are fitted on the training samples of the
 run (the first ``train_size`` samples, the split of the ridge readout), with
@@ -273,12 +273,12 @@ def sum_direction(n_features: int, n_record: int) -> np.ndarray:
     The record ``M`` comes first in ``features_M`` and ``features_M_Z``, so
     ``x @ u`` is ``sum(M) / sqrt(n_record)``: the sum of the outcomes over
     every round and every qubit. At ``p = 1`` every qubit is measured in every
-    round, and the outcomes of a round sum to ``Ns - 2 Q`` whatever the
+    round, and the outcomes of a round sum to ``N - 2 Q`` whatever the
     disorder: ``x @ u`` then takes one value per charge sector.
 
     Args:
         n_features: Length of a feature vector, bias column excluded.
-        n_record: Number of record entries, ``n_rounds * Ns``.
+        n_record: Number of record entries, ``n_rounds * N``.
 
     Returns:
         ``u``, shape ``(n_features,)``, ``1 / sqrt(n_record)`` on the record

@@ -2,15 +2,16 @@
 
 An encoding prepares the initial state of the reservoir: a pure state
 ``psi`` of shape ``(dim,)`` and its density matrix ``rho = |psi><psi|`` of
-shape ``(dim, dim)``. ``N`` is the total number of qubits, so
-``dim = 2**N`` matches the models built with the same ``N``. Some encodings
-use ``Nr`` of them as ancillas, which leaves ``Ns = N - Nr``
-system qubits.
+shape ``(dim, dim)``. ``N`` is the number of system qubits (issue #235).
+Some encodings add ``Nr`` ancillas next to them, so the state has
+``N_total = N + Nr`` qubits and ``dim = 2**N_total``; without ancilla
+(``Nr = 0``), ``N_total = N`` and ``dim = 2**N`` matches the models built
+with the same ``N``.
 
 Qubit ordering follows :func:`QELM.physics.operators.get_site_operator`:
 site 0 is the leftmost factor of ``np.kron``, i.e. the most significant bit
 of a basis index. Ancillas come first (sites ``0 .. Nr - 1``), the
-``Ns`` system qubits after them.
+``N`` system qubits after them (sites ``Nr .. N_total - 1``).
 """
 
 from __future__ import annotations
@@ -31,9 +32,9 @@ class Encoding:
             ``cfg[name]``.
         Nr: Number of ancilla qubits placed before the system.
         params: Scalar parameters from the matching YAML block.
-        N: Total number of qubits, ancillas included.
-        Ns: Number of system qubits, ``N - Nr``.
-        dim: Dimension of the encoded state, ``2**N``.
+        N: Number of system qubits, ancillas excluded.
+        N_total: Number of qubits of the encoded state, ``N + Nr``.
+        dim: Dimension of the encoded state, ``2**N_total``.
     """
 
     name: str = "base"
@@ -44,19 +45,20 @@ class Encoding:
 
         Args:
             params: Parameter names mapped to scalar values from YAML.
-                ``N``, the total number of qubits, is required.
+                ``N``, the number of system qubits, is required.
 
         Raises:
-            ValueError: If ``N`` leaves no system qubit.
+            ValueError: If ``N`` is below 1 (no system qubit).
         """
         self.params: dict[str, Any] = dict(params)
         self.N: int = int(params["N"])
-        self.Ns: int = self.N - self.Nr
-        if self.Ns < 1:
+        if self.N < 1:
             raise ValueError(
-                f"N={self.N} leaves no system qubit next to {self.Nr} ancilla(s)."
+                f"N={self.N}: need at least one system qubit next to "
+                f"{self.Nr} ancilla(s)."
             )
-        self.dim: int = 2**self.N
+        self.N_total: int = self.N + self.Nr
+        self.dim: int = 2**self.N_total
 
     @classmethod
     def from_config(cls, cfg: DictConfig) -> Self:
@@ -165,7 +167,7 @@ class Encoding:
                 NumPy array.
 
         Returns:
-            Complex density matrix of shape ``(2**N, 2**N)``.
+            Complex density matrix of shape ``(dim, dim)``.
         """
         if sparse:
             return self.density_matrix(x, sparse=True)

@@ -9,6 +9,8 @@ from hydra import compose, initialize_config_dir
 from hydra.core.global_hydra import GlobalHydra
 from omegaconf import DictConfig, OmegaConf
 
+from QELM.physics.operators import QubitCounts
+
 # src/QELM/config.py -> repository root, which holds conf/.
 CONFIG_DIR = Path(__file__).resolve().parents[2] / "conf"
 
@@ -53,52 +55,97 @@ def load_config(
 
 
 # Blocks that carry their own copy of a qubit count, by key. Each one is an
-# interpolation of the top-level N or Nr in conf/; overriding the copy
-# instead of the source (N=6 instead of N=6) would desynchronize them.
-_N_COPIES = ("ancilla_charge_sector", "single_observable", "double_observable")
+# interpolation of the top-level N, Nr or N_total in conf/; overriding the
+# copy instead of the source (TFIM.N=6 instead of N=6) would desynchronize
+# them.
+_N_COPIES = ("ancilla_charge_sector",)
 _NR_COPIES = ("projective_measurement",)
+_N_TOTAL_COPIES = ("single_observable", "double_observable")
 
 
-def check_qubit_counts(cfg: DictConfig) -> tuple[int, int, int]:
-    """Check the qubit counts ``N``, ``Ns`` and ``Nr`` of a composed config.
+def check_qubit_counts(cfg: DictConfig) -> QubitCounts:
+    """Check the qubit counts ``N``, ``Nr`` and ``N_total`` of a composed config.
 
-    The convention (issue #88): ``N`` is the total number of qubits, ``Nr``
-    the number of ancilla qubits and ``Ns = N - Nr`` the number of system
-    qubits, all three at the top level of the config. The selected model
-    block (``cfg[cfg.models].N``), the encoding and the readouts copy
-    ``N``, and the projective measurement copies ``Nr``. Scripts read the
-    counts from here, not from a model or an encoding.
+    The convention (issue #235, which replaces that of issue #88): ``N`` is
+    the number of system qubits, the size of the studied system, ``Nr`` the
+    number of ancilla qubits and ``N_total = N + Nr`` the number of qubits
+    of the simulated state, all three at the top level of the config. The
+    selected model block (``cfg[cfg.models].N``) and the encoding copy
+    ``N``, the projective measurement copies ``Nr`` and the readouts, which
+    act on the whole state, copy ``N_total`` (as ``n_qubits``). Scripts read
+    the counts from here, not from a model or an encoding.
 
     Args:
         cfg: Composed config.
 
     Returns:
-        ``(N, Ns, Nr)``.
+        ``(N, Nr, N_total)``.
 
     Raises:
-        ValueError: If ``Nr`` is negative, ``Ns`` is not ``N - Nr`` or is
-            below 1, or a block holds an ``N`` or ``Nr`` different from the
-            top-level one, for instance after ``N=6`` instead of
+        ValueError: If ``N`` is below 1, ``Nr`` is negative, ``N_total`` is
+            not ``N + Nr``, or a block holds a count different from the
+            top-level one, for instance after ``TFIM.N=6`` instead of
             ``N=6``.
     """
     N, Nr = int(cfg.N), int(cfg.Nr)
-    Ns = int(cfg.Ns)
+    N_total = int(cfg.N_total)
+    if N < 1:
+        raise ValueError(f"N, the number of system qubits, must be >= 1, got {N}.")
     if Nr < 0:
         raise ValueError(f"Nr must be >= 0, got {Nr}.")
-    if Ns != N - Nr or Ns < 1:
+    if N_total != N + Nr:
         raise ValueError(
-            f"Ns must be N - Nr >= 1, got N={N}, Nr={Nr}, Ns={Ns}. "
-            "Set N and Nr, never Ns."
+            f"N_total must be N + Nr, got N={N}, Nr={Nr}, N_total={N_total}. "
+            "Set N and Nr, never N_total."
         )
-    blocks = {f"{cfg.models}.N": N}
-    blocks.update({f"{name}.N": N for name in _N_COPIES})
-    blocks.update({f"{name}.Nr": Nr for name in _NR_COPIES})
-    for key, expected in blocks.items():
+    blocks: dict[str, tuple[str, int]] = {f"{cfg.models}.N": ("N", N)}
+    blocks.update({f"{name}.N": ("N", N) for name in _N_COPIES})
+    blocks.update({f"{name}.Nr": ("Nr", Nr) for name in _NR_COPIES})
+    blocks.update(
+        {f"{name}.n_qubits": ("N_total", N_total) for name in _N_TOTAL_COPIES}
+    )
+    for key, (source, expected) in blocks.items():
         value = OmegaConf.select(cfg, key)
         if value is not None and int(value) != expected:
-            source = "N" if key.endswith(".N") else "Nr"
             raise ValueError(
                 f"{key}={value} differs from {source}={expected}. "
                 f"Override {source}, not {key}."
             )
-    return N, Ns, Nr
+    return QubitCounts(N, Nr, N_total)
+
+
+def upgrade_legacy_counts(cfg: DictConfig) -> DictConfig:
+    """Return a config of a run written before issue #235 in the new convention.
+
+    Runs written before issue #235 hold ``N`` as the total number of qubits,
+    ancilla included, and ``Ns = N - Nr`` as the number of system qubits.
+    Such a config is recognized by its top-level ``Ns`` and no
+    ``N_total``; it is resolved, then rewritten so that ``N`` is the number
+    of system qubits and ``N_total`` the total: the top-level ``N``, every
+    block whose ``N`` copied the old total (the model, the encoding, a
+    circuit) and the readouts, whose ``N`` becomes ``n_qubits``. Every
+    other value, ``evolution.n_steps`` included, keeps the value it had in
+    the run. A config of the new convention is returned unchanged, so the
+    plot scripts read old and new run folders alike.
+
+    Args:
+        cfg: Config of one run, typically ``.hydra/config.yaml``.
+
+    Returns:
+        ``cfg`` itself for a new config, otherwise a resolved copy.
+    """
+    if "Ns" not in cfg or "N_total" in cfg:
+        return cfg
+    raw = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=False)
+    if not isinstance(raw, dict):
+        return cfg
+    total, system = int(raw["N"]), int(raw.pop("Ns"))
+    for name, block in raw.items():
+        if not isinstance(block, dict) or block.get("N") != total:
+            continue
+        if name in _N_TOTAL_COPIES:
+            block["n_qubits"] = block.pop("N")
+        else:
+            block["N"] = system
+    raw["N"], raw["N_total"] = system, total
+    return OmegaConf.create(raw)

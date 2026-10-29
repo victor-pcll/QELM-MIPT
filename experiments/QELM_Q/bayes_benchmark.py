@@ -156,12 +156,12 @@ def draw_accuracy(rows: Sequence[dict[str, Any]]) -> Figure:
         The open figure, rows of panels for ``h``, columns for ``N``.
     """
     hs = sorted({float(r["h"]) for r in rows})
-    Ns = sorted({int(r["N"]) for r in rows})
+    n_values = sorted({int(r["N"]) for r in rows})
     metrics = [f"accuracy_{name}" for name, *_ in ESTIMATORS]
     fig, axes = subplots(
         len(hs),
-        len(Ns),
-        figsize=(5.0 * len(Ns), 4.2 * len(hs)),
+        len(n_values),
+        figsize=(5.0 * len(n_values), 4.2 * len(hs)),
         squeeze=False,
         sharey=True,
     )
@@ -169,7 +169,7 @@ def draw_accuracy(rows: Sequence[dict[str, Any]]) -> Figure:
         summary = summarize(
             [r for r in rows if float(r["h"]) == h], by=("N", "p"), metrics=metrics
         )
-        for j, N in enumerate(Ns):
+        for j, N in enumerate(n_values):
             ax = axes[i, j]
             for name, label, color, style in ESTIMATORS:
                 curve = sweep_curve(summary, N, "p", f"accuracy_{name}")
@@ -198,18 +198,18 @@ def draw_time(rows: Sequence[dict[str, Any]]) -> Figure:
     """
     names = [(n, label, c, s) for n, label, c, s in ESTIMATORS if n != "ridge"]
     fig, ax = subplots(figsize=(6.5, 4.5))
-    Ns = sorted({int(r["N"]) for r in rows})
+    n_values = sorted({int(r["N"]) for r in rows})
     for name, label, color, style in names:
         times = [
             np.nanmean([r[f"time_{name}"] for r in rows if int(r["N"]) == N])
-            for N in Ns
+            for N in n_values
         ]
-        ax.plot(Ns, times, marker="o", color=color, ls=style, label=label)
+        ax.plot(n_values, times, marker="o", color=color, ls=style, label=label)
     ax.set_yscale("log")
     ax.set(
         xlabel=r"$N$",
         ylabel="fit + prediction time (s)",
-        xticks=Ns,
+        xticks=n_values,
         title="Cost of the estimators, mean over h, p and seeds",
     )
     ax.legend(fontsize=8)

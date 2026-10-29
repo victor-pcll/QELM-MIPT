@@ -20,7 +20,8 @@ BASH_SCRIPT = REPO_ROOT / "experiments" / "QELM_Z" / "exp_QELM_Z.sh"
 # Virtualenv of another project, active in the shell that launches the script
 # (issue #79): uv must neither use it nor warn about it.
 FOREIGN_VENV = REPO_ROOT.parent / "other-project" / ".venv"
-OVERRIDES = ["models=TFIM", "N=4", "samples.L=10"]
+# N = 3 system qubits and the ancilla: 4 qubits in all (issue #235).
+OVERRIDES = ["models=TFIM", "N=3", "samples.L=10"]
 
 
 def _load_script() -> ModuleType:
@@ -33,22 +34,24 @@ def _load_script() -> ModuleType:
 
 
 def test_run_shapes_and_bias_column() -> None:
-    """X holds 3 observables x (N - 1) system sites plus a column of ones."""
+    """X holds 3 observables x N system sites plus a column of ones."""
     out = _load_script().run(load_config(OVERRIDES))
-    L, N = 10, 4
-    assert out["X"].shape == (L, 3 * (N - 1) + 1)
+    L, N = 10, 3
+    assert out["X"].shape == (L, 3 * N + 1)
     np.testing.assert_array_equal(out["X"][:, -1], 1.0)
     assert out["Y"].shape == (L,)
     assert np.all(np.abs(out["X"]) <= 1 + 1e-9)
     assert np.all(np.abs(out["Y"]) <= 1 + 1e-9)
     n_test = out["y_test"].shape[0]
     assert out["y_pred"].shape == (n_test,)
-    assert out["W"].shape == (3 * (N - 1) + 1,)
+    assert out["W"].shape == (3 * N + 1,)
     assert np.isfinite(out["nmse"]) and np.isfinite(out["r2"])
 
 
 def test_features_match_the_density_matrix() -> None:
     """Evolving psi gives the same <Z_k> as evolving rho = |psi><psi|."""
+    from omegaconf import OmegaConf
+
     from QELM import TransverseFieldIsingModel, set_seed
     from QELM.encoding import AncillaChargeSectorEncoding
     from QELM.training import SingleObservable
@@ -57,10 +60,12 @@ def test_features_match_the_density_matrix() -> None:
     out = _load_script().run(cfg)
     set_seed(cfg)
     sector = AncillaChargeSectorEncoding.from_config(cfg)
-    rho = TransverseFieldIsingModel.from_config(cfg).evolve(
+    # The TFIM of exp_QELM_Z acts on every qubit, the ancilla included.
+    tfim_cfg = OmegaConf.merge(cfg, {"TFIM": {"N": int(cfg.N_total)}})
+    rho = TransverseFieldIsingModel.from_config(tfim_cfg).evolve(
         sector.rho(), dt=float(cfg.evolution.t)
     )
-    Z = SingleObservable({"N": 4, "observables": ["Z"]}).operators()
+    Z = SingleObservable({"n_qubits": 4, "observables": ["Z"]}).operators()
     expected = [np.real(np.trace(Z[k] @ rho)) for k in range(1, 4)]
     np.testing.assert_allclose(out["X"][0, :-1], expected, atol=1e-8)
     np.testing.assert_allclose(out["Y"][0], np.real(np.trace(Z[0] @ rho)), atol=1e-8)
@@ -69,7 +74,7 @@ def test_features_match_the_density_matrix() -> None:
 def test_qelm_learns_the_ancilla() -> None:
     """With enough samples the readout predicts <Z_0> almost perfectly, with the
     default alpha of the config and no override (issue #92)."""
-    cfg = load_config(["models=TFIM", "N=4", "samples.L=200"])
+    cfg = load_config(["models=TFIM", "N=3", "samples.L=200"])
     out = _load_script().run(cfg)
     assert out["r2"] > 0.95
 
@@ -105,7 +110,8 @@ def test_script_saves_outputs(tmp_path: Path) -> None:
     resolved = json.loads((tmp_path / "resolved_config.json").read_text())
     assert resolved["samples"]["L"] == 10
     assert resolved["samples"]["train_size"] == 7  # ${int:${mul:0.7,10}}
-    assert resolved["Ns"] == resolved["N"] - resolved["Nr"]
+    assert resolved["N_total"] == resolved["N"] + resolved["Nr"]
+    assert "Ns" not in resolved
     assert "${" not in (tmp_path / "resolved_config.json").read_text()
 
 
