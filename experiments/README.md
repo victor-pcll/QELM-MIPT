@@ -673,9 +673,15 @@ The launcher sweeps `MODELS`, `N_VALUES` and `SEEDS` (`PER_P`, `P_VALUES`,
 writes one folder per run, `<model>_N<N>_seed<seed>/`. The plot script
 writes `purification_vs_p` (`S_R` against `p`, one curve per `N`),
 `accuracy_vs_p` (expected accuracy of the ridge decoder and the Bayes
-ceiling) and `r2_z_vs_p`, each with its JSON. The TFIM at `N = 12` builds one
-dense `exp(-i H dt)` of size 4096 per run and takes about 5 minutes for the
-default 11 x 500 trajectories.
+ceiling) and `r2_z_vs_p`, each with its JSON. The TFIM at `N = 12` applies a
+dense `exp(-i H dt)` of size 4096 at every round, about 1.6 s per trajectory
+on one core, so 2.5 hours for the default 11 x 500 trajectories; `N = 10`
+takes about 5 minutes, the circuits less.
+
+With a fixed Clifford instance, a purified `R` points along X, Y or Z, an
+axis set by the gates: when it is not Z, the Z outcome stays a coin flip
+(`bayes_accuracy = 1/2`) although `bloch_accuracy = 1`, so the Clifford
+ceilings in Z vary a lot from one seed to the next.
 
 ## Run the double-descent experiment on MNIST (issue #181)
 
