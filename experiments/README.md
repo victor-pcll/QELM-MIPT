@@ -685,10 +685,23 @@ uv run python experiments/QELM_S/plot_entropy_fss.py outputs/exp_QELM_S/<date_ti
   --entropy S1_avg --min-N 8 --p-min 0.05
 ```
 
+The title and the JSON give two errors for the collapse. The statistical
+one (`p_c_stat`, `nu_stat`) comes from a bootstrap: each point of `S(p, N)` is
+redrawn with its standard error, from the spread of the trajectories, and
+the collapse is fitted again. The systematic one (`p_c_sys`, `nu_sys`) is
+half the range of the fits over the choices of the data
+(`collapse_choices`): the smallest size kept (`--min-N` or one of the next
+two sizes), `p_min` or `p_min + 0.05`, and all `p` or only `p <= 0.3`.
+`p_c_total` and `nu_total` add the two in quadrature. The spread of the
+seeds alone (`p_c_err`, `nu_err`, the error bars of PR #240) misses the
+systematic part, which dominates at these sizes.
+
 A scratch run of this protocol (N = 6 to 16, 400 to 600 trajectories per
-`p`) gave `p_c = 0.210`, `nu = 2.04` for `S_1`, and `p_c = 0.21` for `S_2`
-and `S_inf`, as in Table I. With `N >= 10` the minimum moves along the valley
-to `p_c = 0.17`, `nu = 1.6`. The `I_3` curves of `N = 8, 12, 16` cross at
+`p`, `--min-N 8 --p-min 0.05`) gave, for `S_1`, `p_c = 0.209 +- 0.008 (stat)
++- 0.024 (sys)` and `nu = 2.03 +- 0.12 (stat) +- 0.26 (sys)`, in line with
+Table I (`0.21 +- 0.16`, `1.74 +- 0.45`). `S_2` and `S_inf` give the same
+`p_c`. The systematic part is a drift: with `N >= 10` the minimum moves
+along the valley to `p_c = 0.17`, `nu = 1.6`. The `I_3` curves of `N = 8, 12, 16` cross at
 `p = 0.11` to `0.13`.
 
 ## Run the double-descent experiment on MNIST (issue #181)

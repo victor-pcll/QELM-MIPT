@@ -423,6 +423,19 @@ def test_fss_of_the_late_time_averages(tmp_path: Path) -> None:
     assert cost.shape == (len(land["nu"]), len(land["p_c"]))
     # The fitted minimum is at most the lowest cost of the grid.
     assert floquet["collapse"]["cost"] <= cost.min() + 1e-12
+    # Statistical (bootstrap) and systematic (choices of the fit) errors.
+    collapse = floquet["collapse"]
+    for key in ("p_c", "nu"):
+        assert collapse[f"{key}_stat"] >= 0 and collapse[f"{key}_sys"] >= 0
+        assert collapse[f"{key}_total"] == pytest.approx(
+            np.hypot(collapse[f"{key}_stat"], collapse[f"{key}_sys"])
+        )
+    choices = floquet["collapse_choices"]
+    # Sizes 6 and 8 are kept: one smallest size, two p_min, p_max 0.4 only.
+    assert [(c["min_N"], c["p_min"]) for c in choices] == [(6, 0.1), (6, 0.15)]
+    assert collapse["p_c_sys"] == pytest.approx(
+        (max(c["p_c"] for c in choices) - min(c["p_c"] for c in choices)) / 2
+    )
     i3 = json.loads((tmp_path / "i3_crossings.json").read_text())["extra"]
     # I_3 needs 4 | N: only N = 4 and 8.
     assert set(i3["floquet_circuit"]["curves"]) == {"4", "8"}

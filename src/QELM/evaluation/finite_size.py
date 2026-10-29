@@ -11,7 +11,8 @@ Two estimates of the critical measurement probability ``p_c`` from curves
   031009 (2019), Sec. IV: ``S(p, N) - S(p_c, N) = F((p - p_c) N^(1/nu))``.
   Subtracting ``S(p_c, N)`` removes the ``log N`` growth at the critical
   point. :func:`collapse_cost` measures how far the rescaled curves are from
-  one curve, and :func:`fit_collapse` minimizes it over ``(p_c, nu)``.
+  one curve, and :func:`fit_collapse` minimizes it over ``(p_c, nu)``;
+  :func:`bootstrap_collapse` gives its statistical error (issue #251).
 """
 
 from __future__ import annotations
@@ -121,12 +122,14 @@ def fit_collapse(
     nu_range: tuple[float, float] = (0.5, 4.0),
     grid: int = 41,
     window: float | None = None,
+    start: tuple[float, float] | None = None,
 ) -> dict[str, float]:
     """Find the ``(p_c, nu)`` of the best collapse.
 
     A grid search over ``p_range x nu_range`` (``grid`` points each, ``nu``
     on a log scale), refined from its best point by Nelder-Mead inside the
-    same box.
+    same box. With ``start``, the grid search is skipped and Nelder-Mead
+    starts there (for the many fits of :func:`bootstrap_collapse`).
 
     Args:
         curves: ``N -> (p, S)``, at least two sizes.
@@ -134,6 +137,7 @@ def fit_collapse(
         nu_range: Search interval of ``nu``.
         grid: Points per axis of the grid search.
         window: Passed to :func:`collapse_cost`.
+        start: ``(p_c, nu)`` to start Nelder-Mead from, without the grid.
 
     Returns:
         ``{"p_c", "nu", "cost"}``.
@@ -143,12 +147,17 @@ def fit_collapse(
     """
     if len(curves) < 2:
         raise ValueError(f"A collapse needs at least two sizes, got {len(curves)}.")
-    p_grid = np.linspace(*p_range, grid)
-    nu_grid = np.geomspace(*nu_range, grid)
-    costs = np.array(
-        [[collapse_cost(curves, p, nu, window) for nu in nu_grid] for p in p_grid]
-    )
-    i, j = np.unravel_index(int(np.argmin(costs)), costs.shape)
+    if start is None:
+        p_grid = np.linspace(*p_range, grid)
+        nu_grid = np.geomspace(*nu_range, grid)
+        costs = np.array(
+            [[collapse_cost(curves, p, nu, window) for nu in nu_grid] for p in p_grid]
+        )
+        i, j = np.unravel_index(int(np.argmin(costs)), costs.shape)
+        first, first_cost = np.array([p_grid[i], nu_grid[j]]), float(costs[i, j])
+    else:
+        first = np.asarray(start, dtype=float)
+        first_cost = collapse_cost(curves, float(first[0]), float(first[1]), window)
     lo = np.array([p_range[0], nu_range[0]])
     hi = np.array([p_range[1], nu_range[1]])
 
@@ -158,12 +167,66 @@ def fit_collapse(
 
     res = scipy.optimize.minimize(
         objective,
-        np.array([p_grid[i], nu_grid[j]]),
+        first,
         method="Nelder-Mead",
         options={"xatol": 1e-4, "fatol": 1e-10},
     )
     best = np.clip(res.x, lo, hi)
     cost = objective(best)
-    if cost > costs[i, j]:
-        best, cost = np.array([p_grid[i], nu_grid[j]]), float(costs[i, j])
+    if cost > first_cost:
+        best, cost = first, first_cost
     return {"p_c": float(best[0]), "nu": float(best[1]), "cost": float(cost)}
+
+
+def bootstrap_collapse(
+    curves: Curves,
+    errors: Mapping[int, Sequence[float]],
+    p_range: tuple[float, float],
+    nu_range: tuple[float, float] = (0.5, 4.0),
+    n_boot: int = 100,
+    rng: np.random.Generator | None = None,
+) -> dict[str, float]:
+    """Statistical error of the collapse, by a parametric bootstrap (issue #251).
+
+    Each resample adds to every point of ``S(p, N)`` a Gaussian of standard
+    deviation the standard error of that point (``errors``, from the spread
+    of the trajectories behind it) and fits the collapse again, from the fit
+    of the data (Nelder-Mead only). The spread of the resampled ``(p_c,
+    nu)`` is the statistical error. It is not the systematic error of the
+    choice of sizes or of the ``p`` window, which at small ``N`` is larger:
+    the cost has a long valley in the ``(p_c, nu)`` plane.
+
+    Args:
+        curves: ``N -> (p, S)``, at least two sizes.
+        errors: ``N -> standard error of each point of S``.
+        p_range, nu_range: Search box, as in :func:`fit_collapse`.
+        n_boot: Number of resamples, ``>= 2``.
+        rng: Generator of the noise; ``None`` uses a fixed seed.
+
+    Returns:
+        ``{"p_c_stat", "nu_stat"}``: the standard deviations of the
+        resampled ``p_c`` and ``nu``.
+
+    Raises:
+        ValueError: If ``n_boot < 2`` or the errors do not match the curves.
+    """
+    if n_boot < 2:
+        raise ValueError(f"n_boot must be >= 2, got {n_boot}.")
+    if set(errors) != set(curves):
+        raise ValueError("errors must have one entry per size of curves.")
+    rng = np.random.default_rng(0) if rng is None else rng
+    fit = fit_collapse(curves, p_range, nu_range)
+    start = (fit["p_c"], fit["nu"])
+    samples = []
+    for _ in range(n_boot):
+        noisy = {
+            N: (p, np.asarray(S) + rng.normal(0.0, 1.0, len(S)) * np.asarray(errors[N]))
+            for N, (p, S) in curves.items()
+        }
+        f = fit_collapse(noisy, p_range, nu_range, start=start)
+        samples.append((f["p_c"], f["nu"]))
+    values = np.array(samples)
+    return {
+        "p_c_stat": float(values[:, 0].std(ddof=1)),
+        "nu_stat": float(values[:, 1].std(ddof=1)),
+    }

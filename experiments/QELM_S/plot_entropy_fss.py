@@ -19,8 +19,12 @@ row per model:
   of the paper.
 
 The JSON holds, per model, the mean curves, the crossings, the collapse of
-the seed-averaged curves, the collapse of each seed alone (its spread is
-the error bar of ``p_c`` and ``nu`` quoted in the title), the collapse
+the seed-averaged curves with its statistical error (a bootstrap over the
+trajectories, ``p_c_stat``, ``nu_stat``) and its systematic error (half the
+range of the fits over the choices of the smallest size and of the ``p``
+window, ``p_c_sys``, ``nu_sys``, the fits in ``collapse_choices``; issue
+#251), both quoted in the title, the collapse of each seed alone (the
+spread of the seeds, ``p_c_err`` and ``nu_err``), the collapse
 restricted to ``|p - p_c| <= 0.25`` and ``0.15`` (at ``N <= 12`` the
 estimate moves with the window, the main finite-size caveat), and the collapse of
 the sizes with ``N / 2`` even and with ``N / 2`` odd apart. A brickwork
@@ -73,6 +77,7 @@ import numpy as np
 from omegaconf import OmegaConf
 
 from QELM.evaluation.finite_size import (
+    bootstrap_collapse,
     collapse_cost,
     curve_crossings,
     fit_collapse,
@@ -105,15 +110,23 @@ REFERENCES_RENYI = {
 ENTROPIES = ("S", "S1_avg", "S2_avg", "Sinf_avg")
 # Points per axis of the cost landscape.
 LANDSCAPE_GRID = 61
+# Choices of fit_choices: p_min is also raised by this, and the p above
+# this cut are also left out.
+P_MIN_SHIFT = 0.05
+P_MAX_CUT = 0.3
+# Resamples of the bootstrap of the collapse.
+N_BOOT = 100
 
 
 def load_curves(
-    sweep_dir: str | Path, key: str = "S"
+    sweep_dir: str | Path, key: str = "S", errors: bool = False
 ) -> dict[str, dict[int, dict[int, Any]]]:
     """Return ``model -> N -> seed -> (p, <key>_mean)`` from the run folders.
 
-    Runs without ``<key>_mean_p<p>`` (no late-time averages, or ``I3`` for
-    ``N`` not a multiple of 4) are skipped.
+    With ``errors``, the second entry is instead the standard error of that
+    mean, ``<key>_std / sqrt(samples_per_p)``, from the spread of the
+    trajectories of the run. Runs without ``<key>_mean_p<p>`` (no late-time
+    averages, or ``I3`` for ``N`` not a multiple of 4) are skipped.
 
     Raises:
         ValueError: If the folder holds no run.
@@ -121,34 +134,81 @@ def load_curves(
     rows = load_sweep(sweep_dir, keys=KEYS)
     if not rows:
         raise ValueError(f"No run in {sweep_dir}.")
+    stat = "std" if errors else "mean"
     out: dict[str, dict[int, dict[int, Any]]] = {}
     for row in rows:
         cfg = OmegaConf.load(Path(sweep_dir) / row["run"] / ".hydra" / "config.yaml")
         p = [float(v) for v in cfg.entropy_task.p_values]
-        names = [f"{key}_mean_p{v:g}" for v in p]
+        names = [f"{key}_{stat}_p{v:g}" for v in p]
         if any(name not in row for name in names):
             continue
-        S = [float(row[name]) for name in names]
+        S = np.array([float(row[name]) for name in names])
+        if errors:
+            S /= np.sqrt(int(cfg.entropy_task.samples_per_p))
         order = np.argsort(p)
-        curve = (np.asarray(p)[order], np.asarray(S)[order])
+        curve = (np.asarray(p)[order], S[order])
         by_n = out.setdefault(str(row["model"]), {}).setdefault(int(row["N"]), {})
         by_n[int(row["seed"])] = curve
     return {m: dict(sorted(by_n.items())) for m, by_n in sorted(out.items())}
 
 
 def restrict(
-    by_n: dict[int, dict[int, Any]], min_N: int = 0, p_min: float = 0.0
+    by_n: dict[int, dict[int, Any]],
+    min_N: int = 0,
+    p_min: float = 0.0,
+    p_max: float = np.inf,
 ) -> dict[int, dict[int, Any]]:
-    """Keep the sizes ``N >= min_N`` and the points ``p >= p_min`` (issue #251)."""
+    """Keep the sizes ``N >= min_N`` and the points ``p_min <= p <= p_max``."""
     out: dict[int, dict[int, Any]] = {}
     for N, seeds in by_n.items():
         if N < min_N:
             continue
         out[N] = {}
         for seed, (p, S) in seeds.items():
-            keep = np.asarray(p) >= p_min - 1e-12
-            out[N][seed] = (np.asarray(p)[keep], np.asarray(S)[keep])
+            p = np.asarray(p)
+            keep = (p >= p_min - 1e-12) & (p <= p_max + 1e-12)
+            out[N][seed] = (p[keep], np.asarray(S)[keep])
     return out
+
+
+def pooled_errors(errors: dict[int, dict[int, Any]]) -> dict[int, np.ndarray]:
+    """Standard error of the seed average, ``sqrt(sum_s e_s**2) / n_seeds``."""
+    return {
+        N: np.sqrt(sum(np.asarray(e) ** 2 for _, e in seeds.values())) / len(seeds)
+        for N, seeds in errors.items()
+    }
+
+
+def fit_choices(
+    by_n: dict[int, dict[int, Any]], min_N: int = 0, p_min: float = 0.0
+) -> list[dict[str, Any]]:
+    """Collapse fits over reasonable choices of the data (issue #251).
+
+    Around the choice ``(min_N, p_min)``: the smallest size kept is
+    ``min_N`` or one of the next two sizes (as long as three sizes remain),
+    ``p_min`` or ``p_min + P_MIN_SHIFT``, and all the ``p`` above or only
+    ``p <= P_MAX_CUT`` (when at least two points of the grid lie above it).
+    The spread of the fits is the systematic error of the collapse.
+    """
+    sizes = sorted(N for N in by_n if N >= min_N)
+    starts = [sizes[k] for k in range(3) if len(sizes) - k >= 3] or sizes[:1]
+    grid = np.unique(np.concatenate([p for s in by_n.values() for p, _ in s.values()]))
+    cuts = [np.inf] + ([P_MAX_CUT] if np.sum(grid > P_MAX_CUT) >= 2 else [])
+    fits = []
+    for first in starts:
+        for low in (p_min, round(p_min + P_MIN_SHIFT, 10)):
+            for high in cuts:
+                curves = {
+                    N: (p, S)
+                    for N, (p, S, _) in mean_curves(
+                        restrict(by_n, first, low, high)
+                    ).items()
+                }
+                if len(curves) < 2:
+                    continue
+                choice = {"min_N": first, "p_min": low, "p_max": float(high)}
+                fits.append(choice | fit_collapse(curves, P_RANGE, NU_RANGE))
+    return fits
 
 
 def cost_landscape(
@@ -173,11 +233,26 @@ def mean_curves(by_n: dict[int, dict[int, Any]]) -> dict[int, Any]:
 
 
 def analyse(
-    by_n: dict[int, dict[int, Any]], min_N: int = 0, p_min: float = 0.0
+    by_n: dict[int, dict[int, Any]],
+    min_N: int = 0,
+    p_min: float = 0.0,
+    errors: dict[int, dict[int, Any]] | None = None,
 ) -> dict[str, Any]:
     """Crossings of every size and collapses of the sizes ``N >= min_N``.
 
-    The collapses keep only the points with ``p >= p_min``.
+    The collapses keep only the points with ``p >= p_min``. The error of
+    the collapse has two parts (issue #251):
+
+    - statistical, ``p_c_stat`` and ``nu_stat``: a parametric bootstrap
+      (:func:`QELM.evaluation.finite_size.bootstrap_collapse`) with the
+      standard error of each point, from the spread of the trajectories
+      (``errors``, ``N -> seed -> (p, error)``) or, without it, from the
+      spread of the seeds;
+    - systematic, ``p_c_sys`` and ``nu_sys``: half the range of ``p_c`` and
+      ``nu`` over the fits of :func:`fit_choices`, listed in
+      ``collapse_choices``.
+
+    ``p_c_total`` and ``nu_total`` add the two in quadrature.
     """
     mean = mean_curves(by_n)
     sizes = sorted(mean)
@@ -197,12 +272,30 @@ def analyse(
         "crossings_S_over_half": crossings,
         "fit": {"min_N": min_N, "p_min": p_min},
     }
+    full = by_n
     by_n = restrict(by_n, min_N, p_min)
     sizes = sorted(by_n)
     if len(sizes) >= 2:
-        curves = {N: (p, S) for N, (p, S, _) in mean_curves(by_n).items()}
+        mean = mean_curves(by_n)
+        curves = {N: (p, S) for N, (p, S, _) in mean.items()}
         result["collapse"] = fit_collapse(curves, P_RANGE, NU_RANGE)
         result["landscape"] = cost_landscape(curves)
+        point_errors = (
+            pooled_errors(restrict(errors, min_N, p_min))
+            if errors is not None and set(restrict(errors, min_N, p_min)) == set(mean)
+            else {N: e for N, (_, _, e) in mean.items()}
+        )
+        result["collapse"] |= bootstrap_collapse(
+            curves, point_errors, P_RANGE, NU_RANGE, n_boot=N_BOOT
+        )
+        choices = fit_choices(full, min_N, p_min)
+        result["collapse_choices"] = choices
+        for key in ("p_c", "nu"):
+            values = [f[key] for f in choices]
+            sys = (max(values) - min(values)) / 2
+            stat = result["collapse"][f"{key}_stat"]
+            result["collapse"][f"{key}_sys"] = sys
+            result["collapse"][f"{key}_total"] = float(np.hypot(stat, sys))
         seeds = sorted(set.intersection(*(set(s) for s in by_n.values())))
         per_seed = [
             fit_collapse({N: by_n[N][s] for N in sizes}, P_RANGE, NU_RANGE)
@@ -242,6 +335,7 @@ def draw(
     entropy: str = "S",
     min_N: int = 0,
     p_min: float = 0.0,
+    errors: dict[str, dict[int, dict[int, Any]]] | None = None,
 ) -> tuple[plt.Figure, dict[str, Any]]:
     """Draw ``entropy_fss.png``, one row per model."""
     fig, axes = subplots(len(data), 4, figsize=(20, 3.9 * len(data)), squeeze=False)
@@ -250,7 +344,7 @@ def draw(
     references = REFERENCES_RENYI.get(entropy, REFERENCES)
     table: dict[str, Any] = {}
     for row, (model, by_n) in zip(axes, data.items(), strict=True):
-        result = analyse(by_n, min_N, p_min)
+        result = analyse(by_n, min_N, p_min, (errors or {}).get(model))
         ref = references.get(model)
         table[model] = result | {"entropy": entropy, "reference": ref}
         for N, curve in result["curves"].items():
@@ -277,10 +371,11 @@ def draw(
             for N, (x, y) in rescale(curves, fit["p_c"], fit["nu"]).items():
                 row[2].plot(x, y, "o-", ms=3, color=colors[str(N)])
             title = (
-                f"collapse N >= {min(curves)}, p >= {p_min:g}: p_c = {fit['p_c']:.3f}"
-                + (f" ± {fit['p_c_err']:.3f}" if "p_c_err" in fit else "")
-                + f", nu = {fit['nu']:.2f}"
-                + (f" ± {fit['nu_err']:.2f}" if "nu_err" in fit else "")
+                f"collapse N >= {min(curves)}, p >= {p_min:g}:\n"
+                f"p_c = {fit['p_c']:.3f} ± {fit['p_c_stat']:.3f} (stat)"
+                f" ± {fit['p_c_sys']:.3f} (sys), "
+                f"nu = {fit['nu']:.2f} ± {fit['nu_stat']:.2f} (stat)"
+                f" ± {fit['nu_sys']:.2f} (sys)"
             )
             if ref is not None:
                 title += f"\npaper: p_c = {ref['p_c']} ± {ref['p_c_err']}, "
@@ -367,7 +462,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             f"No run of {args.sweep} holds {args.entropy}_mean_p<p>: "
             "run the sweep with AVERAGE_FROM set (entropy_task.average_from)."
         )
-    fig, table = draw(data, args.entropy, args.min_N, args.p_min)
+    errors = load_curves(args.sweep, args.entropy, errors=True)
+    fig, table = draw(data, args.entropy, args.min_N, args.p_min, errors)
     print(f"Wrote {save_figure(fig, out, 'entropy_fss', table)}")
     for model, result in table.items():
         print(f"{model}: crossings of S/(N/2) {result['crossings_S_over_half']}")
