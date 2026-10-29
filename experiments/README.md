@@ -637,15 +637,31 @@ Task 1B, after the scalable probes of Gullans & Huse (arXiv:1905.05195,
 arXiv:1910.00020). A reference qubit `R` (the ancilla, qubit 0, `Nr=1`) is
 maximally entangled with the central system qubit of the Néel state at
 `t = 0`, then left alone: only the `N` system qubits run `n_rounds` rounds
-(default `2 N`) of a unitary step followed by a Z measurement of each system
-qubit with probability `p`. In the mixed (volume-law) phase the system hides
-`R`, whose entropy `S_R` stays near 1 bit; in the pure (area-law) phase the
-measurements purify it, `S_R -> 0`. `experiments/QELM_R/exp_QELM_R.py` keeps
-one draw of the dynamics for the whole run (`purification_task.fixed_instance`,
-the fixed reservoir of the QELM) and fits, at each `p` of
-`purification_task.p_values`, two `sklearn.linear_model.Ridge` decoders of
-the flattened record `M` (`training.alpha`, 1.0 in `conf/QELM_R.yaml`): a
-classifier of a single Z shot of `R` and a regression of `<Z_R>`.
+(default `2 N`) of one half-layer of two-qubit gates (even bonds, then odd
+bonds) followed by a Z measurement of each system qubit with probability
+`p`, the time step of Skinner et al. (2019) and of the diagnostics of PR
+#244. In the mixed (volume-law) phase the system hides `R`, whose entropy
+`S_R` stays near 1 bit; in the pure (area-law) phase the measurements
+purify it, `S_R -> 0`.
+
+Two local, chaotic reservoirs are compared, by `purification_task.dynamics`
+(`conf/QELM_R.yaml`):
+
+- `haar`: Haar-random U(4) gates, new for every bond and every round, drawn
+  once per run (`purification_task.fixed_instance`, the fixed reservoir of
+  the QELM; `false` draws a new circuit per trajectory);
+- `floquet`: the Floquet Ising brick of Skinner, Ruhman & Nahum, PRX 9,
+  031009 (2019), the same everywhere and at every round
+  (`QELM.evaluation.chaos_locality.floquet_ising_gate`, couplings in
+  `purification_task.floquet`, the paper's values by default).
+
+`experiments/QELM_R/exp_QELM_R.py` fits, at each `p` of
+`purification_task.p_values`, two `sklearn.linear_model` ridge decoders of
+the flattened record `M`: a classifier of a single Z shot of `R` and a
+regression of `<Z_R>`. With `training.alpha=null` (default) each picks its
+regularization on its training set by leave-one-out cross-validation
+(`RidgeCV`, 1e-2 to 1e4), written as `alpha_shot` and `alpha_z`: the record
+has `2 N**2` features, as many as the training trajectories at large `N`.
 
 Per `p`, `metrics.json` holds `accuracy` (on the test shots),
 `accuracy_expected` (the mean probability `(1 + s z) / 2` that the guesses
@@ -656,32 +672,18 @@ vector), the chance level `majority_accuracy`, `r2_z` and `mse_z` of the
 `<Z_R>` regression (`r2_z` is NaN at `p = 0`, where `<Z_R> = 0`), and
 `S_R_mean`, `S_R_std`, `purified` (share with `S_R < 0.1` bit).
 
-The TFIM with `TFIM.basis=X` conserves the Z parity of the system, opposite
-in the two branches of the Bell pair: `R` stays diagonal and decoding it is
-the learnability of a Z2 charge. The Haar brickwork has no symmetry, `R` is
-purified along a random axis (ceiling about 0.75) and `<Z_R>` is a nonlinear
-function of the record, which a linear decoder mostly misses.
-
 ```bash
-uv run python experiments/QELM_R/exp_QELM_R.py models=clifford_circuit N=8
-MAX_JOBS=4 ./experiments/QELM_R/exp_QELM_R.sh   # TFIM, Clifford, Haar; N = 6 8 10 12
+uv run python experiments/QELM_R/exp_QELM_R.py N=8 purification_task.dynamics=floquet
+MAX_JOBS=4 ./experiments/QELM_R/exp_QELM_R.sh   # haar and floquet; N = 6 8 10 12
 uv run python experiments/QELM_R/plot_QELM_R.py outputs/exp_QELM_R/<date_time>
 ```
 
-The launcher sweeps `MODELS`, `N_VALUES` and `SEEDS` (`PER_P`, `P_VALUES`,
-`P_C_CIRCUIT=0.17`, `P_C_TFIM`, `ALPHA`, `MAX_JOBS` change the defaults) and
-writes one folder per run, `<model>_N<N>_seed<seed>/`. The plot script
+The launcher sweeps `DYNAMICS`, `N_VALUES` and `SEEDS` (`PER_P`, `P_VALUES`,
+`P_C_HAAR=0.17`, `P_C_FLOQUET`, `ALPHA`, `MAX_JOBS` change the defaults) and
+writes one folder per run, `<dynamics>_N<N>_seed<seed>/`. The plot script
 writes `purification_vs_p` (`S_R` against `p`, one curve per `N`),
 `accuracy_vs_p` (expected accuracy of the ridge decoder and the Bayes
-ceiling) and `r2_z_vs_p`, each with its JSON. The TFIM at `N = 12` applies a
-dense `exp(-i H dt)` of size 4096 at every round, about 1.6 s per trajectory
-on one core, so 2.5 hours for the default 11 x 500 trajectories; `N = 10`
-takes about 5 minutes, the circuits less.
-
-With a fixed Clifford instance, a purified `R` points along X, Y or Z, an
-axis set by the gates: when it is not Z, the Z outcome stays a coin flip
-(`bayes_accuracy = 1/2`) although `bloch_accuracy = 1`, so the Clifford
-ceilings in Z vary a lot from one seed to the next.
+ceiling) and `r2_z_vs_p`, each with its JSON.
 
 ## Run the double-descent experiment on MNIST (issue #181)
 

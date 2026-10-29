@@ -4,22 +4,36 @@
 Task 1B of the experimental framework, after the scalable probes of Gullans
 & Huse (arXiv:1905.05195, arXiv:1910.00020). Can a ridge decoder of the
 local measurement record ``M`` predict the final state of a reference qubit
-``R`` that the measurements never touch? For each measurement probability
-``p`` of ``purification_task.p_values`` and each of its
+``R`` that the measurements never touch? Two local, chaotic reservoirs are
+compared (issue #243, PR #244): a random Haar brickwork and the
+deterministic Floquet Ising chain of Skinner, Ruhman & Nahum (PRX 9, 031009
+(2019)). For each measurement probability ``p`` of
+``purification_task.p_values`` and each of its
 ``purification_task.samples_per_p`` trajectories:
 
 1. ``R`` (qubit 0, the ancilla, ``Nr = 1``) is maximally entangled with the
    central system qubit ``N // 2`` of the Néel state ``|0101...>``
    (:func:`QELM.evaluation.purification.reference_bell_state`).
 2. The ``N`` system qubits alone run ``n_rounds`` rounds
-   (``purification_task.n_rounds``, default ``2 N``) of a unitary step (the
-   TFIM ``U(dt)`` with ``dt = purification_task.dt``, or brickwork layers of
-   a Haar or Clifford circuit) followed by a projective measurement in Z of
-   each system qubit with probability ``p``. Row ``j`` of ``M`` holds the
-   outcomes of round ``j``, +-1, and 0 for an unmeasured qubit. ``R`` is
-   never acted on. With ``purification_task.fixed_instance`` (default) the
-   dynamics are drawn once per run, the fixed reservoir of the QELM, and
-   only the measurements change between trajectories.
+   (``purification_task.n_rounds``, default ``2 N``). A round is one
+   half-layer of two-qubit gates, on the even bonds ``(0, 1), (2, 3), ...``
+   for even rounds and on the odd bonds ``(1, 2), (3, 4), ...`` for odd ones,
+   followed by a projective measurement in Z of each system qubit with
+   probability ``p``: the time step of Skinner et al. and of the diagnostics
+   of PR #244. ``purification_task.dynamics`` sets the gates:
+
+   - ``haar``: gates drawn from the Haar measure on U(4), new for every
+     bond and every round. With ``purification_task.fixed_instance``
+     (default) the circuit is drawn once per run, the fixed reservoir of the
+     QELM, and only the measurements change between trajectories; ``false``
+     draws a new circuit per trajectory;
+   - ``floquet``: the same brick everywhere and at every round,
+     :func:`QELM.evaluation.chaos_locality.floquet_ising_gate` with the
+     couplings of ``purification_task.floquet`` (the paper's values by
+     default). It has no randomness: ``fixed_instance`` changes nothing.
+
+   Row ``j`` of ``M`` holds the outcomes of round ``j``, +-1, and 0 for an
+   unmeasured qubit. ``R`` is never acted on.
 3. At the end, the Bloch vector ``(x, y, z)`` of ``R`` in the state
    conditioned on the record is read, with its entropy ``S_R`` (1 bit: mixed,
    0: purified), and ``R`` is measured once in Z with the Born rule
@@ -29,8 +43,11 @@ Each ``p`` gets its own decoder, as in the learnability experiments: its
 trajectories are split into training and test sets
 (``samples.train_fraction``,
 :func:`~QELM.evaluation.entropy_regression.stratified_split`) and two
-ridge regressions (``sklearn.linear_model.Ridge``, ``alpha =
-training.alpha``, intercept fitted) read the flattened record:
+ridge regressions (``sklearn.linear_model``, intercept fitted) read the
+flattened record. With ``training.alpha = null`` (``conf/QELM_R.yaml``) the
+regularization of each is chosen on the training set by efficient
+leave-one-out cross-validation (``RidgeCV`` over :data:`ALPHAS`) and written
+as ``alpha_shot_p<p>`` and ``alpha_z_p<p>``; a number fixes it.
 
 - a classifier of the shot of ``R``: trained on the shots, it guesses
   ``sign(prediction)``. ``accuracy_p<p>`` is its share of right guesses on
@@ -50,17 +67,12 @@ the chance level. In the mixed phase ``R`` stays entangled with the system,
 ``z`` is close to 0 and every accuracy stays at 1/2; in the pure phase the
 record carries ``R`` and the decoder can approach the ceiling.
 
-The TFIM with ``TFIM.basis = X`` conserves the Z parity of the system, and
-the two branches of the Bell pair have opposite parities: ``R`` stays
-diagonal (``x = y = 0``) and ``z`` is the posterior of the parity given the
-record. The TFIM task is then the learnability of a Z2 charge; the Haar
-brickwork has no symmetry and is the generic case.
-
 The unsuffixed ``nmse``, ``nmse_err``, ``r2``, ``y_test`` and ``y_pred``
 are those of the ``z`` regression on the test sets pooled over ``p``. Run
 from the repository root:
 
-    uv run python experiments/QELM_R/exp_QELM_R.py models=haar_circuit N=8
+    uv run python experiments/QELM_R/exp_QELM_R.py N=8 \\
+        purification_task.dynamics=floquet
 
 Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
@@ -85,11 +97,12 @@ from typing import Any
 import hydra
 import numpy as np
 from hydra.core.hydra_config import HydraConfig
-from omegaconf import DictConfig, OmegaConf
-from sklearn.linear_model import Ridge
+from omegaconf import DictConfig
+from sklearn.linear_model import Ridge, RidgeCV
 from tqdm import tqdm
 
-from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
+from QELM import check_qubit_counts, set_seed
+from QELM.evaluation.chaos_locality import floquet_ising_gate
 from QELM.evaluation.entropy_regression import stratified_split
 from QELM.evaluation.metrics import MSE, NMSE, R2, NMSE_err, accuracy
 from QELM.evaluation.metrics import majority_accuracy as chance_accuracy
@@ -100,19 +113,17 @@ from QELM.evaluation.purification import (
     reference_bloch,
     reference_entropy,
 )
-from QELM.models.circuits.base import BrickworkCircuit
-from QELM.models.circuits.clifford import CliffordBrickworkCircuit
-from QELM.models.circuits.haar import HaarBrickworkCircuit
+from QELM.models.circuits.base import Layer, apply_layer
+from QELM.models.circuits.haar import haar_gate
 from QELM.training.measurements.projective import measure_projective_psi
 from QELM.utils import save_config, save_results
 
-# Random circuits that can replace the TFIM, by models value.
-CIRCUITS: dict[str, type[BrickworkCircuit]] = {
-    HaarBrickworkCircuit.name: HaarBrickworkCircuit,
-    CliffordBrickworkCircuit.name: CliffordBrickworkCircuit,
-}
+# Gates of the system, by purification_task.dynamics.
+DYNAMICS = ("haar", "floquet")
 # Seed tag of the generator of the measurements and the shots of R.
 RNG_TAG = 247
+# Regularizations tried by RidgeCV when training.alpha is null.
+ALPHAS = np.logspace(-2, 4, 13)
 # Entropy of R, in bits, below which a trajectory counts as purified.
 PURIFIED_BELOW = 0.1
 # Below this variance of z on the test set (at p = 0, z = 0 exactly), R2 is
@@ -131,8 +142,8 @@ PER_P_SCORES = (
     "S_R_std",
     "purified",
 )
-# One unitary step of a trajectory: the state of R and the system, round j.
-Step = Callable[[np.ndarray, int], np.ndarray]
+# The half-layers of one trajectory, one per round.
+Circuit = list[Layer]
 
 
 def neel_state(N: int) -> np.ndarray:
@@ -143,63 +154,57 @@ def neel_state(N: int) -> np.ndarray:
     return psi
 
 
-def _tfim_sampler(
-    cfg: DictConfig, N: int, dt: float, fixed: bool
-) -> Callable[[], Step]:
-    """Return a function that draws a TFIM step ``U(dt)`` on the system qubits.
+def half_layer_bonds(N: int, t: int) -> list[tuple[int, int]]:
+    """Return the bonds of half-layer ``t``, as qubits of the state with ``R`` first.
 
-    The step acts on the rows of the ``(2, 2**N)`` reshaped state, so ``R``
-    is left alone. With ``fixed`` the couplings are drawn once.
+    System qubit ``k`` is qubit ``k + 1`` of the state. Even ``t``: the
+    system bonds ``(0, 1), (2, 3), ...``; odd ``t``: ``(1, 2), (3, 4), ...``
+    (open chain).
     """
-    block = OmegaConf.to_container(cfg[TransverseFieldIsingModel.name], resolve=True)
-    assert isinstance(block, dict)
-    params = {**{str(k): v for k, v in block.items()}, "N": N}
-
-    def build() -> Step:
-        U_T = TransverseFieldIsingModel(params).propagator(dt=dt).T
-        return lambda psi, j: (psi.reshape(2, -1) @ U_T).reshape(-1)
-
-    if fixed:
-        step = build()
-        return lambda: step
-    return build
+    return [(k + 1, k + 2) for k in range(t % 2, N - 1, 2)]
 
 
-def _circuit_sampler(cfg: DictConfig, n_rounds: int, fixed: bool) -> Callable[[], Step]:
-    """Return a function that draws the gates of a brickwork circuit, per sample.
+def circuit_sampler(
+    dynamics: str,
+    N: int,
+    n_rounds: int,
+    fixed: bool,
+    floquet: dict[str, float],
+    rng: np.random.Generator,
+) -> Callable[[], Circuit]:
+    """Return a function that gives the ``n_rounds`` half-layers of a trajectory.
 
-    The gates act on qubits ``Nr`` to ``N_total - 1``, never on ``R``. Round
-    ``j`` applies brickwork layers ``j * k`` to ``(j + 1) * k - 1``, with
-    ``k = layers_per_step``. With ``fixed`` the gates are drawn once.
+    Args:
+        dynamics: ``"haar"`` or ``"floquet"``.
+        N: Number of system qubits.
+        n_rounds: Number of half-layers.
+        fixed: Haar only: ``True`` draws the circuit once, ``False`` per call.
+        floquet: Couplings of :func:`floquet_ising_gate`.
+        rng: Generator of the Haar gates.
 
     Raises:
-        ValueError: If ``layers_per_step < 1``.
+        ValueError: If ``dynamics`` is unknown.
     """
-    name = str(cfg.models)
-    block = OmegaConf.to_container(cfg[name], resolve=True)
-    assert isinstance(block, dict)
-    params = {str(k): v for k, v in block.items()}
-    per_step = int(params.get("layers_per_step", 1))
-    if per_step < 1:
-        raise ValueError(f"{name}.layers_per_step must be >= 1, got {per_step}.")
-    params["fixed_instance"] = fixed
-    circuit = CIRCUITS[name]({**params, "depth": n_rounds * per_step})
+    if dynamics == "floquet":
+        gate = floquet_ising_gate(**floquet)
+        circuit = [
+            [(i, j, gate) for i, j in half_layer_bonds(N, t)] for t in range(n_rounds)
+        ]
+        return lambda: circuit
+    if dynamics != "haar":
+        raise ValueError(
+            f"purification_task.dynamics must be one of {DYNAMICS}, got {dynamics!r}."
+        )
 
-    def step(psi: np.ndarray, j: int) -> np.ndarray:
-        for t in range(j * per_step, (j + 1) * per_step):
-            psi = circuit.apply_layer(psi, t)
-        return psi
+    def draw() -> Circuit:
+        return [
+            [(i, j, haar_gate(rng)) for i, j in half_layer_bonds(N, t)]
+            for t in range(n_rounds)
+        ]
 
-    first = True
-
-    def draw() -> Step:
-        nonlocal first
-        # The constructor drew the gates of the first sample.
-        if not (first or circuit.fixed_instance):
-            circuit.redraw()
-        first = False
-        return step
-
+    if fixed:
+        circuit = draw()
+        return lambda: circuit
     return draw
 
 
@@ -226,6 +231,14 @@ def _with_bias(X: np.ndarray) -> np.ndarray:
     return np.hstack([X, np.ones((X.shape[0], 1))])
 
 
+def _ridge(alpha: float | None) -> Ridge | RidgeCV:
+    return RidgeCV(alphas=ALPHAS) if alpha is None else Ridge(alpha=alpha)
+
+
+def _alpha(model: Ridge | RidgeCV) -> float:
+    return float(model.alpha_ if isinstance(model, RidgeCV) else model.alpha)
+
+
 def decode(
     X: np.ndarray,
     shot: np.ndarray,
@@ -233,7 +246,7 @@ def decode(
     r: np.ndarray,
     train: np.ndarray,
     test: np.ndarray,
-    alpha: float,
+    alpha: float | None,
 ) -> tuple[dict[str, float], np.ndarray, np.ndarray]:
     """Fit the two ridge decoders of one ``p`` and score them.
 
@@ -244,16 +257,18 @@ def decode(
         r: Length of the Bloch vector of ``R``, ``(L,)``.
         train: Training indices.
         test: Test indices.
-        alpha: Ridge regularization.
+        alpha: Ridge regularization, or ``None`` to choose it by
+            leave-one-out cross-validation on the training set.
 
     Returns:
         ``(scores, shot_pred, z_pred)``: the scores of :data:`PER_P_SCORES`
-        about the decoders, and the outputs of the classifier and of the
-        ``z`` regression on the test set.
+        about the decoders with ``alpha_shot`` and ``alpha_z``, and the
+        outputs of the classifier and of the ``z`` regression on the test
+        set.
     """
-    classifier = Ridge(alpha=alpha).fit(X[train], shot[train])
+    classifier = _ridge(alpha).fit(X[train], shot[train])
     shot_pred = np.asarray(classifier.predict(X[test]), dtype=float)
-    regression = Ridge(alpha=alpha).fit(X[train], z[train])
+    regression = _ridge(alpha).fit(X[train], z[train])
     z_pred = np.asarray(regression.predict(X[test]), dtype=float)
     scores = {
         "accuracy": accuracy(shot[test], shot_pred),
@@ -263,6 +278,8 @@ def decode(
         "majority_accuracy": chance_accuracy(shot[train], shot[test]),
         "r2_z": R2(z[test], z_pred) if np.var(z[test]) > Z_VAR_MIN else np.nan,
         "mse_z": MSE(z[test], z_pred),
+        "alpha_shot": _alpha(classifier),
+        "alpha_z": _alpha(regression),
     }
     return scores, shot_pred, z_pred
 
@@ -272,17 +289,15 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     Args:
         cfg: Composed config (``load_config(..., config_name="QELM_R")`` or
-            Hydra). Reads ``models``, ``N``, ``Nr`` (must be 1), the model
-            block, ``purification_task``, ``samples.train_fraction`` and
-            ``training.alpha``.
+            Hydra). Reads ``N``, ``Nr`` (must be 1), ``purification_task``,
+            ``samples.train_fraction`` and ``training.alpha``.
 
     Returns:
         The arrays and scores listed in the module docstring.
 
     Raises:
-        ValueError: If ``Nr`` is not 1, ``N < 2``, ``models`` is not
-            supported, a probability is outside ``[0, 1]`` or a count is too
-            small.
+        ValueError: If ``Nr`` is not 1, ``N < 2``, ``dynamics`` is unknown,
+            a probability is outside ``[0, 1]`` or a count is too small.
     """
     set_seed(cfg)
     N, Nr, N_total = check_qubit_counts(cfg)
@@ -302,22 +317,19 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     n_rounds = 2 * N if task.n_rounds is None else int(task.n_rounds)
     if n_rounds < 1:
         raise ValueError(f"purification_task.n_rounds must be >= 1, got {n_rounds}.")
-    fixed = bool(task.fixed_instance)
 
-    model_name = str(cfg.models)
-    if model_name == TransverseFieldIsingModel.name:
-        draw_evolution = _tfim_sampler(cfg, N, float(task.dt), fixed)
-    elif model_name in CIRCUITS:
-        draw_evolution = _circuit_sampler(cfg, n_rounds, fixed)
-    else:
-        known = ", ".join([TransverseFieldIsingModel.name, *CIRCUITS])
-        raise ValueError(f"models={model_name} is not supported here. Known: {known}.")
-
-    # The dynamics come from the global NumPy state (set_seed), the
-    # measurements and the shots from their own generator, so a run is
-    # reproducible for a given seed.
+    # The gates, the measurements and the shots have their own generators,
+    # so a run is reproducible for a given seed.
     seed = int(cfg.seed)
     rng = np.random.default_rng([seed, RNG_TAG])
+    draw_circuit = circuit_sampler(
+        str(task.dynamics),
+        N,
+        n_rounds,
+        bool(task.fixed_instance),
+        {str(k): float(v) for k, v in task.floquet.items()},
+        np.random.default_rng([seed, RNG_TAG, 2]),
+    )
     psi0 = reference_bell_state(neel_state(N), N // 2)
 
     L = levels.size * per_p
@@ -327,10 +339,10 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     S_R = np.zeros(L)
     shot = np.zeros(L)
     for i in tqdm(range(L)):
-        evolve = draw_evolution()
+        circuit = draw_circuit()
         psi = psi0
         for j in range(n_rounds):
-            psi = evolve(psi, j)
+            psi = apply_layer(psi, circuit[j])
             psi, M[i, j] = measure_system(psi, float(p[i]), rng)
         bloch[i] = reference_bloch(psi)
         S_R[i] = reference_entropy(bloch[i])
@@ -341,7 +353,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     split_rng = np.random.default_rng([seed, RNG_TAG, 1])
     train, test = stratified_split(p, float(cfg.samples.train_fraction), split_rng)
     X = M.reshape(L, -1)
-    alpha = float(cfg.training.alpha)
+    alpha = None if cfg.training.alpha is None else float(cfg.training.alpha)
 
     metrics: dict[str, float] = {"n_rounds": float(n_rounds)}
     z_pred = np.zeros(test.size)
@@ -356,7 +368,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         scores["S_R_mean"] = float(S_R[in_p].mean())
         scores["S_R_std"] = float(S_R[in_p].std())
         scores["purified"] = float(np.mean(S_R[in_p] < PURIFIED_BELOW))
-        metrics |= {f"{name}_p{level:g}": scores[name] for name in PER_P_SCORES}
+        names = (*PER_P_SCORES, "alpha_shot", "alpha_z")
+        metrics |= {f"{name}_p{level:g}": scores[name] for name in names}
 
     y_test = z[test]
     return {
@@ -403,7 +416,8 @@ def main(cfg: DictConfig) -> None:
         results, out_dir, Path(__file__).stem, extra_metrics=scalar_keys(results)
     )
     save_config(cfg, out_dir)
-    print(f"L: {results['z'].shape[0]}  N: {cfg.N}  model: {cfg.models}")
+    dynamics = cfg.purification_task.dynamics
+    print(f"L: {results['z'].shape[0]}  N: {cfg.N}  dynamics: {dynamics}")
     print(f"{'p':>6} {'S_R':>6} {'acc':>6} {'acc_exp':>8} {'bayes':>6} {'r2_z':>7}")
     for level in cfg.purification_task.p_values:
         key = f"p{float(level):g}"

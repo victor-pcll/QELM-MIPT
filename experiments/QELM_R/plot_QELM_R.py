@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Figures of a sweep of ``exp_QELM_R.sh``: purification decoding (issue #247).
 
-Reads every run folder of the sweep (one per model, ``N`` and seed),
+Reads every run folder of the sweep (one per dynamics, ``N`` and seed),
 averages over the seeds (standard error as error bars) and writes three
 figures, each with its JSON (:func:`QELM.utils.plots.save_figure`), in the
-sweep folder unless ``--out`` is given. Each has one panel per model, one
-color per ``N``, and the dashed vertical line at ``p_c`` when the run sets
-it:
+sweep folder unless ``--out`` is given. Each has one panel per dynamics
+(Haar, Floquet), one color per ``N``, and the dashed vertical line at
+``p_c`` when the run sets it:
 
 - ``purification_vs_p.png``: the mean entropy of the reference qubit,
   ``S_R``, against ``p``. 1 bit while the system hides ``R`` (mixed,
@@ -38,9 +38,11 @@ from omegaconf import OmegaConf
 from QELM.utils.plots import color_map, save_figure, subplots
 from QELM.utils.sweep import load_sweep
 
-KEYS = (("N", "N"), ("seed", "seed"), ("model", "models"))
-# Panel order of the models; others follow in alphabetical order.
-MODEL_ORDER = ("TFIM", "clifford_circuit", "haar_circuit")
+KEYS = (("N", "N"), ("seed", "seed"), ("model", "purification_task.dynamics"))
+# Panel order of the dynamics; others follow in alphabetical order.
+MODEL_ORDER = ("haar", "floquet")
+# Panel titles of the dynamics.
+TITLES = {"haar": "Haar brickwork", "floquet": "Floquet (Skinner et al. 2019)"}
 
 
 def _mean_err(values: Sequence[float | None]) -> tuple[float, float]:
@@ -122,7 +124,7 @@ def _figure(
             ax.axhline(hline, color="0.6", lw=1)
         if ylim is not None:
             ax.set_ylim(*ylim)
-        ax.set_title(model)
+        ax.set_title(TITLES.get(model, model))
         ax.set_xlabel("p")
         ax.set_ylabel(ylabel)
         ax.legend(frameon=False, fontsize=9)
