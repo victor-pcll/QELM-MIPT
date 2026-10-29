@@ -24,12 +24,12 @@ uv sync
 | --- | --- |
 | `conf/` | Hydra YAML: `config.yaml` plus groups `models`, `training/{measurements,readout,regression}`, `evaluation`, mirroring `src/QELM/` |
 | `data/` | Local time series and training datasets (gitignored); MNIST is downloaded to `data/mnist/` on first use |
-| `src/QELM/models/` | Hamiltonians and time evolution (transverse-field Ising model, Kitaev scaffold), random brickwork circuits in the package `circuits/` (issue #189): `base.py` (`BrickworkCircuit`, gate application), `haar.py` (U(1) and Haar gates), `clifford.py` (Clifford gates) |
+| `src/QELM/models/` | Hamiltonians and time evolution (transverse-field Ising model, Kitaev scaffold), random brickwork circuits in the package `circuits/` (issue #189): `base.py` (`BrickworkCircuit`, gate application), `haar.py` (U(1) and Haar gates), `clifford.py` (Clifford gates), `floquet.py` (the local Floquet Ising chain of Skinner, Ruhman and Nahum 2019, issue #239) |
 | `src/QELM/physics/` | Quantum primitives: Pauli matrices and site operators |
 | `src/QELM/encoding/` | Initial-state encodings (renamed from `embedding/`, issue #197) (`Encoding` base, ancilla + charge-sector state, angle encoding `RotationEncoding` of a static input, and the product encodings of issue #196: `AngleEncoding`, `DenseAngleEncoding`, `UniformBlochEncoding`, `GeneralEncoding`) |
 | `src/QELM/datasets/` | Static classification datasets: MNIST and scikit-learn's 8x8 digits as a task between a few chosen digits, and their PCA to rotation angles (`AngleEncoder`) |
 | `src/QELM/training/` | Measurements, feature extraction and readout fitting (`LinearReadout` scaffold, `RidgeReadout` closed-form ridge regression, `alpha = 0` for the unregularized minimum-norm fit) |
-| `src/QELM/evaluation/` | Metrics, entropies, the learnability and charge-sharpening statistics, the double-descent sweep (`double_descent.py`), the scores of the entropy-prediction task (`entropy_regression.py`, issue #230), plot scaffolds |
+| `src/QELM/evaluation/` | Metrics, entropies, the learnability and charge-sharpening statistics, the double-descent sweep (`double_descent.py`), the scores of the entropy-prediction task (`entropy_regression.py`, issue #230), the crossings and data collapse of the entropy curves (`finite_size.py`, issue #239), plot scaffolds |
 | `src/QELM/utils/plots/` | Plotting helpers shared by the scripts and the notebooks: one style (no grid, closed box, large titles), sweep curves, reference overlays, `save_figure` (figure and its data in the run's output folder) |
 | `notebooks/benchmarks/` | Benchmark notebooks: reproductions of published figures (learnability, Barratt et al. 2022, Fig. 2b and 2c; charge sharpening, Agrawal et al. 2024, Fig. 7) |
 | `notebooks/results/` | Notebooks producing new results (TFIM reservoir, QELM on the measurement record M, double descent on MNIST) |

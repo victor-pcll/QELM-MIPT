@@ -631,6 +631,47 @@ the transition), `r2_summary` (pooled and fixed-`p` `R2` of every set),
 `p`), each with its JSON. The TFIM at `N = 10` builds a dense `exp(-i H dt)`
 per trajectory and is the slow part of the sweep.
 
+### The local Floquet chain of Skinner et al. (2019) (issue #239)
+
+`models=floquet_circuit` runs the nearest-neighbour model of the numerics of
+Skinner, Ruhman and Nahum, PRX 9, 031009 (2019), their Eq. (1)
+(`QELM.models.circuits.floquet`): every brick of a running-bond circuit is
+the same two-qubit unitary
+
+    U = exp{-i [phi_xx X X + theta_x (X 1 + 1 X)]} exp{-i [phi_zz Z Z + theta_z (Z 1 + 1 Z)]}
+
+with the paper's `phi_xx = 0.3`, `phi_zz = 0.6`, `theta_x = 0.2`,
+`theta_z = 0.4`: Ising couplings in a transverse and a longitudinal field,
+chaotic, with no conserved charge (neither `sum_i Z_i` nor its parity, so the
+charge task of `exp_QELM_Q` is not defined for it). One round is one layer of
+bricks, on the even bonds or on the odd ones in turn, followed by the
+measurement of each qubit with probability `p`: the protocol of the paper.
+By default a run lasts `4 N` rounds, `2 N` periods, by when the entropy at
+`p = 0` has saturated, plus one round when `N / 2` is odd, so that the last
+layer always holds the bond across the cut of `S`. The entropy read right
+after the measurements depends on whether the cut bond got its gate in the
+last layer or one layer earlier: at `p = 0.2`, `S_A / (N/2)` is 0.175 (ending
+on the cut) against 0.123 (not) at `N = 6`. Without this choice the curves of
+`N / 2` even and odd form two families that do not cross where they should. `models=U1_circuit` (`conf/models/U1_circuit.yaml`)
+adds the random U(1) brickwork of Agrawal et al. and Barratt et al. (2022)
+as the charge-conserving reference.
+
+```bash
+MODELS="floquet_circuit haar_circuit U1_circuit" N_VALUES="6 8 10 12" SEEDS="42 43 44" \
+  P_VALUES="0 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.6" MAX_JOBS=4 \
+  ./experiments/QELM_S/exp_QELM_S.sh
+uv run python experiments/QELM_S/plot_entropy_fss.py outputs/exp_QELM_S/<date_time>
+```
+
+`P_C_FLOQUET` (default `0.21`, `S_1` of the Floquet model in Table I of the
+paper) and `P_C_U1` (default none) set the phase label, `N_ROUNDS` the number
+of rounds. `plot_entropy_fss.py` writes `entropy_fss.png` and its JSON: per
+model, `S_A / (N/2)` and `S_A` against `p` with the crossings of consecutive
+sizes, and the collapse `S(p, N) - S(p_c, N)` against `(p - p_c) N^(1/nu)` at
+the `(p_c, nu)` that minimizes the mismatch of the rescaled curves
+(`QELM.evaluation.finite_size`, the method of Sec. IV of the paper), fitted
+on the seed average and on each seed (the spread gives the error bars).
+
 ## Run the double-descent experiment on MNIST (issue #181)
 
 ```bash
