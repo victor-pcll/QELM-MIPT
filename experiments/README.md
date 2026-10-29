@@ -659,6 +659,37 @@ sizes, and the collapse `S(p, N) - S(p_c, N)` against `(p - p_c) N^(1/nu)` at
 the `(p_c, nu)` that minimizes the mismatch of the rescaled curves
 (`QELM.evaluation.finite_size`, the method of Sec. IV of the paper), fitted
 on the seed average and on each seed (the spread gives the error bars).
+A fourth column draws the cost of the collapse in the `(p_c, nu)` plane.
+
+#### Closer to the paper: late-time averages and the `I_3` crossing (issue #251)
+
+At `N <= 12`, with the final entropy alone and steps of 0.05 in `p`, the
+collapse gives `p_c = 0.25`, `nu = 2.2`, against `0.21 +- 0.16` and
+`1.74 +- 0.45` in the paper. The cost of the collapse has a long diagonal
+valley in the `(p_c, nu)` plane, so the window, the sizes and the noise move
+the minimum along it. `AVERAGE_FROM=0.5` averages, over the second half of
+each run, the Rényi entropies `S_1`, `S_2`, `S_inf` of the half chain and,
+when 4 divides `N`, the tripartite mutual information `I_3` of the four
+quarters (`entropy_task.average_from`). `plot_entropy_fss.py` then collapses
+one of them (`--entropy S1_avg`, `S2_avg` or `Sinf_avg`, the rows of Table I)
+on the sizes `N >= --min-N` and the points `p >= --p-min`. It also writes
+`i3_crossings.png`: `I_3` against `p` and the crossings of every pair of
+sizes, an estimate of `p_c` without a fit (Zabalo et al., PRB 101, 060301
+(2020)).
+
+```bash
+MODELS=floquet_circuit N_VALUES="16 14 12 10 8 6" SEEDS="42 43 44 45" PER_P=150 \
+  P_VALUES="0 0.025 0.05 0.075 0.1 0.125 0.15 0.175 0.2 0.225 0.25 0.275 0.3 0.35 0.4" \
+  AVERAGE_FROM=0.5 MAX_JOBS=4 ./experiments/QELM_S/exp_QELM_S.sh
+uv run python experiments/QELM_S/plot_entropy_fss.py outputs/exp_QELM_S/<date_time> \
+  --entropy S1_avg --min-N 8 --p-min 0.05
+```
+
+A scratch run of this protocol (N = 6 to 16, 400 to 600 trajectories per
+`p`) gave `p_c = 0.210`, `nu = 2.04` for `S_1`, and `p_c = 0.21` for `S_2`
+and `S_inf`, as in Table I. With `N >= 10` the minimum moves along the valley
+to `p_c = 0.17`, `nu = 1.6`. The `I_3` curves of `N = 8, 12, 16` cross at
+`p = 0.11` to `0.13`.
 
 ## Run the double-descent experiment on MNIST (issue #181)
 

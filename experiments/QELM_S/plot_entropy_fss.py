@@ -32,7 +32,33 @@ sizes are offset from each other. The paper's values
 for the Floquet model (von Neumann entropy ``S_1``, Table I) are
 ``p_c = 0.21 +- 0.16`` and ``nu = 1.74 +- 0.45``.
 
+A fourth column draws the cost of the collapse in the ``(p_c, nu)`` plane,
+on a log scale, with its minimum and the paper's point. At these sizes the
+cost has a long diagonal valley: raising ``p_c`` and ``nu`` together costs
+almost nothing, so the window, the sizes or the noise move the minimum
+along it (issue #251).
+
+Options (issue #251), for a sweep run with ``AVERAGE_FROM`` set:
+
+- ``--entropy``: the curve to collapse, ``S`` (the final von Neumann
+  entropy, default) or a late-time average, ``S1_avg``, ``S2_avg`` or
+  ``Sinf_avg`` (the rows of Table I of the paper are ``S_1``, ``S_2`` and
+  ``S_inf``);
+- ``--min-N``: leave the smaller sizes out of the fit, they carry the
+  largest corrections to scaling;
+- ``--p-min``: leave the points with ``p < p_min`` out of the fit, the
+  volume-law side far from ``p_c``.
+
+When the runs hold ``I3_avg``, the tripartite mutual information of the
+four quarters (``N`` a multiple of 4), the script also writes
+``i3_crossings.png`` with its JSON: ``I_3`` against ``p`` for each ``N``,
+and the crossings of every pair of sizes. ``I_3`` needs no fit: its curves
+cross near ``p_c`` with a small drift in ``N`` (Zabalo et al., PRB 101,
+060301 (2020)).
+
     uv run python experiments/QELM_S/plot_entropy_fss.py outputs/exp_QELM_S/<date_time>
+    uv run python experiments/QELM_S/plot_entropy_fss.py <sweep> \
+        --entropy S1_avg --min-N 8 --p-min 0.05
 """
 
 from __future__ import annotations
@@ -46,7 +72,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from omegaconf import OmegaConf
 
-from QELM.evaluation.finite_size import curve_crossings, fit_collapse, rescale
+from QELM.evaluation.finite_size import (
+    collapse_cost,
+    curve_crossings,
+    fit_collapse,
+    rescale,
+)
 from QELM.utils.plots import color_map, save_figure, subplots
 from QELM.utils.sweep import load_sweep
 
@@ -61,10 +92,28 @@ REFERENCES = {
     "floquet_circuit": {"p_c": 0.21, "p_c_err": 0.16, "nu": 1.74, "nu_err": 0.45},
     "haar_circuit": {"p_c": 0.26, "p_c_err": 0.08, "nu": 2.01, "nu_err": 0.10},
 }
+# The other Rényi indices of the Floquet model in Table I, by --entropy.
+REFERENCES_RENYI = {
+    "S2_avg": {
+        "floquet_circuit": {"p_c": 0.22, "p_c_err": 0.05, "nu": 2.07, "nu_err": 0.0}
+    },
+    "Sinf_avg": {
+        "floquet_circuit": {"p_c": 0.21, "p_c_err": 0.05, "nu": 2.03, "nu_err": 0.0}
+    },
+}
+# Curves --entropy can collapse: the final S or a late-time average.
+ENTROPIES = ("S", "S1_avg", "S2_avg", "Sinf_avg")
+# Points per axis of the cost landscape.
+LANDSCAPE_GRID = 61
 
 
-def load_curves(sweep_dir: str | Path) -> dict[str, dict[int, dict[int, Any]]]:
-    """Return ``model -> N -> seed -> (p, S_mean)`` from the run folders.
+def load_curves(
+    sweep_dir: str | Path, key: str = "S"
+) -> dict[str, dict[int, dict[int, Any]]]:
+    """Return ``model -> N -> seed -> (p, <key>_mean)`` from the run folders.
+
+    Runs without ``<key>_mean_p<p>`` (no late-time averages, or ``I3`` for
+    ``N`` not a multiple of 4) are skipped.
 
     Raises:
         ValueError: If the folder holds no run.
@@ -76,12 +125,40 @@ def load_curves(sweep_dir: str | Path) -> dict[str, dict[int, dict[int, Any]]]:
     for row in rows:
         cfg = OmegaConf.load(Path(sweep_dir) / row["run"] / ".hydra" / "config.yaml")
         p = [float(v) for v in cfg.entropy_task.p_values]
-        S = [float(row[f"S_mean_p{v:g}"]) for v in p]
+        names = [f"{key}_mean_p{v:g}" for v in p]
+        if any(name not in row for name in names):
+            continue
+        S = [float(row[name]) for name in names]
         order = np.argsort(p)
         curve = (np.asarray(p)[order], np.asarray(S)[order])
         by_n = out.setdefault(str(row["model"]), {}).setdefault(int(row["N"]), {})
         by_n[int(row["seed"])] = curve
     return {m: dict(sorted(by_n.items())) for m, by_n in sorted(out.items())}
+
+
+def restrict(
+    by_n: dict[int, dict[int, Any]], min_N: int = 0, p_min: float = 0.0
+) -> dict[int, dict[int, Any]]:
+    """Keep the sizes ``N >= min_N`` and the points ``p >= p_min`` (issue #251)."""
+    out: dict[int, dict[int, Any]] = {}
+    for N, seeds in by_n.items():
+        if N < min_N:
+            continue
+        out[N] = {}
+        for seed, (p, S) in seeds.items():
+            keep = np.asarray(p) >= p_min - 1e-12
+            out[N][seed] = (np.asarray(p)[keep], np.asarray(S)[keep])
+    return out
+
+
+def cost_landscape(
+    curves: dict[int, Any], grid: int = LANDSCAPE_GRID
+) -> dict[str, list[Any]]:
+    """Return the collapse cost on a ``(p_c, nu)`` grid over the search box."""
+    p_c = np.linspace(*P_RANGE, grid)
+    nu = np.linspace(*NU_RANGE, grid)
+    cost = [[collapse_cost(curves, a, b) for a in p_c] for b in nu]
+    return {"p_c": p_c.tolist(), "nu": nu.tolist(), "cost": cost}
 
 
 def mean_curves(by_n: dict[int, dict[int, Any]]) -> dict[int, Any]:
@@ -95,8 +172,13 @@ def mean_curves(by_n: dict[int, dict[int, Any]]) -> dict[int, Any]:
     return out
 
 
-def analyse(by_n: dict[int, dict[int, Any]]) -> dict[str, Any]:
-    """Crossings and collapses of one model."""
+def analyse(
+    by_n: dict[int, dict[int, Any]], min_N: int = 0, p_min: float = 0.0
+) -> dict[str, Any]:
+    """Crossings of every size and collapses of the sizes ``N >= min_N``.
+
+    The collapses keep only the points with ``p >= p_min``.
+    """
     mean = mean_curves(by_n)
     sizes = sorted(mean)
     crossings = {
@@ -113,10 +195,14 @@ def analyse(by_n: dict[int, dict[int, Any]]) -> dict[str, Any]:
             for N, (p, S, e) in mean.items()
         },
         "crossings_S_over_half": crossings,
+        "fit": {"min_N": min_N, "p_min": p_min},
     }
+    by_n = restrict(by_n, min_N, p_min)
+    sizes = sorted(by_n)
     if len(sizes) >= 2:
-        curves = {N: (p, S) for N, (p, S, _) in mean.items()}
+        curves = {N: (p, S) for N, (p, S, _) in mean_curves(by_n).items()}
         result["collapse"] = fit_collapse(curves, P_RANGE, NU_RANGE)
+        result["landscape"] = cost_landscape(curves)
         seeds = sorted(set.intersection(*(set(s) for s in by_n.values())))
         per_seed = [
             fit_collapse({N: by_n[N][s] for N in sizes}, P_RANGE, NU_RANGE)
@@ -153,15 +239,20 @@ def analyse(by_n: dict[int, dict[int, Any]]) -> dict[str, Any]:
 
 def draw(
     data: dict[str, dict[int, dict[int, Any]]],
+    entropy: str = "S",
+    min_N: int = 0,
+    p_min: float = 0.0,
 ) -> tuple[plt.Figure, dict[str, Any]]:
     """Draw ``entropy_fss.png``, one row per model."""
-    fig, axes = subplots(len(data), 3, figsize=(15, 3.9 * len(data)), squeeze=False)
+    fig, axes = subplots(len(data), 4, figsize=(20, 3.9 * len(data)), squeeze=False)
     all_sizes = sorted({N for by_n in data.values() for N in by_n})
     colors = color_map([str(N) for N in all_sizes])
+    references = REFERENCES_RENYI.get(entropy, REFERENCES)
     table: dict[str, Any] = {}
     for row, (model, by_n) in zip(axes, data.items(), strict=True):
-        result = analyse(by_n)
-        table[model] = result | {"reference": REFERENCES.get(model)}
+        result = analyse(by_n, min_N, p_min)
+        ref = references.get(model)
+        table[model] = result | {"entropy": entropy, "reference": ref}
         for N, curve in result["curves"].items():
             p, S, e = (np.asarray(curve[k]) for k in ("p", "S", "S_err"))
             half = int(N) // 2
@@ -171,8 +262,8 @@ def draw(
         for points in result["crossings_S_over_half"].values():
             for x in points:
                 row[0].axvline(x, color="0.6", lw=0.8, ls=":")
-        row[0].set_ylabel(r"$\overline{S_A} / (N/2)$")
-        row[1].set_ylabel(r"$\overline{S_A}$ (bits)")
+        row[0].set_ylabel(rf"$\overline{{{entropy}}} / (N/2)$".replace("_", r"\_"))
+        row[1].set_ylabel(rf"$\overline{{{entropy}}}$ (bits)".replace("_", r"\_"))
         row[1].legend(frameon=False, fontsize=8)
         for ax in row[:2]:
             ax.set_xlabel("p")
@@ -180,41 +271,114 @@ def draw(
         fit = result.get("collapse")
         if fit is not None:
             curves = {
-                int(N): (np.asarray(c["p"]), np.asarray(c["S"]))
-                for N, c in result["curves"].items()
+                N: (p, S)
+                for N, (p, S, _) in mean_curves(restrict(by_n, min_N, p_min)).items()
             }
             for N, (x, y) in rescale(curves, fit["p_c"], fit["nu"]).items():
                 row[2].plot(x, y, "o-", ms=3, color=colors[str(N)])
             title = (
-                f"collapse: p_c = {fit['p_c']:.3f}"
+                f"collapse N >= {min(curves)}, p >= {p_min:g}: p_c = {fit['p_c']:.3f}"
                 + (f" ± {fit['p_c_err']:.3f}" if "p_c_err" in fit else "")
                 + f", nu = {fit['nu']:.2f}"
                 + (f" ± {fit['nu_err']:.2f}" if "nu_err" in fit else "")
             )
-            ref = REFERENCES.get(model)
             if ref is not None:
                 title += f"\npaper: p_c = {ref['p_c']} ± {ref['p_c_err']}, "
                 title += f"nu = {ref['nu']} ± {ref['nu_err']}"
             row[2].set_title(title, fontsize=9)
             row[2].axvline(0.0, color="0.6", lw=0.8)
+            land = result["landscape"]
+            levels = np.log10(np.maximum(np.asarray(land["cost"]), 1e-12))
+            mesh = row[3].contourf(land["p_c"], land["nu"], levels, 30, cmap="magma_r")
+            fig.colorbar(mesh, ax=row[3], label="log10 cost")
+            row[3].plot(fit["p_c"], fit["nu"], "c*", ms=12, label="minimum")
+            if ref is not None:
+                row[3].errorbar(
+                    ref["p_c"],
+                    ref["nu"],
+                    xerr=ref["p_c_err"],
+                    yerr=ref["nu_err"],
+                    fmt="ws",
+                    mec="k",
+                    capsize=3,
+                    label="paper",
+                )
+            row[3].legend(frameon=False, fontsize=8)
         row[2].set_xlabel(r"$(p - p_c)\, N^{1/\nu}$")
-        row[2].set_ylabel(r"$S_A(p, N) - S_A(p_c, N)$")
+        row[2].set_ylabel(r"$S(p, N) - S(p_c, N)$")
+        row[3].set_xlabel("p_c")
+        row[3].set_ylabel("nu")
+        row[3].set_title("cost of the collapse", fontsize=9)
+    return fig, table
+
+
+def draw_i3(
+    data: dict[str, dict[int, dict[int, Any]]],
+) -> tuple[plt.Figure, dict[str, Any]]:
+    """Draw ``i3_crossings.png``: ``I_3`` against ``p``, one panel per model."""
+    fig, axes = subplots(1, len(data), figsize=(5 * len(data), 3.9), squeeze=False)
+    all_sizes = sorted({N for by_n in data.values() for N in by_n})
+    colors = color_map([str(N) for N in all_sizes])
+    table: dict[str, Any] = {}
+    for ax, (model, by_n) in zip(axes[0], data.items(), strict=True):
+        mean = mean_curves(by_n)
+        sizes = sorted(mean)
+        crossings = {
+            f"N{a}-N{b}": curve_crossings(mean[a][0], mean[a][1], mean[b][1])
+            for k, a in enumerate(sizes)
+            for b in sizes[k + 1 :]
+        }
+        table[model] = {
+            "curves": {
+                str(N): {"p": p.tolist(), "I3": y.tolist(), "I3_err": e.tolist()}
+                for N, (p, y, e) in mean.items()
+            },
+            "crossings": crossings,
+        }
+        for N, (p, y, e) in mean.items():
+            ax.errorbar(p, y, yerr=e, marker="o", ms=3, color=colors[str(N)])
+            ax.lines[-1].set_label(f"N = {N}")
+        for points in crossings.values():
+            for x in points:
+                ax.axvline(x, color="0.6", lw=0.8, ls=":")
+        ax.axhline(0.0, color="0.6", lw=0.8)
+        ax.set(xlabel="p", ylabel=r"$\overline{I_3}$ (bits)", title=model)
+        ax.legend(frameon=False, fontsize=8)
     return fig, table
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    """Parse the arguments, draw the figure and print the estimates."""
+    """Parse the arguments, draw the figures and print the estimates."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("sweep", type=Path, help="folder of an exp_QELM_S.sh sweep")
     parser.add_argument("--out", type=Path, default=None, help="output folder")
+    parser.add_argument(
+        "--entropy", choices=ENTROPIES, default="S", help="curve to collapse"
+    )
+    parser.add_argument("--min-N", type=int, default=0, help="smallest N of the fit")
+    parser.add_argument(
+        "--p-min", type=float, default=0.0, help="smallest p of the fit"
+    )
     args = parser.parse_args(argv)
     out = args.out or args.sweep
-    fig, table = draw(load_curves(args.sweep))
+    data = load_curves(args.sweep, args.entropy)
+    if not data:
+        raise ValueError(
+            f"No run of {args.sweep} holds {args.entropy}_mean_p<p>: "
+            "run the sweep with AVERAGE_FROM set (entropy_task.average_from)."
+        )
+    fig, table = draw(data, args.entropy, args.min_N, args.p_min)
     print(f"Wrote {save_figure(fig, out, 'entropy_fss', table)}")
     for model, result in table.items():
         print(f"{model}: crossings of S/(N/2) {result['crossings_S_over_half']}")
         if "collapse" in result:
             print(f"{model}: collapse {result['collapse']}")
+    i3 = load_curves(args.sweep, "I3_avg")
+    if i3:
+        fig, table = draw_i3(i3)
+        print(f"Wrote {save_figure(fig, out, 'i3_crossings', table)}")
+        for model, result in table.items():
+            print(f"{model}: crossings of I_3 {result['crossings']}")
 
 
 if __name__ == "__main__":
