@@ -42,8 +42,19 @@ purification_task:
   # samples.L is not read.
   p_values: [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.8, 1.0]
   samples_per_p: 2000
-  # Rounds of (half-layer of gates, measurement of each system qubit with
-  # probability p). null: 2 * N, that is N periods of the brickwork.
+  # Rounds run by the system alone, from the Néel state and at the same p,
+  # before R is entangled (Gullans & Huse): the system reaches its steady
+  # state, volume law below p_c, so that R is hidden in a scrambled state
+  # rather than in a product state that local measurements read at once.
+  # Then the central qubit is measured and paired with R in a Bell state
+  # (QELM.evaluation.purification.entangle_reference). Their outcomes are
+  # not in the record M. null: 4 * N (2 N periods, about 3 times the
+  # scrambling time of the Floquet chain, PR #244); 0: R is paired with the
+  # Néel state at t = 0, without scrambling.
+  scramble_rounds: null
+  # Rounds after R is entangled, recorded in M, of (half-layer of gates,
+  # measurement of each system qubit with probability p). null: 2 * N, that
+  # is N periods of the brickwork.
   n_rounds: null
   # haar only. true: one draw of the circuit for every trajectory of the run,
   # set by the seed: the fixed reservoir of the QELM, whose map from the

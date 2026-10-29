@@ -142,3 +142,52 @@ def expected_accuracy(z: np.ndarray, guess: np.ndarray) -> float:
         raise ValueError(f"z and guess differ in shape: {z.shape}, {guess.shape}.")
     sign = np.where(guess >= 0.0, 1.0, -1.0)
     return float(np.mean((1.0 + sign * z) / 2.0))
+
+
+def entangle_reference(
+    psi: np.ndarray, site: int, rng: np.random.Generator
+) -> tuple[np.ndarray, int]:
+    """Entangle ``R`` maximally with system qubit ``site`` of a state where ``R = |0>``.
+
+    The protocol of Gullans & Huse, after a scrambling phase: the system is
+    first evolved alone, then ``R`` is paired with one of its qubits. Here
+    qubit ``site`` is measured in Z (outcome ``m`` with the Born rule), which
+    leaves the qubit in ``|m>``; it is reset to ``|0>`` (``X`` when ``m =
+    1``), giving ``|psi_0>``, and the state becomes ``(|0>|psi_0> + |1>
+    X_site |psi_0>) / sqrt(2)``: the Bell pair ``|00> + |11>`` between ``R``
+    and the qubit, whatever ``m``, the other system qubits keeping the
+    entanglement built so far. ``S_R = 1`` bit exactly. The reset keeps the
+    sign of ``<Z_R>`` tied to that of the qubit, as without scrambling; a
+    pair that depends on ``m`` would flip the map from the record to ``R``
+    with an outcome the decoder does not see.
+
+    Args:
+        psi: State vector of ``R`` (qubit 0, in ``|0>``) and ``N`` system
+            qubits, shape ``(2**(N + 1),)``.
+        site: System qubit paired with ``R``, from 0 to ``N - 1``.
+        rng: Generator of the outcome of the measurement.
+
+    Returns:
+        ``(psi, m)``: the new state and the outcome, +-1, of the measurement
+        of ``site``.
+
+    Raises:
+        ValueError: If ``R`` is not in ``|0>`` or ``site`` is out of range.
+    """
+    N = _system_qubits(psi)
+    if not 0 <= site < N:
+        raise ValueError(f"site must be in [0, {N - 1}], got {site}.")
+    A = np.asarray(psi, dtype=complex).reshape(2, 2**N)
+    if np.linalg.norm(A[1]) > 1e-9:
+        raise ValueError("R must be in |0> before it is entangled.")
+    bits = (np.arange(2**N) >> (N - 1 - site)) & 1
+    p0 = float(np.sum(np.abs(A[0, bits == 0]) ** 2))
+    outcome = 0 if rng.random() < p0 else 1
+    kept = np.where(bits == outcome, A[0], 0.0)
+    kept = kept / np.linalg.norm(kept)
+    flip = np.arange(2**N) ^ (1 << (N - 1 - site))
+    if outcome == 1:
+        # Reset the qubit to |0>, so that the pair is always |00> + |11>.
+        kept = kept[flip]
+    out = np.stack([kept, kept[flip]]) / np.sqrt(2.0)
+    return out.reshape(-1), 1 - 2 * outcome

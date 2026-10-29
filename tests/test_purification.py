@@ -8,6 +8,7 @@ import pytest
 from QELM.evaluation.entropy import von_neumann_entropy
 from QELM.evaluation.purification import (
     bayes_accuracy,
+    entangle_reference,
     expected_accuracy,
     reference_bell_state,
     reference_bloch,
@@ -96,3 +97,30 @@ def test_bayes_and_expected_accuracy() -> None:
     assert expected_accuracy(np.zeros(5), np.arange(5) - 2.0) == pytest.approx(0.5)
     with pytest.raises(ValueError):
         expected_accuracy(z, z[:2])
+
+
+def test_entangle_reference_makes_a_bell_pair_with_the_site() -> None:
+    rng = np.random.default_rng(3)
+    system = rng.normal(size=16) + 1j * rng.normal(size=16)
+    system /= np.linalg.norm(system)
+    psi = np.kron([1.0, 0.0], system)
+    for seed in range(6):
+        out, m = entangle_reference(psi, 2, np.random.default_rng(seed))
+        assert m in (1, -1)
+        np.testing.assert_allclose(np.linalg.norm(out), 1.0)
+        # R maximally mixed, pure with its partner (state qubit 3), in
+        # |00> + |11>: <Z_R Z_site> = +1 whatever the outcome.
+        assert von_neumann_entropy(out, [0]) == pytest.approx(1.0)
+        assert von_neumann_entropy(out, [0, 3]) == pytest.approx(0.0, abs=1e-9)
+        ZZ = get_site_operator(Z, 0, 5) @ get_site_operator(Z, 3, 5)
+        assert np.real(out.conj() @ ZZ @ out) == pytest.approx(1.0)
+
+
+def test_entangle_reference_needs_r_in_zero() -> None:
+    psi = np.kron([0.0, 1.0], _basis(2, "01"))
+    with pytest.raises(ValueError, match="R must be in"):
+        entangle_reference(psi, 0, np.random.default_rng(0))
+    with pytest.raises(ValueError, match="site"):
+        entangle_reference(
+            np.kron([1.0, 0.0], _basis(2, "01")), 2, np.random.default_rng(0)
+        )

@@ -5,8 +5,9 @@ Reads every run folder of the sweep (one per dynamics, ``N`` and seed),
 averages over the seeds (standard error as error bars) and writes three
 figures, each with its JSON (:func:`QELM.utils.plots.save_figure`), in the
 sweep folder unless ``--out`` is given. Each has one panel per dynamics
-(Haar, Floquet), one color per ``N``, and the dashed vertical line at
-``p_c`` when the run sets it:
+(Haar, Floquet), with and without the scrambling phase before ``R`` is
+entangled when the sweep holds both, one color per ``N``, and the dashed
+vertical line at ``p_c`` when the run sets it:
 
 - ``purification_vs_p.png``: the mean entropy of the reference qubit,
   ``S_R``, against ``p``. 1 bit while the system hides ``R`` (mixed,
@@ -40,9 +41,14 @@ from QELM.utils.sweep import load_sweep
 
 KEYS = (("N", "N"), ("seed", "seed"), ("model", "purification_task.dynamics"))
 # Panel order of the dynamics; others follow in alphabetical order.
-MODEL_ORDER = ("haar", "floquet")
-# Panel titles of the dynamics.
-TITLES = {"haar": "Haar brickwork", "floquet": "Floquet (Skinner et al. 2019)"}
+MODEL_ORDER = ("haar", "haar_scrambled", "floquet", "floquet_scrambled")
+# Panel titles of the dynamics, with or without the scrambling phase.
+TITLES = {
+    "haar": "Haar brickwork",
+    "haar_scrambled": "Haar, R entangled after scrambling",
+    "floquet": "Floquet (Skinner et al. 2019)",
+    "floquet_scrambled": "Floquet, R entangled after scrambling",
+}
 
 
 def _mean_err(values: Sequence[float | None]) -> tuple[float, float]:
@@ -73,10 +79,17 @@ def load_rows(sweep_dir: str | Path) -> list[dict[str, Any]]:
     return rows
 
 
+def panel(row: dict[str, Any]) -> str:
+    """Return the panel of a run: its dynamics, ``_scrambled`` when ``R`` was
+    entangled after a scrambling phase (``scramble_rounds > 0``)."""
+    scrambled = float(row.get("scramble_rounds") or 0.0) > 0.0
+    return f"{row['model']}_scrambled" if scrambled else str(row["model"])
+
+
 def _groups(rows: list[dict[str, Any]]) -> dict[str, dict[int, list[dict[str, Any]]]]:
     out: dict[str, dict[int, list[dict[str, Any]]]] = {}
     for row in rows:
-        out.setdefault(str(row["model"]), {}).setdefault(int(row["N"]), []).append(row)
+        out.setdefault(panel(row), {}).setdefault(int(row["N"]), []).append(row)
     order = {m: i for i, m in enumerate(MODEL_ORDER)}
     models = sorted(out, key=lambda m: (order.get(m, len(order)), m))
     return {m: dict(sorted(out[m].items())) for m in models}

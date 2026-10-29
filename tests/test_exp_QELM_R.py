@@ -150,6 +150,21 @@ def test_scores_per_p() -> None:
     assert out["y_pred"].shape == out["y_test"].shape == out["shot_pred"].shape
 
 
+def test_scrambling_rounds() -> None:
+    default = _run("purification_task.dynamics=floquet")
+    assert default["scramble_rounds"] == 4 * N
+    none = _run(
+        "purification_task.dynamics=floquet", "purification_task.scramble_rounds=0"
+    )
+    assert none["scramble_rounds"] == 0
+    # The record holds only the rounds after R is entangled.
+    assert default["M"].shape == none["M"].shape == (3 * PER_P, 2 * N, N)
+    for out in (default, none):
+        np.testing.assert_allclose(out["S_R"][out["p"] == 0.0], 1.0, atol=1e-9)
+    with pytest.raises(ValueError, match="scramble_rounds"):
+        _run("purification_task.scramble_rounds=-1")
+
+
 def test_a_fixed_alpha_is_used() -> None:
     out = _run("purification_task.dynamics=floquet", "training.alpha=2.5")
     assert out["alpha_shot_p0.3"] == 2.5 and out["alpha_z_p1"] == 2.5

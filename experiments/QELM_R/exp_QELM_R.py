@@ -11,8 +11,16 @@ deterministic Floquet Ising chain of Skinner, Ruhman & Nahum (PRX 9, 031009
 ``purification_task.p_values`` and each of its
 ``purification_task.samples_per_p`` trajectories:
 
-1. ``R`` (qubit 0, the ancilla, ``Nr = 1``) is maximally entangled with the
-   central system qubit ``N // 2`` of the Néel state ``|0101...>``
+1. The system starts in the Néel state ``|0101...>`` and first runs alone,
+   with ``R`` (qubit 0, the ancilla, ``Nr = 1``) in ``|0>``, for
+   ``purification_task.scramble_rounds`` rounds (default ``4 N``) at the
+   same ``p``, as in Gullans & Huse: it reaches its steady state, so that
+   ``R`` is hidden in a scrambled state rather than in a product state.
+   Then the central system qubit ``N // 2`` is measured, reset to ``|0>``
+   and paired with ``R`` in the Bell state ``|00> + |11>``
+   (:func:`QELM.evaluation.purification.entangle_reference`). The outcomes
+   of this phase are not in the record. With ``scramble_rounds = 0``, ``R``
+   is paired with the Néel state at ``t = 0``
    (:func:`QELM.evaluation.purification.reference_bell_state`).
 2. The ``N`` system qubits alone run ``n_rounds`` rounds
    (``purification_task.n_rounds``, default ``2 N``). A round is one
@@ -84,7 +92,7 @@ Everything is written to the Hydra run directory, by default
   record with a bias column);
 - ``metrics.json``: per ``p`` the scores above, ``S_R_mean_p<p>``,
   ``S_R_std_p<p>`` and ``purified_p<p>`` (share of trajectories with ``S_R <
-  0.1`` bit), and ``n_rounds``;
+  0.1`` bit), ``n_rounds`` and ``scramble_rounds``;
 - ``.hydra/config.yaml`` and ``resolved_config.json``: the config of the run.
 """
 
@@ -108,6 +116,7 @@ from QELM.evaluation.metrics import MSE, NMSE, R2, NMSE_err, accuracy
 from QELM.evaluation.metrics import majority_accuracy as chance_accuracy
 from QELM.evaluation.purification import (
     bayes_accuracy,
+    entangle_reference,
     expected_accuracy,
     reference_bell_state,
     reference_bloch,
@@ -317,6 +326,11 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     n_rounds = 2 * N if task.n_rounds is None else int(task.n_rounds)
     if n_rounds < 1:
         raise ValueError(f"purification_task.n_rounds must be >= 1, got {n_rounds}.")
+    scramble = 4 * N if task.scramble_rounds is None else int(task.scramble_rounds)
+    if scramble < 0:
+        raise ValueError(
+            f"purification_task.scramble_rounds must be >= 0, got {scramble}."
+        )
 
     # The gates, the measurements and the shots have their own generators,
     # so a run is reproducible for a given seed.
@@ -325,12 +339,17 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     draw_circuit = circuit_sampler(
         str(task.dynamics),
         N,
-        n_rounds,
+        scramble + n_rounds,
         bool(task.fixed_instance),
         {str(k): float(v) for k, v in task.floquet.items()},
         np.random.default_rng([seed, RNG_TAG, 2]),
     )
-    psi0 = reference_bell_state(neel_state(N), N // 2)
+    # Without scrambling, R is paired at t = 0 with the central qubit of the
+    # Néel state; with it, the system first runs alone with R in |0>.
+    if scramble == 0:
+        psi0 = reference_bell_state(neel_state(N), N // 2)
+    else:
+        psi0 = np.kron(np.array([1.0, 0.0]), neel_state(N))
 
     L = levels.size * per_p
     p = np.repeat(levels, per_p)
@@ -341,8 +360,13 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     for i in tqdm(range(L)):
         circuit = draw_circuit()
         psi = psi0
-        for j in range(n_rounds):
+        for j in range(scramble):
             psi = apply_layer(psi, circuit[j])
+            psi, _ = measure_system(psi, float(p[i]), rng)
+        if scramble:
+            psi, _ = entangle_reference(psi, N // 2, rng)
+        for j in range(n_rounds):
+            psi = apply_layer(psi, circuit[scramble + j])
             psi, M[i, j] = measure_system(psi, float(p[i]), rng)
         bloch[i] = reference_bloch(psi)
         S_R[i] = reference_entropy(bloch[i])
@@ -355,7 +379,10 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     X = M.reshape(L, -1)
     alpha = None if cfg.training.alpha is None else float(cfg.training.alpha)
 
-    metrics: dict[str, float] = {"n_rounds": float(n_rounds)}
+    metrics: dict[str, float] = {
+        "n_rounds": float(n_rounds),
+        "scramble_rounds": float(scramble),
+    }
     z_pred = np.zeros(test.size)
     shot_pred = np.zeros(test.size)
     for level in levels:

@@ -22,6 +22,10 @@
 #     P_VALUES="0 0.1 0.2"        overrides purification_task.p_values
 #     P_C_HAAR=0.17               p_c drawn on the figures for haar
 #     P_C_FLOQUET=                p_c for floquet (empty: none drawn)
+#     SCRAMBLE=0                  purification_task.scramble_rounds (default:
+#                                 the config, 4 N); the run folders then end
+#                                 in _scr<SCRAMBLE>, so that one sweep can
+#                                 hold several values
 #     ALPHA=1.0                   fixed ridge regularization (default: chosen
 #                                 by cross-validation, training.alpha=null)
 #     MAX_JOBS=4                  runs at once (default 1)
@@ -89,7 +93,7 @@ run_one() {
   set -uo pipefail
   local DYN N SEED P_C RUN_DIR status
   read -r DYN N SEED <<< "$1"
-  RUN_DIR="$OUT_DIR/${DYN}_N${N}_seed${SEED}"
+  RUN_DIR="$OUT_DIR/${DYN}_N${N}_seed${SEED}${SCRAMBLE:+_scr$SCRAMBLE}"
   if [[ "$DYN" == "floquet" ]]; then P_C="$P_C_FLOQUET"; else P_C="$P_C_HAAR"; fi
   echo "--- dynamics=$DYN N=$N seed=$SEED samples_per_p=$PER_P p_c=${P_C:-none}"
   uv run python experiments/QELM_R/exp_QELM_R.py \
@@ -100,6 +104,7 @@ run_one() {
     ${P_LIST:+"purification_task.p_values=$P_LIST"} \
     ${P_C:+"purification_task.p_c=$P_C"} \
     ${ALPHA:+"training.alpha=$ALPHA"} \
+    ${SCRAMBLE:+"purification_task.scramble_rounds=$SCRAMBLE"} \
     "hydra.run.dir=$RUN_DIR"
   status=$?
   if (( status != 0 )); then
@@ -109,7 +114,7 @@ run_one() {
   fi
 }
 export -f run_one
-export OUT_DIR PER_P P_LIST P_C_HAAR P_C_FLOQUET FAILED_LOG ALPHA
+export OUT_DIR PER_P P_LIST P_C_HAAR P_C_FLOQUET FAILED_LOG ALPHA SCRAMBLE
 
 QUEUE_STATUS=0
 printf '%s\0' "${RUNS[@]}" \
