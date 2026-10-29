@@ -48,7 +48,10 @@ uniform on the circle, so the unfolding is a division by ``2 pi / dim``.
    (:func:`entanglement_velocity`), the butterfly velocity ``v_B`` of the
    front of ``C(x, t)`` (:func:`operator_spreading`,
    :func:`butterfly_velocity`) and the Lieb-Robinson velocity ``v_LR``
-   (:func:`lieb_robinson_velocity`), an upper bound on every front.
+   (:func:`lieb_robinson_velocity`), an upper bound on every front;
+5. the scrambling time (:func:`scrambling_time`), at which the operator
+   spread from ``x0`` fails to commute with a probe on every site: ``~ L /
+   v_B`` for a local model.
 
 The dynamics is a list of dense unitaries ``steps`` on the ``N`` system
 qubits, applied in turn and cycled (one ``exp(-i H tau)`` for a Hamiltonian,
@@ -936,6 +939,32 @@ def lieb_robinson_velocity(bond_norm: float) -> float:
 
 
 _LIEB_ROBINSON_RATIO = _lieb_robinson_ratio()
+
+
+def scrambling_time(
+    C: np.ndarray,
+    times: np.ndarray,
+    threshold: float = 0.5,
+    sites: Sequence[int] | None = None,
+) -> float:
+    """Return the first time at which ``C`` reaches ``threshold`` on every site.
+
+    ``C[t, x]`` is the spreading of one local operator
+    (:func:`operator_spreading`); the operator is scrambled once it fails to
+    commute with a local probe on every site, i.e. once ``min_x C(x, t) >=
+    threshold`` (``C`` saturates near 1 at infinite temperature). A local
+    model scrambles in ``t ~ L / v_B``, a fast scrambler in ``t ~ log N``.
+    Linear interpolation between steps; ``nan`` if never reached.
+
+    Args:
+        C: ``C[t, x]``.
+        times: Times of the rows of ``C``.
+        threshold: Level of a scrambled site.
+        sites: The sites that must be scrambled; all of them by default.
+    """
+    columns = list(range(C.shape[1])) if sites is None else list(sites)
+    worst = C[:, columns].min(axis=1)
+    return float(front_times(worst[:, None], times, threshold)[0])
 
 
 # ---------------------------------------------------------------------------

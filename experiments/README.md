@@ -922,7 +922,7 @@ Floquet version: one draw of the gates of a period, repeated in time.
 
 The 1D Hamiltonians and the Floquet bricks are rebuilt in
 `QELM.evaluation.chaos_locality` with the conventions of their pull requests
-(#238, #240, #242), so that the diagnostics run on `main`. It writes six
+(#238, #240, #242), so that the diagnostics run on `main`. It writes seven
 figures per family, each with its JSON, in
 `outputs/diagnostics_physiques/<date_time>/<family>/`, and `summary.json`
 (`--out` to change the folder):
@@ -961,12 +961,18 @@ figures per family, each with its JSON, in
   the chain (`N = 11`); and the Lieb-Robinson velocity `v_LR`, 1 site per
   half-layer for a circuit and the Nachtergaele-Sims bound `7.57 ||h_bond||`
   for a Hamiltonian. A chaotic local model has `v_E <= v_B <= v_LR`.
+- `scrambling.png` (part B2c, every model): the scrambling time at fixed
+  `N = 11` (`--N-scrambling`). `Z_x0` starts at the centre, and the time is
+  the first one at which `C(x, t) = (1/2) <|[Z_x0(t), Z_x]|^2>` reaches
+  `0.5` (`--scrambling-threshold`) on every site: `~ (N/2) / v_B` for a local
+  model.
 
 The default sizes (`N = 12` for the continuous spectra and 10 for the
 quasi-energies, 6 to 12 for the growth, 10 for the OTOC, 8 for the reference
-qubit) take about an hour; `--quick` runs tiny sizes in seconds,
-`--models ising_hz05 haar` a subset of the reservoirs and `--parts spectra
-growth otoc reference velocities` a subset of the diagnostics (each part of each family
+qubit, 11 and 12 for the velocities, 11 for the scrambling time) take about
+two hours; `--quick` runs tiny sizes in seconds, `--models ising_hz05 haar` a
+subset of the reservoirs and `--parts spectra growth otoc reference
+velocities scrambling` a subset of the diagnostics (each part of each family
 has its own random generator, so a part run alone gives the same figure as in
 the full run).
 

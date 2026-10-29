@@ -61,12 +61,15 @@ Figures, in ``outputs/diagnostics_physiques/<date_time>/<family>/``
 5. ``reference_qubit_cutoff.png`` (part B3b): ``<S_Q(t)>`` when only the
    outcomes of the measurements at ``|x - x0| <= l`` are kept, at the same
    two ``p``.
-
 6. ``velocities.png`` (part B2b, the local models): the entanglement
    velocity ``v_E`` (slope of ``S_A(t)`` from random product states), the
    butterfly velocity ``v_B`` (front of ``C(x, t)`` from the edge of the
    chain) and the Lieb-Robinson velocity ``v_LR``, against ``v_E <= v_B <=
    v_LR``.
+7. ``scrambling.png`` (part B2c, every model): the scrambling time at
+   fixed ``N`` (``--N-scrambling``), the first time at which the operator
+   spread from the centre fails to commute with a probe on every site,
+   ``min_x C(x, t) >= 0.5``.
 
 ``--families``, ``--models`` and ``--parts`` run a subset; ``--quick`` runs
 tiny sizes in a few seconds (tests).
@@ -120,6 +123,7 @@ from QELM.evaluation.chaos_locality import (
     reference_qubit_cutoff,
     reference_qubit_trajectories,
     reflection_operator,
+    scrambling_time,
     sector_spectra,
     step_unitary,
     symmetry_blocks,
@@ -271,6 +275,7 @@ def reservoirs(tfim_h: float = 10.0, xxz_h: float = 1.0) -> list[Reservoir]:
             tfim,
             tau=0.25,
             disordered=True,
+            velocity_tau=0.1,
         ),
         # J_i <= 1.5: bond norm 1.5. XXZ: ||XX + YY + ZZ|| = 3.
         Reservoir(
@@ -682,6 +687,98 @@ def run_velocities(
 
 
 # ---------------------------------------------------------------------------
+# Part B2c
+
+
+def run_scrambling(
+    models: Sequence[Reservoir],
+    N: int,
+    n_steps: int,
+    draws: int,
+    circuit_draws: int,
+    threshold: float,
+    rng: np.random.Generator,
+    out_dir: Path,
+) -> dict[str, Any]:
+    """Draw ``scrambling.png``: the scrambling time of every model at fixed ``N``.
+
+    ``Z_x0`` starts at the centre ``x0 = N // 2``; ``C(x, t) = (1/2)
+    <|[Z_x0(t), Z_x]|^2>`` (:func:`operator_spreading`) on every site. The
+    scrambling time is the first time ``min_x C(x, t) >= threshold``
+    (:func:`scrambling_time`). A disordered model is averaged over ``draws``
+    draws, a random circuit over ``circuit_draws``.
+    """
+    x0 = N // 2
+    fig, axes = subplots(1, 3, figsize=(15, 4.4), squeeze=False)
+    ax_min, ax_mean, ax_bars = axes[0]
+    summary: dict[str, Any] = {}
+    for k, model in enumerate(models):
+        color = COLORS[k % len(COLORS)]
+        tau = model.velocity_tau
+        t = np.arange(n_steps + 1) * tau
+        n_draws = circuit_draws if model.random_gates is not None else draws
+        n_draws = n_draws if model.disordered else 1
+        C = np.mean(
+            [
+                operator_spreading(model.steps(N, n_steps, rng, tau=tau), x0, n_steps)
+                for _ in range(n_draws)
+            ],
+            axis=0,
+        )
+        t_scr = scrambling_time(C, t, threshold)
+        worst, mean = C.min(axis=1), C.mean(axis=1)
+        summary[model.key] = {
+            "t_scrambling": t_scr,
+            "C_min_final": float(worst[-1]),
+            "C_mean_final": float(mean[-1]),
+            "draws": n_draws,
+        }
+        label = f"{model.label}: $t_{{scr}}$ = {t_scr:.2f}"
+        ax_min.plot(t, worst, color=color, label=label)
+        if np.isfinite(t_scr):
+            ax_min.plot([t_scr], [threshold], "o", color=color, label=model.key)
+        ax_mean.plot(t, mean, color=color, label=model.key)
+    time_unit = models[0].time_unit
+    ax_min.axhline(threshold, color="black", linestyle=":", linewidth=1)
+    ax_min.set_xlabel(time_unit)
+    ax_min.set_ylabel("$\\min_x C(x, t)$")
+    ax_min.set_title(f"(a) least scrambled site, $x_0 = {x0}$, N = {N}")
+    ax_min.legend(
+        [line for line in ax_min.get_lines() if line.get_linestyle() == "-"],
+        [
+            f"{m.label}: $t_{{scr}}$ = {summary[m.key]['t_scrambling']:.2f}"
+            for m in models
+        ],
+        fontsize=8,
+    )
+    ax_mean.set_xlabel(time_unit)
+    ax_mean.set_ylabel("$\\overline{C}(t)$, mean over the sites")
+    ax_mean.set_title("(b) mean OTOC")
+    x = np.arange(len(models))
+    values = [summary[m.key]["t_scrambling"] for m in models]
+    bars = ax_bars.bar(x, values, color=[COLORS[k % len(COLORS)] for k in x])
+    ax_bars.bar_label(bars, fmt="%.2f", fontsize=8)
+    ax_bars.set_xticks(x, [m.key for m in models], rotation=20)
+    ax_bars.set_ylabel(f"$t_{{scr}}$ ({time_unit})")
+    ax_bars.set_title(f"(c) scrambling time, $\\min_x C = {threshold:g}$")
+    fig.suptitle(f"Scrambling time of $Z_{{x_0}}$ at fixed N = {N}")
+    save_figure(
+        fig,
+        out_dir,
+        "scrambling",
+        {
+            "N": N,
+            "x0": x0,
+            "n_steps": n_steps,
+            "threshold": threshold,
+            "models": summary,
+        },
+    )
+    plt.close(fig)
+    return summary
+
+
+# ---------------------------------------------------------------------------
 # Part B3
 
 
@@ -826,7 +923,7 @@ def run_reference_qubit(
 
 # Each part draws from its own generator, spawned from --seed, so that a part
 # run alone (--parts) gives the same figure as in the full run.
-PARTS = ("spectra", "growth", "otoc", "reference", "velocities")
+PARTS = ("spectra", "growth", "otoc", "reference", "velocities", "scrambling")
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -851,6 +948,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--velocity-draws", type=int, default=6)
     parser.add_argument("--velocity-circuit-draws", type=int, default=16)
     parser.add_argument("--front-thresholds", type=float, nargs="+", default=[0.5, 0.2])
+    parser.add_argument("--N-scrambling", type=int, default=11)
+    parser.add_argument("--scrambling-threshold", type=float, default=0.5)
     parser.add_argument("--N-ref", type=int, default=8)
     parser.add_argument("--ref-steps", type=int, default=24)
     parser.add_argument("--p-volume", type=float, default=0.05)
@@ -878,6 +977,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         args.N_velocity_otoc, args.N_velocity_entropy = 6, 6
         args.velocity_steps, args.velocity_steps_discrete = 12, 12
         args.velocity_draws, args.velocity_circuit_draws = 2, 2
+        args.N_scrambling = 5
         args.cutoffs = [-1, 0, 4]
         args.trajectories, args.cutoff_trajectories = 2, 2
     return args
@@ -930,6 +1030,16 @@ def run_family(
             args.velocity_circuit_draws,
             args.front_thresholds,
             rngs["velocities"],
+            folder,
+        ),
+        "scrambling": lambda: run_scrambling(
+            models,
+            args.N_scrambling,
+            velocity_steps,
+            args.velocity_draws,
+            args.velocity_circuit_draws,
+            args.scrambling_threshold,
+            rngs["scrambling"],
             folder,
         ),
     }

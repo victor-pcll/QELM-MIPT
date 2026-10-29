@@ -48,6 +48,7 @@ from QELM.evaluation.chaos_locality import (
     reference_qubit_cutoff,
     reference_qubit_trajectories,
     reflection_operator,
+    scrambling_time,
     sector_spectra,
     step_unitary,
     symmetry_blocks,
@@ -440,6 +441,25 @@ def test_butterfly_velocity_of_free_fermions_is_their_maximal_group_velocity() -
     assert v_B < lieb_robinson_velocity(1.0)
 
 
+def test_scrambling_time_waits_for_the_last_site() -> None:
+    times = np.arange(0, 20, 0.1)
+    x = np.arange(9)
+    # A ballistic front from the centre x0 = 4, at speed 0.5.
+    C = np.clip(0.5 * times[:, None] - np.abs(x[None, :] - 4) + 1, 0, 1)
+    # The edges, 4 sites away, reach 0.5 at t = (4 - 0.5) / 0.5 = 7.
+    assert scrambling_time(C, times, 0.5) == pytest.approx(7.0)
+    assert scrambling_time(C, times, 0.5, sites=[3, 4, 5]) == pytest.approx(1.0)
+    assert math.isnan(scrambling_time(C[:10], times[:10], 0.5))
+
+
+def test_brickwork_scrambles_no_faster_than_its_light_cone() -> None:
+    N, x0 = 7, 3
+    steps = random_brickwork_steps(N, 12, haar_gate, np.random.default_rng(5))
+    C = operator_spreading(steps, x0, 12)
+    # The edges are 3 sites away: at least 3 half-layers.
+    assert scrambling_time(C, np.arange(13), 0.5) >= 3
+
+
 def test_random_product_state() -> None:
     psi = random_product_state(5, np.random.default_rng(4))
     assert np.linalg.norm(psi) == pytest.approx(1)
@@ -545,6 +565,8 @@ def test_script_writes_every_figure_of_both_families(tmp_path: Path) -> None:
             data = json.loads((out / family / f"{name}.json").read_text())
             assert len(data["panels"]) >= len(keys)
         assert (out / family / "velocities.png").is_file()
+        assert (out / family / "scrambling.png").is_file()
+        assert set(summary[family]["scrambling"]) == keys
         assert set(summary[family]["spectra"]) == keys
         assert set(summary[family]["otoc"]) == keys
         # The all-to-all TFIM has no light cone, hence no velocities.
