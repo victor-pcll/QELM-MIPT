@@ -672,6 +672,40 @@ the `(p_c, nu)` that minimizes the mismatch of the rescaled curves
 (`QELM.evaluation.finite_size`, the method of Sec. IV of the paper), fitted
 on the seed average and on each seed (the spread gives the error bars).
 
+### The same chain in continuous time (issue #241)
+
+`models=continuous_tfim_1d` replaces the Floquet bricks by the Hamiltonian
+of an open Ising chain in a tilted field
+(`QELM.models.continuous_tfim_1d.ContinuousTFIMChain`):
+
+    H = - sum_i J_i Z_i Z_{i+1} - h_x sum_i X_i - h_z sum_i Z_i
+
+with `h_x = 1.05`, `h_z = 0.5` (the chaotic point of Kim and Huse, PRL 111,
+127205 (2013)) and each `J_i` uniform in `[0.5, 1.5]`, so that no bond is
+ever cut. The mean ratio of consecutive level spacings is 0.54 at `N = 10`,
+the GOE value: the chain is chaotic. The record is cut into `4 N` windows of
+length `tau = 0.3 / J`, each in `n_sub = 3` micro-steps `exp(-i H dt)`; after
+each micro-step every qubit is measured in Z with probability
+`1 - exp(-gamma dt)`, a Poisson process of rate `gamma = -ln(1 - p) / tau`
+(`QELM.training.measurements.poisson`). A qubit is then measured at least once
+in a window with probability `p`, as after a layer of the Floquet chain, so
+the two models share the same `p` axis. Row `j` of `M` holds the last outcome
+of each qubit in window `j`. `tau = 0.3` matches the entanglement growth of
+the two models at `p = 0` from the Néel state (about 0.15 bit per layer of
+the Floquet chain, 0.5 bit per unit time here). `n_disorder = 12` chains are
+drawn per run, trajectory `i` evolving under chain `i % 12`; the trajectories
+of a chain run as one batch, a matrix product per micro-step.
+
+```bash
+MODELS="continuous_tfim_1d" N_VALUES="12 10 8 6" SEEDS="42 43 44" \
+  P_VALUES="0 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.6" MAX_JOBS=4 \
+  ./experiments/QELM_S/exp_QELM_S.sh
+```
+
+`P_C_CONTINUOUS` sets its phase label (default none). The energy is
+conserved here, unlike in the Floquet chain: the Néel state has a finite
+temperature for this `H`, so the entropy saturates below the Page value.
+
 ## Run the double-descent experiment on MNIST (issue #181)
 
 ```bash

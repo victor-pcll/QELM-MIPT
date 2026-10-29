@@ -98,13 +98,22 @@ def test_measure_round_at_p_zero_and_one() -> None:
 
 @pytest.mark.parametrize(
     "model",
-    ["haar_circuit", "clifford_circuit", "U1_circuit", "floquet_circuit", "TFIM"],
+    [
+        "haar_circuit",
+        "clifford_circuit",
+        "U1_circuit",
+        "floquet_circuit",
+        "continuous_tfim_1d",
+        "TFIM",
+    ],
 )
 def test_shapes_and_range_of_the_outputs(model: str) -> None:
     out = _run(f"models={model}")
     # The Floquet chain runs half-layers: 2 N periods are 4 N rounds, here
-    # with N // 2 = 2 even, the last one already on the cut bond.
-    L, n_rounds = 3 * PER_P, (4 if model == "floquet_circuit" else 2) * N
+    # with N // 2 = 2 even, the last one already on the cut bond. The
+    # continuous chain records 4 N windows of length tau.
+    long = model in ("floquet_circuit", "continuous_tfim_1d")
+    L, n_rounds = 3 * PER_P, (4 if long else 2) * N
     assert out["M"].shape == (L, n_rounds, N)
     assert out["Z"].shape == out["Zshot"].shape == (L, N)
     assert out["S"].shape == out["p"].shape == (L,)
@@ -316,3 +325,17 @@ def test_floquet_rounds_end_on_the_cut_bond() -> None:
         circuit = FloquetBrickworkCircuit({"N": N, "Nr": 0, "depth": R})
         last = [(i, j) for i, j, _ in circuit.layers[-1]]
         assert (N // 2 - 1, N // 2) in last
+
+
+def test_continuous_chain_follows_p() -> None:
+    """Issue #241: p = 0 gives no record, p = 1 measures every qubit in every
+    window and leaves a product state; the same seed gives the same run."""
+    out = _run("models=continuous_tfim_1d")
+    p, M, S = out["p"], out["M"], out["S"]
+    np.testing.assert_array_equal(M[p == 0.0], 0.0)
+    assert np.all(np.abs(M[p == 1.0]) == 1.0)
+    np.testing.assert_allclose(S[p == 1.0], 0.0, atol=1e-9)
+    assert S[p == 0.0].mean() > 0.5
+    again = _run("models=continuous_tfim_1d")
+    np.testing.assert_array_equal(again["M"], M)
+    np.testing.assert_allclose(again["S"], S)
