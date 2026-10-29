@@ -14,7 +14,7 @@ folders in the new convention (`documentation/configuration.md`, "Runs
 written before issue #235").
 
 Next to `metrics.json`, every Python experiment script (`projective/`,
-`QELM_Z/`, `QELM_M/`, `QELM_Q/`, `QELM_S/`, `charge_sharpening/`,
+`QELM_Z/`, `QELM_M/`, `QELM_Q/`, `QELM_S/`, `QELM_R/`, `charge_sharpening/`,
 `learnability/`, `double_descent/`) writes
 `resolved_config.json`, the config of the run with every interpolation
 evaluated (`QELM.utils.save_config`, issue #85). `.hydra/config.yaml` keeps the
@@ -630,6 +630,52 @@ the transition), `r2_summary` (pooled and fixed-`p` `R2` of every set),
 `r2_within_vs_p` and `predicted_vs_exact` (test trajectories colored by
 `p`), each with its JSON. The TFIM at `N = 10` builds a dense `exp(-i H dt)`
 per trajectory and is the slow part of the sweep.
+
+## Run the purification decoding (issue #247)
+
+Task 1B, after the scalable probes of Gullans & Huse (arXiv:1905.05195,
+arXiv:1910.00020). A reference qubit `R` (the ancilla, qubit 0, `Nr=1`) is
+maximally entangled with the central system qubit of the Néel state at
+`t = 0`, then left alone: only the `N` system qubits run `n_rounds` rounds
+(default `2 N`) of a unitary step followed by a Z measurement of each system
+qubit with probability `p`. In the mixed (volume-law) phase the system hides
+`R`, whose entropy `S_R` stays near 1 bit; in the pure (area-law) phase the
+measurements purify it, `S_R -> 0`. `experiments/QELM_R/exp_QELM_R.py` keeps
+one draw of the dynamics for the whole run (`purification_task.fixed_instance`,
+the fixed reservoir of the QELM) and fits, at each `p` of
+`purification_task.p_values`, two `sklearn.linear_model.Ridge` decoders of
+the flattened record `M` (`training.alpha`, 1.0 in `conf/QELM_R.yaml`): a
+classifier of a single Z shot of `R` and a regression of `<Z_R>`.
+
+Per `p`, `metrics.json` holds `accuracy` (on the test shots),
+`accuracy_expected` (the mean probability `(1 + s z) / 2` that the guesses
+`s` are right, free of shot noise), the Bayes ceiling `bayes_accuracy`
+(`(1 + |z|) / 2`, the best any decoder of the record can do),
+`bloch_accuracy` (`(1 + |r|) / 2`, measuring `R` along its own Bloch
+vector), the chance level `majority_accuracy`, `r2_z` and `mse_z` of the
+`<Z_R>` regression (`r2_z` is NaN at `p = 0`, where `<Z_R> = 0`), and
+`S_R_mean`, `S_R_std`, `purified` (share with `S_R < 0.1` bit).
+
+The TFIM with `TFIM.basis=X` conserves the Z parity of the system, opposite
+in the two branches of the Bell pair: `R` stays diagonal and decoding it is
+the learnability of a Z2 charge. The Haar brickwork has no symmetry, `R` is
+purified along a random axis (ceiling about 0.75) and `<Z_R>` is a nonlinear
+function of the record, which a linear decoder mostly misses.
+
+```bash
+uv run python experiments/QELM_R/exp_QELM_R.py models=clifford_circuit N=8
+MAX_JOBS=4 ./experiments/QELM_R/exp_QELM_R.sh   # TFIM, Clifford, Haar; N = 6 8 10 12
+uv run python experiments/QELM_R/plot_QELM_R.py outputs/exp_QELM_R/<date_time>
+```
+
+The launcher sweeps `MODELS`, `N_VALUES` and `SEEDS` (`PER_P`, `P_VALUES`,
+`P_C_CIRCUIT=0.17`, `P_C_TFIM`, `ALPHA`, `MAX_JOBS` change the defaults) and
+writes one folder per run, `<model>_N<N>_seed<seed>/`. The plot script
+writes `purification_vs_p` (`S_R` against `p`, one curve per `N`),
+`accuracy_vs_p` (expected accuracy of the ridge decoder and the Bayes
+ceiling) and `r2_z_vs_p`, each with its JSON. The TFIM at `N = 12` builds one
+dense `exp(-i H dt)` of size 4096 per run and takes about 5 minutes for the
+default 11 x 500 trajectories.
 
 ## Run the double-descent experiment on MNIST (issue #181)
 
