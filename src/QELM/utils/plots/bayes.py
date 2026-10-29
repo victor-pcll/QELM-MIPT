@@ -1,6 +1,6 @@
 """The estimators of the Bayes accuracy on the plane of the PCA (issue #202).
 
-The features ``<Z_k>`` of the two charge sectors live in ``Ns`` dimensions,
+The features ``<Z_k>`` of the two charge sectors live in ``N`` dimensions,
 too many to draw. Every function here projects the samples onto their plane
 of largest variance (:func:`~QELM.evaluation.bayes_optimal.pca_plane`) and
 draws them colored by sector, with what one estimator makes of them:
@@ -20,10 +20,10 @@ draws them colored by sector, with what one estimator makes of them:
 - :func:`draw_decision_regions`: the class that a classifier (the ridge
   readout, the K-NN, ...) predicts on the PCA plane, as two shaded regions
   and their boundary, with the test samples it gets wrong marked. The
-  classifier works in all ``Ns`` dimensions: the regions are its slice by
+  classifier works in all ``N`` dimensions: the regions are its slice by
   the plane through the mean of the samples, so a sample far from the plane
   can be predicted otherwise than the region it projects to; the crosses
-  mark the true mistakes, from all ``Ns`` coordinates.
+  mark the true mistakes, from all ``N`` coordinates.
 
 The samples, the ellipses and the crosses are drawn as labelled lines, so
 that :func:`~QELM.utils.plots.save_figure` writes their coordinates to the

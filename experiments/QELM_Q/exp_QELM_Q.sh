@@ -16,10 +16,10 @@
 #     OUT_ROOT=/tmp/qelm      write under /tmp/qelm instead of outputs
 #     OUT_DIR=...             write the sweep exactly there (the notebook)
 #     L=1000                  number of samples per run
-#     DELTA=200               samples per qubit: each run gets
+#     DELTA=200               samples per system qubit: each run gets
 #                             L = int(DELTA * N), and L is ignored (issue #201)
 #     ALPHA=1e-2              ridge regularization (training.alpha, default 1e-3)
-#     N_VALUES="4 6"          total numbers of qubits, ancilla included
+#     N_VALUES="4 6"          numbers of system qubits, ancilla excluded
 #     H_VALUES="10 1"         transverse fields TFIM.h, in units of TFIM.J = 1
 #     T_VALUES="0.5 2 10"     total evolution times evolution.t, in units of 1/J
 #     SEEDS="42 43 44"        seeds (one disorder and measurement draw each)
@@ -28,11 +28,12 @@
 #     BALANCED=true           exactly L / 2 samples per charge sector
 #                             (samples.balanced, issue #233)
 #     STATE=vector            simulate the state vector (state_representation,
-#                             issue #183), much faster from N = 8 on
+#                             issue #183), much faster from N = 7 on
 #     MAX_JOBS=4              runs at once (default 1), one core each; the
 #                             runs wait in a queue (xargs -P, issue #199).
-#                             At N = 12, about 1-1.5 GB per run with the
-#                             density matrix: 6 to 8 on 16 GB of RAM.
+#                             At N = 11 (12 qubits with the ancilla), about
+#                             1-1.5 GB per run with the density matrix: 6 to
+#                             8 on 16 GB of RAM.
 #                             JOBS is the former name and still works.
 #
 # A failed run (a Python error, or a run killed out of memory) does not stop
@@ -58,7 +59,7 @@ unset VIRTUAL_ENV
 # ---- Parameters -------------------------------------------------------------
 EXPERIMENT="exp_QELM_Q"
 MODEL="TFIM"
-read -r -a N_VALUES <<< "${N_VALUES:-4}"   # number of qubits, ancilla included
+read -r -a N_VALUES <<< "${N_VALUES:-4}"   # system qubits, ancilla excluded (issue #235)
 read -r -a H_VALUES <<< "${H_VALUES:-10}"  # TFIM.h, 10 J is the config default
 read -r -a T_VALUES <<< "${T_VALUES:-10}"  # evolution.t, 10 / J is the config default
 L="${L:-200}"                               # samples per run (samples.L)

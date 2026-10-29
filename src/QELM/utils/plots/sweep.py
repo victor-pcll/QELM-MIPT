@@ -2,7 +2,7 @@
 
 Shared by the plot scripts of ``experiments/`` and by the notebooks: a sweep
 is read with :func:`QELM.utils.load_sweep`, averaged over the seeds with
-:func:`QELM.utils.summarize`, then each size ``N`` (total number of qubits)
+:func:`QELM.utils.summarize`, then each size ``N`` (number of system qubits)
 gives one curve of ``<metric>_mean`` against a swept parameter (``p``,
 ``gamma``), with an error bar per point.
 """

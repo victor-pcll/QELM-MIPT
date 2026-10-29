@@ -18,8 +18,8 @@ def encoding(request: pytest.FixtureRequest) -> AncillaChargeSectorEncoding:
 def test_dense_rho_shape_trace_and_hermiticity(
     encoding: AncillaChargeSectorEncoding,
 ) -> None:
-    """rho dense : forme (2**N, 2**N), trace 1, hermitienne, pure."""
-    dim = 2**encoding.N
+    """rho dense : forme (2**N_total, 2**N_total), trace 1, hermitienne, pure."""
+    dim = encoding.dim
     rho = encoding.rho()
     assert isinstance(rho, np.ndarray)
     assert rho.shape == (dim, dim)
@@ -32,7 +32,7 @@ def test_sparse_rho_shape_trace_and_hermiticity(
     encoding: AncillaChargeSectorEncoding,
 ) -> None:
     """rho creux : CSR, trace 1, hermitienne sans copie dense."""
-    dim = 2**encoding.N
+    dim = encoding.dim
     rho = encoding.rho(sparse=True)
     assert sp.issparse(rho) and rho.format == "csr"
     assert rho.shape == (dim, dim)

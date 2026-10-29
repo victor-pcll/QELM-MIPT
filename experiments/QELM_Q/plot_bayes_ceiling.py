@@ -167,10 +167,10 @@ def draw_ceilings(
         The open figure.
     """
     summary = summarize(rows, by=("N", "p"), metrics=METRICS)
-    Ns = sizes(summary)
-    colors = color_map(f"N{N}" for N in Ns)
+    n_values = sizes(summary)
+    colors = color_map(f"N{N}" for N in n_values)
     fig, ax = subplots(figsize=(7.5, 5.5))
-    for N in Ns:
+    for N in n_values:
         color = colors[f"N{N}"]
         draw_curve(
             ax,
@@ -310,16 +310,16 @@ def draw_plane(
         The open figure and, per panel ``"N<N>_p<p>"``, the run drawn, its
         ridge accuracy and ceilings, and what :func:`draw_panel` returns.
     """
-    Ns = sorted({int(r["N"]) for r in rows})
+    n_values = sorted({int(r["N"]) for r in rows})
     ps = sorted({float(r["p"]) for r in rows} if p_values is None else p_values)
     fig, axes = subplots(
-        len(Ns),
+        len(n_values),
         len(ps),
-        figsize=(4.2 * len(ps), 3.8 * len(Ns)),
+        figsize=(4.2 * len(ps), 3.8 * len(n_values)),
         squeeze=False,
     )
     extra: dict[str, Any] = {}
-    for i, N in enumerate(Ns):
+    for i, N in enumerate(n_values):
         for j, p in enumerate(ps):
             ax = axes[i, j]
             runs = sorted(

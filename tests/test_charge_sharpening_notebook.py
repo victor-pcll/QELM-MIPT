@@ -30,7 +30,7 @@ def test_notebook_runs_the_sweep_and_plots(
     monkeypatch.setattr(plt, "show", lambda *args, **kwargs: shows.append(args))
     for key, value in {
         "L": "30",
-        "N_VALUES": "7",
+        "N_VALUES": "6",
         "SEEDS": "0 1",
         "GAMMA_VALUES": "0.0 0.5 1.0",
         "OUT_ROOT": str(tmp_path),
@@ -60,11 +60,11 @@ def test_notebook_runs_the_sweep_and_plots(
     # Exact limits: S_R = ln 2 without measurement, 0 with projective ones.
     assert table[0]["S_R_mean_mean"] == pytest.approx(np.log(2), abs=1e-9)
     assert table[-1]["S_R_mean_mean"] == pytest.approx(0.0, abs=1e-9)
-    # The paper's 6-site curve, N = 7 with the ancilla, is compared; the
-    # 20-site one (N = 21) is only drawn.
+    # The paper's 6-site curve, our N = 6 (issue #235), is compared; the
+    # 20-site one (N = 20) is only drawn.
     comparison = namespace["comparison"]
-    assert set(comparison["S_R_mean"]["N7"]) == {"N = 7"}
-    assert comparison["S_R_mean"]["N7"]["N = 7"]["n_points"] > 0
+    assert set(comparison["S_R_mean"]["N6"]) == {"N = 6"}
+    assert comparison["S_R_mean"]["N6"]["N = 6"]["n_points"] > 0
     assert len(namespace["fig"].axes) == 3
     assert namespace["figure_path"].is_file()
     assert namespace["figure_path"].parent.parent == tmp_path / "charge_sharpening_fig7"
