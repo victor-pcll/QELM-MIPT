@@ -15,7 +15,7 @@ written before issue #235").
 
 Next to `metrics.json`, every Python experiment script (`projective/`,
 `QELM_Z/`, `QELM_M/`, `QELM_Q/`, `QELM_S/`, `charge_sharpening/`,
-`learnability/`, `double_descent/`) writes
+`learnability/`, `double_descent/`, `haar_readouts/`) writes
 `resolved_config.json`, the config of the run with every interpolation
 evaluated (`QELM.utils.save_config`, issue #85). `.hydra/config.yaml` keeps the
 formulas as written in `conf/`, such as `depth: ${int:${div:${N},2}}`;
@@ -891,6 +891,52 @@ several sizes `N` cross at `p_success ~ 0.2` in the paper. The figure is
 `notebooks/benchmarks/02_learnability_entropy.ipynb` runs the sweep, in
 `outputs/learnability_fig2c/<date_time>/` with `FIGURES=2c`, and plots
 Fig. 2c.
+
+## Run the charge of a random Haar circuit with several readouts
+
+`experiments/haar_readouts/haar_readouts.py` (config `conf/haar_readouts.yaml`)
+asks the question of `QELM_M` (can a readout of the measurement record `M`
+tell the initial charge sector of the system, `N // 2` or `N // 2 - 1`?) for
+gates that conserve nothing: a brickwork of Haar-random U(4) gates. With the
+TFIM of `QELM_M` (`h = 10 J`) or U(1) gates, the charge is (almost)
+conserved and a sum of outcomes, so a linear readout reads it; here it is
+not. The reference qubit `R` holds the charge sector
+(`AncillaChargeSectorEncoding`), the `N` system qubits run
+`readouts_task.n_rounds` rounds (default 5) of one brickwork layer followed
+by a Z measurement of each system qubit with probability `p`, and the
+label is the Z outcome of `R`. The state stays pure and is simulated as a
+state vector.
+
+At each `p` of `readouts_task.p_values`, `readouts_task.samples_per_p`
+trajectories (default 2000) are split into training and test sets, and each
+readout of `readouts_task.readouts` is fitted on the flattened record and
+scored on the test set by its accuracy (`accuracy_<readout>_p<p>`) and
+the `R2` of its output against the label (`r2_<readout>_p<p>`; a
+classifier outputs `2 P(Y = +1) - 1`):
+
+- `ridge`: the linear readout, `RidgeCV` with leave-one-out alpha;
+- `ridge_pairs`: the same ridge on the outcomes and the products of every
+  pair of them;
+- `knn`: `sqrt(n_train)` nearest neighbors, weighted by distance;
+- `mlp`: a neural network with two hidden layers of 64 units;
+- `gradient_boosting`: gradient-boosted trees.
+
+`S_R_mean_p<p>` is the mean entropy of `R` (bits), the purification curve.
+`haar_circuit.fixed_instance=false` (the default) draws new gates for every
+trajectory; `true` keeps one circuit for the run.
+
+```bash
+uv run python experiments/haar_readouts/haar_readouts.py N=6 readouts_task.samples_per_p=500
+MAX_JOBS=4 ./experiments/haar_readouts/haar_readouts.sh
+uv run python experiments/haar_readouts/plot_haar_readouts.py outputs/haar_readouts/<date_time>
+```
+
+The launcher sweeps `GATES` (`random fixed`), `N_VALUES` (`8`) and `SEEDS`
+(`PER_P`, `P_VALUES`, `MAX_JOBS` change the defaults), one folder per run,
+`<gates>_N<N>_seed<seed>/`. The plot script writes one figure per readout,
+`<readout>.png` with its JSON: the purification curve `S_R(p)` on the left,
+the accuracy of the readout in the middle, with the chance level 1/2, and
+its `R2` on the right.
 
 ## Check the chaos and the locality of the reservoirs (issue #243)
 

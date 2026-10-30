@@ -1,0 +1,30 @@
+# Charge of a fully random Haar circuit read by several readouts. Primary
+# config of experiments/haar_readouts/haar_readouts.py: the main config, with
+# the Haar circuit and the block below.
+#
+#   uv run python experiments/haar_readouts/haar_readouts.py N=6
+defaults:
+  - config
+  - override models: haar_circuit
+  - _self_
+
+# One ancilla: the reference qubit R, qubit 0, entangled with the charge
+# sector of the N system qubits (ancilla_charge_sector) and never acted on.
+Nr: 1
+N: 8
+
+# haar_circuit (conf/models/haar_circuit.yaml): open chain, new gates for
+# every trajectory (fixed_instance: false); haar_circuit.fixed_instance=true
+# keeps one draw for the run. Its depth is readouts_task.n_rounds.
+
+readouts_task:
+  # Measurement probabilities. Each p gets its own trajectories and its own
+  # readouts, split with samples.train_fraction. samples.L is not read.
+  p_values: [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.7, 1.0]
+  samples_per_p: 2000
+  # Rounds of (one brickwork layer of Haar gates, measurement of each system
+  # qubit with probability p), as the 5 steps of experiments/QELM_M.
+  n_rounds: 5
+  # Readouts of the record, each fitted and scored on its own
+  # (READOUTS in the script): ridge, ridge_pairs, knn, mlp, gradient_boosting.
+  readouts: [ridge, ridge_pairs, knn, mlp, gradient_boosting]
