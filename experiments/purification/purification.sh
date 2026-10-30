@@ -19,6 +19,7 @@
 #     SEEDS="0"                   several seeds split the trajectories of a point
 #     MODES="reference"           probes: reference (purification.py, S_Q) and/or
 #                                 steady (steady_state.py, S_half and I3, #257)
+#     DYNAMICS=clifford           clifford (stabilizer) or haar (state vector, N <= 16)
 #     MAX_JOBS=1                  runs at once, one core each (JOBS, the
 #                                 former name, works when MAX_JOBS is unset)
 
@@ -44,6 +45,7 @@ read -r -a N_VALUES <<< "${N_VALUES:-8 16 32 64}"
 read -r -a P_VALUES <<< "${P_VALUES:-0.10 0.12 0.14 0.15 0.16 0.17 0.18 0.20 0.22}"
 read -r -a SEEDS <<< "${SEEDS:-0}"
 read -r -a MODES <<< "${MODES:-reference}"
+DYNAMICS="${DYNAMICS:-clifford}"
 L="${L:-2000}"
 MAX_JOBS="${MAX_JOBS:-${JOBS:-1}}"
 if ! [[ "$MAX_JOBS" =~ ^[1-9][0-9]*$ ]]; then
@@ -68,6 +70,7 @@ run_one() {
   uv run python "experiments/purification/$SCRIPT" \
     "N=$N" \
     "probe.p=$P" \
+    "probe.dynamics=$DYNAMICS" \
     "seed=$SEED" \
     "samples.L=$L" \
     "hydra.run.dir=$OUT_DIR/$RUN_NAME" > /dev/null 2>&1 \
@@ -100,7 +103,7 @@ if (( STATUS )); then
   exit 1
 fi
 
-if [[ " ${MODES[*]} " == *" reference "* ]]; then
+if [[ " ${MODES[*]} " == *" reference "* && "$DYNAMICS" == clifford ]]; then
   uv run python experiments/purification/plot_purification.py "$OUT_DIR"
 fi
 uv run python experiments/purification/plot_estimators.py "$OUT_DIR"

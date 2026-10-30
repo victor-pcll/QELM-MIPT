@@ -848,6 +848,30 @@ crossings and the collapses, next to the paper's `p_c = 0.1598(5)`,
 `notebooks/benchmarks/04_reference_qubit_purification.ipynb` runs this sweep
 from Jupyter, in `outputs/purification_gullans_huse/<date_time>/`.
 
+### Do all the estimators of `p_c` agree? (issue #257)
+
+```bash
+MODES="reference steady" MAX_JOBS=4 ./experiments/purification/purification.sh
+DYNAMICS=haar MODES="reference steady" N_VALUES="8 12 16" L=600 \
+  P_VALUES="0.05 0.11 0.15 0.17 0.19 0.24 0.33" MAX_JOBS=4 \
+  ./experiments/purification/purification.sh
+```
+
+`MODES=steady` adds `steady_state.py` next to the reference-qubit runs: the
+same circuit, step and boundaries, without reference qubit, monitored from
+`|0...0>` for `4N` steps, with the half-chain entropy `S_half` and the
+tripartite mutual information `I3` of three quarters of the chain at the end
+(`QELM.models.circuits.stabilizer.steady_state_entropies`, GF(2) rank of the
+stabilizer tableau). `DYNAMICS=haar` replaces the Clifford gates by Haar
+`U(4)` gates on the state vector (`QELM.models.circuits.monitored`, `N <= 16`)
+and writes the Renyi-2 values too (`S_Q2`, `S_half2`, `I3_2`).
+
+`plot_estimators.py` then compares the estimators in `pc_estimators.png` and
+`estimators.json`: crossings of `S_Q` and `I3` for consecutive sizes, with
+bootstrap errors, and collapses of `S_Q`, `I3` and
+`S_half(p, N) - S_half(p_c, N)` (`QELM.evaluation.finite_size_scaling`,
+`subtract=True` for `S_half`).
+
 ## Charge conservation check (issue #134)
 
 Both U(1) benchmarks (charge sharpening and learnability) check along every
