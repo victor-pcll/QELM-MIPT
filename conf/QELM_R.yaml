@@ -1,0 +1,75 @@
+# Purification decoding with a ridge decoder (issue #247). Primary config of
+# experiments/QELM_R/exp_QELM_R.py: the main config, with the block below.
+#
+#   uv run python experiments/QELM_R/exp_QELM_R.py purification_task.dynamics=floquet N=8
+defaults:
+  - config
+  # The haar_circuit block holds N and Nr, which check_qubit_counts reads;
+  # the gates themselves are set by purification_task.dynamics.
+  - override models: haar_circuit
+  - _self_
+
+# One ancilla: the reference qubit R, qubit 0, maximally entangled with the
+# central system qubit at t = 0 and never acted on afterwards (the gates and
+# the measurements touch the N system qubits only).
+Nr: 1
+N: 8
+
+# Ridge regularization of the decoders (sklearn.linear_model, intercept not
+# penalized). null: chosen at each p on the training set by leave-one-out
+# cross-validation (RidgeCV over 1e-2 .. 1e4); a number fixes it. The record
+# has n_rounds * N = 2 N**2 features, as many as the training trajectories
+# at large N, so a fixed small alpha overfits.
+training:
+  alpha: null
+
+purification_task:
+  # Gates of the system, one half-layer per round (even bonds, then odd
+  # bonds), as in Skinner et al. (2019) and the diagnostics of PR #244:
+  # haar: Haar-random U(4) gates, new for every bond and every round;
+  # floquet: the Floquet Ising brick of Skinner et al., the same everywhere.
+  dynamics: haar
+  # Couplings of the Floquet brick, exp{-i [phi_xx XX + theta_x (X1 + X2)]}
+  # exp{-i [phi_zz ZZ + theta_z (Z1 + Z2)]}: the values of Sec. II of the
+  # paper, in its chaotic regime (QELM.evaluation.chaos_locality).
+  floquet:
+    phi_xx: 0.3
+    phi_zz: 0.6
+    theta_x: 0.2
+    theta_z: 0.4
+  # Measurement probabilities. Each p gets its own dataset of samples_per_p
+  # trajectories and its own decoders, split with samples.train_fraction.
+  # samples.L is not read.
+  p_values: [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.8, 1.0]
+  samples_per_p: 2000
+  # Rounds run by the system alone, from the Néel state and at the same p,
+  # before R is entangled (Gullans & Huse): the system reaches its steady
+  # state, volume law below p_c, so that R is hidden in a scrambled state
+  # rather than in a product state that local measurements read at once.
+  # Then the central qubit is measured and paired with R in a Bell state
+  # (QELM.evaluation.purification.entangle_reference). Their outcomes are
+  # not in the record M. null: 4 * N (2 N periods, about 3 times the
+  # scrambling time of the Floquet chain, PR #244); 0: R is paired with the
+  # Néel state at t = 0, without scrambling.
+  scramble_rounds: null
+  # steady: the scrambling above, at p, then R is entangled. paper: the
+  # protocol of Gullans & Huse (arXiv:1910.00020, issue #185): R is paired at
+  # t = 0 with the central qubit of |0...0>, then the gates run
+  # scramble_rounds rounds (null: 2 * N) without measurement.
+  protocol: steady
+  # Periodic boundaries: the odd half-layers also act on the bond (N - 1, 0),
+  # as in the paper. Needs an even N.
+  periodic: false
+  # Rounds after R is entangled, recorded in M, of (half-layer of gates,
+  # measurement of each system qubit with probability p). null: 2 * N, that
+  # is N periods of the brickwork.
+  n_rounds: null
+  # haar only. true: one draw of the circuit for every trajectory of the run,
+  # set by the seed: the fixed reservoir of the QELM, whose map from the
+  # record to R the decoder can learn. false: a new circuit per trajectory.
+  # The Floquet brick is deterministic, so this changes nothing for it.
+  fixed_instance: true
+  # Phase boundary drawn on the figures, or null. About 0.17 for the Haar
+  # brickwork measured after each half-layer (Zabalo et al. 2020); the
+  # launcher leaves it unset for the Floquet chain.
+  p_c: null

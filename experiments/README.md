@@ -14,7 +14,7 @@ folders in the new convention (`documentation/configuration.md`, "Runs
 written before issue #235").
 
 Next to `metrics.json`, every Python experiment script (`projective/`,
-`QELM_Z/`, `QELM_M/`, `QELM_Q/`, `QELM_S/`, `charge_sharpening/`,
+`QELM_Z/`, `QELM_M/`, `QELM_Q/`, `QELM_S/`, `QELM_R/`, `charge_sharpening/`,
 `purification/`, `learnability/`, `double_descent/`) writes
 `resolved_config.json`, the config of the run with every interpolation
 evaluated (`QELM.utils.save_config`, issue #85). `.hydra/config.yaml` keeps the
@@ -630,6 +630,76 @@ the transition), `r2_summary` (pooled and fixed-`p` `R2` of every set),
 `r2_within_vs_p` and `predicted_vs_exact` (test trajectories colored by
 `p`), each with its JSON. The TFIM at `N = 10` builds a dense `exp(-i H dt)`
 per trajectory and is the slow part of the sweep.
+
+## Run the purification decoding (issue #247)
+
+Task 1B, after the scalable probes of Gullans & Huse (arXiv:1905.05195,
+arXiv:1910.00020). A reference qubit `R` (the ancilla, qubit 0, `Nr=1`) is
+maximally entangled with the central system qubit, then left alone. As in
+Gullans & Huse, the system first runs alone from the Néel state, at the same
+`p`, for `purification_task.scramble_rounds` rounds (default `4 N`); then the
+central qubit is measured, reset to `|0>` and paired with `R` in a Bell
+state (`QELM.evaluation.purification.entangle_reference`). Without this
+phase (`scramble_rounds=0`), `R` is paired with the Néel state at `t = 0`
+and hidden in a product state, which local measurements read at once: the
+crossing of `S_R` moves to smaller `p`. `purification_task.protocol=paper`
+runs the protocol of the paper instead, as reproduced for Clifford circuits
+in `experiments/purification` (issue #185): `R` is paired at `t = 0` with
+the central qubit of `|0...0>`, then the gates scramble for
+`scramble_rounds` rounds (default `2 N`) without measurement;
+`purification_task.periodic=true` closes the chain (even `N`). After the
+pairing, only the `N`
+system qubits run `n_rounds` recorded rounds (default `2 N`) of one half-layer of two-qubit gates (even bonds, then odd
+bonds) followed by a Z measurement of each system qubit with probability
+`p`, the time step of Skinner et al. (2019) and of the diagnostics of PR
+#244. In the mixed (volume-law) phase the system hides `R`, whose entropy
+`S_R` stays near 1 bit; in the pure (area-law) phase the measurements
+purify it, `S_R -> 0`.
+
+Two local, chaotic reservoirs are compared, by `purification_task.dynamics`
+(`conf/QELM_R.yaml`):
+
+- `haar`: Haar-random U(4) gates, new for every bond and every round, drawn
+  once per run (`purification_task.fixed_instance`, the fixed reservoir of
+  the QELM; `false` draws a new circuit per trajectory);
+- `floquet`: the Floquet Ising brick of Skinner, Ruhman & Nahum, PRX 9,
+  031009 (2019), the same everywhere and at every round
+  (`QELM.evaluation.chaos_locality.floquet_ising_gate`, couplings in
+  `purification_task.floquet`, the paper's values by default).
+
+`experiments/QELM_R/exp_QELM_R.py` fits, at each `p` of
+`purification_task.p_values`, two `sklearn.linear_model` ridge decoders of
+the flattened record `M`: a classifier of a single Z shot of `R` and a
+regression of `<Z_R>`. With `training.alpha=null` (default) each picks its
+regularization on its training set by leave-one-out cross-validation
+(`RidgeCV`, 1e-2 to 1e4), written as `alpha_shot` and `alpha_z`: the record
+has `2 N**2` features, as many as the training trajectories at large `N`.
+
+Per `p`, `metrics.json` holds `accuracy` (on the test shots),
+`accuracy_expected` (the mean probability `(1 + s z) / 2` that the guesses
+`s` are right, free of shot noise), the Bayes ceiling `bayes_accuracy`
+(`(1 + |z|) / 2`, the best any decoder of the record can do),
+`bloch_accuracy` (`(1 + |r|) / 2`, measuring `R` along its own Bloch
+vector), the chance level `majority_accuracy`, `r2_z` and `mse_z` of the
+`<Z_R>` regression (`r2_z` is NaN at `p = 0`, where `<Z_R> = 0`), and
+`S_R_mean`, `S_R_std`, `purified` (share with `S_R < 0.1` bit).
+
+```bash
+uv run python experiments/QELM_R/exp_QELM_R.py N=8 purification_task.dynamics=floquet
+MAX_JOBS=4 ./experiments/QELM_R/exp_QELM_R.sh   # haar and floquet; N = 6 8 10 12
+uv run python experiments/QELM_R/plot_QELM_R.py outputs/exp_QELM_R/<date_time>
+```
+
+The launcher sweeps `DYNAMICS`, `N_VALUES` and `SEEDS` (`PER_P`, `P_VALUES`,
+`P_C_HAAR=0.17`, `P_C_FLOQUET`, `SCRAMBLE`, `PROTOCOL`, `ALPHA`, `MAX_JOBS`
+change the defaults) and writes one folder per run, `<dynamics>_N<N>_seed<seed>/`
+(`..._scr<SCRAMBLE>` when `SCRAMBLE` is set, `..._paper` with
+`PROTOCOL=paper`, which also closes the chain). The plot script gives the
+runs with and without scrambling, and with the paper protocol, their own
+panels. The plot script
+writes `purification_vs_p` (`S_R` against `p`, one curve per `N`),
+`accuracy_vs_p` (expected accuracy of the ridge decoder and the Bayes
+ceiling) and `r2_z_vs_p`, each with its JSON.
 
 ## Run the double-descent experiment on MNIST (issue #181)
 
