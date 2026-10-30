@@ -305,7 +305,9 @@ def draw_benchmark(
     present = [s for s in scores if any(f"accuracy_{s}_p0" in r for r in runs)]
     if len(present) < 2:
         return None
-    colors = color_map([scores[s] for s in present])
+    # Up to nine sets: tab10 keeps them all apart, unlike color_map.
+    palette = plt.get_cmap("tab10").colors
+    colors = {scores[s]: palette[i % len(palette)] for i, s in enumerate(present)}
     lines = []
     for label, group in _by_run(runs).items():
         for s in present:
