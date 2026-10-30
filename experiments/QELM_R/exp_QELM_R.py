@@ -22,6 +22,14 @@ deterministic Floquet Ising chain of Skinner, Ruhman & Nahum (PRX 9, 031009
    of this phase are not in the record. With ``scramble_rounds = 0``, ``R``
    is paired with the Néel state at ``t = 0``
    (:func:`QELM.evaluation.purification.reference_bell_state`).
+
+   With ``purification_task.protocol = paper``, the protocol of Gullans &
+   Huse (arXiv:1910.00020, reproduced for Clifford circuits by
+   ``experiments/purification``, issue #185) instead: ``R`` is paired at
+   ``t = 0`` with the central qubit of ``|0...0>``, then the gates run
+   ``scramble_rounds`` rounds (default ``2 N``) without measurement.
+   ``purification_task.periodic`` closes the chain (bond ``(N - 1, 0)``
+   in the odd half-layers, ``N`` even), as in the paper.
 2. The ``N`` system qubits alone run ``n_rounds`` rounds
    (``purification_task.n_rounds``, default ``2 N``). A round is one
    half-layer of two-qubit gates, on the even bonds ``(0, 1), (2, 3), ...``
@@ -92,7 +100,8 @@ Everything is written to the Hydra run directory, by default
   record with a bias column);
 - ``metrics.json``: per ``p`` the scores above, ``S_R_mean_p<p>``,
   ``S_R_std_p<p>`` and ``purified_p<p>`` (share of trajectories with ``S_R <
-  0.1`` bit), ``n_rounds`` and ``scramble_rounds``;
+  0.1`` bit), ``n_rounds``, ``scramble_rounds``, ``paper_protocol`` and
+  ``periodic`` (1 or 0);
 - ``.hydra/config.yaml`` and ``resolved_config.json``: the config of the run.
 """
 
@@ -122,6 +131,7 @@ from QELM.evaluation.purification import (
     reference_bloch,
     reference_entropy,
 )
+from QELM.models.circuits import periodic_bonds
 from QELM.models.circuits.base import Layer, apply_layer
 from QELM.models.circuits.haar import haar_gate
 from QELM.training.measurements.projective import measure_projective_psi
@@ -129,6 +139,8 @@ from QELM.utils import save_config, save_results
 
 # Gates of the system, by purification_task.dynamics.
 DYNAMICS = ("haar", "floquet")
+# When R is entangled, by purification_task.protocol.
+PROTOCOLS = ("steady", "paper")
 # Seed tag of the generator of the measurements and the shots of R.
 RNG_TAG = 247
 # Regularizations tried by RidgeCV when training.alpha is null.
@@ -163,13 +175,16 @@ def neel_state(N: int) -> np.ndarray:
     return psi
 
 
-def half_layer_bonds(N: int, t: int) -> list[tuple[int, int]]:
+def half_layer_bonds(N: int, t: int, periodic: bool = False) -> list[tuple[int, int]]:
     """Return the bonds of half-layer ``t``, as qubits of the state with ``R`` first.
 
     System qubit ``k`` is qubit ``k + 1`` of the state. Even ``t``: the
-    system bonds ``(0, 1), (2, 3), ...``; odd ``t``: ``(1, 2), (3, 4), ...``
-    (open chain).
+    system bonds ``(0, 1), (2, 3), ...``; odd ``t``: ``(1, 2), (3, 4), ...``,
+    and ``(N - 1, 0)`` with ``periodic`` (``N`` even,
+    :func:`~QELM.models.circuits.periodic_bonds`).
     """
+    if periodic:
+        return [(i + 1, j + 1) for i, j in periodic_bonds(N, t)]
     return [(k + 1, k + 2) for k in range(t % 2, N - 1, 2)]
 
 
@@ -180,6 +195,7 @@ def circuit_sampler(
     fixed: bool,
     floquet: dict[str, float],
     rng: np.random.Generator,
+    periodic: bool = False,
 ) -> Callable[[], Circuit]:
     """Return a function that gives the ``n_rounds`` half-layers of a trajectory.
 
@@ -190,6 +206,7 @@ def circuit_sampler(
         fixed: Haar only: ``True`` draws the circuit once, ``False`` per call.
         floquet: Couplings of :func:`floquet_ising_gate`.
         rng: Generator of the Haar gates.
+        periodic: Periodic boundaries (:func:`half_layer_bonds`).
 
     Raises:
         ValueError: If ``dynamics`` is unknown.
@@ -197,7 +214,8 @@ def circuit_sampler(
     if dynamics == "floquet":
         gate = floquet_ising_gate(**floquet)
         circuit = [
-            [(i, j, gate) for i, j in half_layer_bonds(N, t)] for t in range(n_rounds)
+            [(i, j, gate) for i, j in half_layer_bonds(N, t, periodic)]
+            for t in range(n_rounds)
         ]
         return lambda: circuit
     if dynamics != "haar":
@@ -207,7 +225,7 @@ def circuit_sampler(
 
     def draw() -> Circuit:
         return [
-            [(i, j, haar_gate(rng)) for i, j in half_layer_bonds(N, t)]
+            [(i, j, haar_gate(rng)) for i, j in half_layer_bonds(N, t, periodic)]
             for t in range(n_rounds)
         ]
 
@@ -326,7 +344,19 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     n_rounds = 2 * N if task.n_rounds is None else int(task.n_rounds)
     if n_rounds < 1:
         raise ValueError(f"purification_task.n_rounds must be >= 1, got {n_rounds}.")
-    scramble = 4 * N if task.scramble_rounds is None else int(task.scramble_rounds)
+    protocol = str(task.get("protocol", "steady"))
+    if protocol not in PROTOCOLS:
+        raise ValueError(
+            f"purification_task.protocol must be one of {PROTOCOLS}, got {protocol!r}."
+        )
+    paper = protocol == "paper"
+    periodic = bool(task.get("periodic", False))
+    if periodic and N % 2:
+        raise ValueError(f"purification_task.periodic needs an even N, got N={N}.")
+    default_scramble = 2 * N if paper else 4 * N
+    scramble = (
+        default_scramble if task.scramble_rounds is None else int(task.scramble_rounds)
+    )
     if scramble < 0:
         raise ValueError(
             f"purification_task.scramble_rounds must be >= 0, got {scramble}."
@@ -343,10 +373,17 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         bool(task.fixed_instance),
         {str(k): float(v) for k, v in task.floquet.items()},
         np.random.default_rng([seed, RNG_TAG, 2]),
+        periodic,
     )
-    # Without scrambling, R is paired at t = 0 with the central qubit of the
+    # Paper protocol: R is paired at t = 0 with the central qubit of
+    # |0...0>, then the gates scramble without measurement. Steady protocol:
+    # without scrambling, R is paired at t = 0 with the central qubit of the
     # Néel state; with it, the system first runs alone with R in |0>.
-    if scramble == 0:
+    if paper:
+        zeros = np.zeros(2**N, dtype=complex)
+        zeros[0] = 1.0
+        psi0 = reference_bell_state(zeros, N // 2)
+    elif scramble == 0:
         psi0 = reference_bell_state(neel_state(N), N // 2)
     else:
         psi0 = np.kron(np.array([1.0, 0.0]), neel_state(N))
@@ -362,8 +399,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         psi = psi0
         for j in range(scramble):
             psi = apply_layer(psi, circuit[j])
-            psi, _ = measure_system(psi, float(p[i]), rng)
-        if scramble:
+            if not paper:
+                psi, _ = measure_system(psi, float(p[i]), rng)
+        if scramble and not paper:
             psi, _ = entangle_reference(psi, N // 2, rng)
         for j in range(n_rounds):
             psi = apply_layer(psi, circuit[scramble + j])
@@ -382,6 +420,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     metrics: dict[str, float] = {
         "n_rounds": float(n_rounds),
         "scramble_rounds": float(scramble),
+        "paper_protocol": float(paper),
+        "periodic": float(periodic),
     }
     z_pred = np.zeros(test.size)
     shot_pred = np.zeros(test.size)

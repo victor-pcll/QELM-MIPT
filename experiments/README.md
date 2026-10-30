@@ -642,7 +642,13 @@ central qubit is measured, reset to `|0>` and paired with `R` in a Bell
 state (`QELM.evaluation.purification.entangle_reference`). Without this
 phase (`scramble_rounds=0`), `R` is paired with the Néel state at `t = 0`
 and hidden in a product state, which local measurements read at once: the
-crossing of `S_R` moves to smaller `p`. After the pairing, only the `N`
+crossing of `S_R` moves to smaller `p`. `purification_task.protocol=paper`
+runs the protocol of the paper instead, as reproduced for Clifford circuits
+in `experiments/purification` (issue #185): `R` is paired at `t = 0` with
+the central qubit of `|0...0>`, then the gates scramble for
+`scramble_rounds` rounds (default `2 N`) without measurement;
+`purification_task.periodic=true` closes the chain (even `N`). After the
+pairing, only the `N`
 system qubits run `n_rounds` recorded rounds (default `2 N`) of one half-layer of two-qubit gates (even bonds, then odd
 bonds) followed by a Z measurement of each system qubit with probability
 `p`, the time step of Skinner et al. (2019) and of the diagnostics of PR
@@ -685,10 +691,12 @@ uv run python experiments/QELM_R/plot_QELM_R.py outputs/exp_QELM_R/<date_time>
 ```
 
 The launcher sweeps `DYNAMICS`, `N_VALUES` and `SEEDS` (`PER_P`, `P_VALUES`,
-`P_C_HAAR=0.17`, `P_C_FLOQUET`, `SCRAMBLE`, `ALPHA`, `MAX_JOBS` change the
-defaults) and writes one folder per run, `<dynamics>_N<N>_seed<seed>/`
-(`..._scr<SCRAMBLE>` when `SCRAMBLE` is set). The plot script gives the runs
-with and without scrambling their own panels. The plot script
+`P_C_HAAR=0.17`, `P_C_FLOQUET`, `SCRAMBLE`, `PROTOCOL`, `ALPHA`, `MAX_JOBS`
+change the defaults) and writes one folder per run, `<dynamics>_N<N>_seed<seed>/`
+(`..._scr<SCRAMBLE>` when `SCRAMBLE` is set, `..._paper` with
+`PROTOCOL=paper`, which also closes the chain). The plot script gives the
+runs with and without scrambling, and with the paper protocol, their own
+panels. The plot script
 writes `purification_vs_p` (`S_R` against `p`, one curve per `N`),
 `accuracy_vs_p` (expected accuracy of the ridge decoder and the Bayes
 ceiling) and `r2_z_vs_p`, each with its JSON.

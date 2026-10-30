@@ -41,13 +41,22 @@ from QELM.utils.sweep import load_sweep
 
 KEYS = (("N", "N"), ("seed", "seed"), ("model", "purification_task.dynamics"))
 # Panel order of the dynamics; others follow in alphabetical order.
-MODEL_ORDER = ("haar", "haar_scrambled", "floquet", "floquet_scrambled")
+MODEL_ORDER = (
+    "haar",
+    "haar_scrambled",
+    "haar_paper",
+    "floquet",
+    "floquet_scrambled",
+    "floquet_paper",
+)
 # Panel titles of the dynamics, with or without the scrambling phase.
 TITLES = {
     "haar": "Haar brickwork",
     "haar_scrambled": "Haar, R entangled after scrambling",
     "floquet": "Floquet (Skinner et al. 2019)",
     "floquet_scrambled": "Floquet, R entangled after scrambling",
+    "haar_paper": "Haar, protocol of Gullans & Huse",
+    "floquet_paper": "Floquet, protocol of Gullans & Huse",
 }
 
 
@@ -80,8 +89,11 @@ def load_rows(sweep_dir: str | Path) -> list[dict[str, Any]]:
 
 
 def panel(row: dict[str, Any]) -> str:
-    """Return the panel of a run: its dynamics, ``_scrambled`` when ``R`` was
+    """Return the panel of a run: its dynamics, ``_paper`` for the protocol of
+    Gullans & Huse (``paper_protocol``), ``_scrambled`` when ``R`` was
     entangled after a scrambling phase (``scramble_rounds > 0``)."""
+    if float(row.get("paper_protocol") or 0.0) > 0.0:
+        return f"{row['model']}_paper"
     scrambled = float(row.get("scramble_rounds") or 0.0) > 0.0
     return f"{row['model']}_scrambled" if scrambled else str(row["model"])
 

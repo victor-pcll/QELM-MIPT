@@ -52,6 +52,14 @@ purification_task:
   # scrambling time of the Floquet chain, PR #244); 0: R is paired with the
   # Néel state at t = 0, without scrambling.
   scramble_rounds: null
+  # steady: the scrambling above, at p, then R is entangled. paper: the
+  # protocol of Gullans & Huse (arXiv:1910.00020, issue #185): R is paired at
+  # t = 0 with the central qubit of |0...0>, then the gates run
+  # scramble_rounds rounds (null: 2 * N) without measurement.
+  protocol: steady
+  # Periodic boundaries: the odd half-layers also act on the bond (N - 1, 0),
+  # as in the paper. Needs an even N.
+  periodic: false
   # Rounds after R is entangled, recorded in M, of (half-layer of gates,
   # measurement of each system qubit with probability p). null: 2 * N, that
   # is N periods of the brickwork.

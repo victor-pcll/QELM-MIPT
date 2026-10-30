@@ -69,6 +69,9 @@ def test_half_layers_alternate_the_bonds() -> None:
     assert exp.half_layer_bonds(5, 0) == [(1, 2), (3, 4)]
     assert exp.half_layer_bonds(5, 1) == [(2, 3), (4, 5)]
     assert exp.half_layer_bonds(4, 2) == [(1, 2), (3, 4)]
+    # Periodic chain: the odd half-layer closes it with the bond (N - 1, 0).
+    assert exp.half_layer_bonds(4, 0, periodic=True) == [(1, 2), (3, 4)]
+    assert exp.half_layer_bonds(4, 1, periodic=True) == [(2, 3), (4, 1)]
 
 
 def test_circuits_of_the_two_dynamics() -> None:
@@ -163,6 +166,40 @@ def test_scrambling_rounds() -> None:
         np.testing.assert_allclose(out["S_R"][out["p"] == 0.0], 1.0, atol=1e-9)
     with pytest.raises(ValueError, match="scramble_rounds"):
         _run("purification_task.scramble_rounds=-1")
+
+
+def test_paper_protocol() -> None:
+    out = _run(
+        "purification_task.dynamics=floquet",
+        "purification_task.protocol=paper",
+        "purification_task.periodic=true",
+    )
+    assert out["paper_protocol"] == 1.0 and out["periodic"] == 1.0
+    assert out["scramble_rounds"] == 2 * N
+    assert out["M"].shape == (3 * PER_P, 2 * N, N)
+    # p = 0: unitary dynamics, R stays maximally mixed; p = 1: purified.
+    np.testing.assert_allclose(out["S_R"][out["p"] == 0.0], 1.0, atol=1e-9)
+    np.testing.assert_allclose(out["S_R"][out["p"] == 1.0], 0.0, atol=1e-6)
+    steady = _run("purification_task.dynamics=floquet")
+    assert steady["paper_protocol"] == 0.0 and steady["periodic"] == 0.0
+    with pytest.raises(ValueError, match="even N"):
+        _run("N=5", "purification_task.periodic=true")
+    with pytest.raises(ValueError, match="protocol"):
+        _run("purification_task.protocol=other")
+
+
+def test_paper_protocol_scrambles_without_measurement() -> None:
+    # At p = 0, the whole trajectory is unitary: R stays maximally mixed and
+    # the record is empty.
+    out = _run(
+        "purification_task.dynamics=floquet",
+        "purification_task.protocol=paper",
+        "purification_task.scramble_rounds=2",
+        "purification_task.p_values=[0.0]",
+    )
+    assert out["scramble_rounds"] == 2
+    assert not out["M"].any()
+    np.testing.assert_allclose(out["S_R"], 1.0, atol=1e-9)
 
 
 def test_a_fixed_alpha_is_used() -> None:
@@ -263,6 +300,33 @@ def test_bash_sweep_and_figures(tmp_path: Path) -> None:
     for name in ("purification_vs_p", "accuracy_vs_p", "r2_z_vs_p"):
         assert (tmp_path / f"{name}.png").is_file()
         assert (tmp_path / f"{name}.json").is_file()
+
+
+def test_bash_sweep_with_the_paper_protocol(tmp_path: Path) -> None:
+    env = {
+        **os.environ,
+        "OUT_DIR": str(tmp_path),
+        "DYNAMICS": "floquet",
+        "N_VALUES": "4",
+        "SEEDS": "1",
+        "PER_P": "8",
+        "P_VALUES": "0 0.5",
+        "PROTOCOL": "paper",
+        "TQDM_DISABLE": "1",
+    }
+    subprocess.run(
+        ["bash", str(BASH_SCRIPT)],
+        check=True,
+        env=env,
+        cwd=tmp_path,
+        capture_output=True,
+    )
+    metrics = json.loads(
+        (tmp_path / "floquet_N4_seed1_paper" / "metrics.json").read_text()
+    )
+    assert metrics["paper_protocol"] == 1.0 and metrics["periodic"] == 1.0
+    plot = _load(PLOT_SCRIPT)
+    assert plot.panel({"model": "floquet", **metrics}) == "floquet_paper"
 
 
 def test_bash_sweep_refuses_a_bad_max_jobs(tmp_path: Path) -> None:
