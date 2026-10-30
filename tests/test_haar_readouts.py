@@ -161,7 +161,7 @@ def test_readouts_learn_a_linear_and_a_parity_rule() -> None:
     parity = X[:, 1] * X[:, 2]
     train, test = slice(0, 400), slice(400, None)
     for y, names in (
-        (linear, READOUTS),
+        (linear, (*READOUTS, "logistic")),
         (parity, ("ridge_pairs", "gradient_boosting")),
     ):
         for name in names:
@@ -339,4 +339,103 @@ def test_clifford_circuit_and_qelm_m_comparison(tmp_path: Path) -> None:
         assert (tmp_path / f"{circuit}_ridge_M_all.png").is_file()
     assert (
         plot.title("ridge_M_all") == "Ridge (linear) on M and all six observable sets"
+    )
+
+
+def test_benchmark_feature_maps_match_dense_operators() -> None:
+    exp = _load(SCRIPT)
+    ops = exp.local2_operators(N)
+    assert len(ops) == 3 * N + 9 * N * (N - 1) // 2
+    rng = np.random.default_rng(5)
+    phi = rng.normal(size=2**N) + 1j * rng.normal(size=2**N)
+    phi /= np.linalg.norm(phi)
+    psi = np.kron([0.0, 1.0], phi)  # R measured in |1>
+    np.testing.assert_allclose(exp.system_state(psi, N), phi)
+    # <X_1 Z_3>, the first cross term of the pair (1, 3), on qubits 2 and 4.
+    dense = get_site_operator(PAULIS["X"], 2, N + 1) @ get_site_operator(
+        PAULIS["Z"], 4, N + 1
+    )
+    index = 3 * N + 9 * (N - 1) + 9 + 2
+    values = exp.expectation_values(psi, ops)
+    np.testing.assert_allclose(values[index], np.real(np.vdot(psi, dense @ psi)))
+    probs = exp.born_probabilities(psi, N)
+    np.testing.assert_allclose(probs, np.abs(phi) ** 2)
+    # A basis state gives its own bits: |0110> -> (+1, -1, -1, +1).
+    basis = np.zeros(2**N)
+    basis[0b0110] = 1.0
+    np.testing.assert_array_equal(exp.shot(basis, N, rng), [1.0, -1.0, -1.0, 1.0])
+
+
+def test_qelm_benchmark_feature_sets() -> None:
+    sets = "[local2,born,reservoir,shot,M_shot,M_x_all]"
+    out = _run(
+        "haar_circuit.fixed_instance=true",
+        "readouts_task.readouts=[ridge,logistic]",
+        f"readouts_task.features={sets}",
+    )
+    L = 3 * PER_P
+    assert out["features_local2"].shape == (L, 3 * N + 9 * N * (N - 1) // 2)
+    assert out["features_born"].shape == out["features_reservoir"].shape
+    np.testing.assert_allclose(out["features_born"].sum(1), 1.0)
+    np.testing.assert_allclose(out["features_reservoir"].sum(1), 1.0)
+    assert set(np.unique(out["features_shot"])) <= {-1.0, 1.0}
+    metrics = out["metrics"]
+    for name in ("local2", "born", "reservoir", "shot", "M_shot", "M_x_all"):
+        for readout in ("ridge", "logistic"):
+            assert 0.0 <= metrics[f"accuracy_{readout}_{name}_p0.5"] <= 1.0
+    # p = 0 with one fixed circuit: two fixed orthogonal final states, which
+    # the linear readouts of their Z-basis probabilities tell apart.
+    assert metrics["accuracy_ridge_born_p0"] == 1.0
+    assert metrics["accuracy_ridge_reservoir_p0"] == 1.0
+    # The benchmark sets draw from their own generators: the trajectories and
+    # the observables are those of a run without them.
+    base = _run(
+        "haar_circuit.fixed_instance=true",
+        "readouts_task.readouts=[ridge]",
+        "readouts_task.features=[all]",
+    )
+    np.testing.assert_array_equal(base["M"], out["M"])
+    np.testing.assert_array_equal(base["Y"], out["Y"])
+    np.testing.assert_allclose(base["features_ZZ"], out["features_ZZ"])
+
+
+def test_benchmark_figures_merge_two_sweeps(tmp_path: Path) -> None:
+    base = {
+        **os.environ,
+        "GATES": "fixed",
+        "N_VALUES": "3",
+        "SEEDS": "1",
+        "PER_P": "20",
+        "P_VALUES": "0 1",
+        "TQDM_DISABLE": "1",
+    }
+    for folder, readouts, features in (
+        ("linear", "ridge logistic", "all born shot M_x_all"),
+        ("pairs", "ridge_pairs", "all"),
+    ):
+        env = {
+            **base,
+            "OUT_DIR": str(tmp_path / folder),
+            "READOUTS": readouts,
+            "FEATURES": features,
+        }
+        subprocess.run(
+            ["bash", str(BASH_SCRIPT)],
+            check=True,
+            env=env,
+            cwd=tmp_path,
+            capture_output=True,
+        )
+    plot = _load(PLOT_SCRIPT)
+    out = tmp_path / "figures"
+    plot.main([str(tmp_path / "linear"), str(tmp_path / "pairs"), "--out", str(out)])
+    for stem in ("benchmark_haar_fixed_ridge", "benchmark_haar_fixed_logistic"):
+        assert (out / f"{stem}.png").is_file()
+    table = json.loads((out / "benchmark_haar_fixed_ridge.json").read_text())
+    assert "QELM quadratic: products of <.>: accuracy_ridge_pairs_all" in json.dumps(
+        table
+    )
+    assert (out / "ridge_pairs_all.png").is_file()
+    assert plot.title("logistic_M_x_all") == (
+        "Logistic regression (linear) on M, all six sets and their products"
     )
