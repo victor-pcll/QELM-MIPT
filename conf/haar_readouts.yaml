@@ -26,9 +26,14 @@ readouts_task:
   # qubit with probability p), as the 5 steps of experiments/QELM_M.
   n_rounds: 5
   # Readouts of the record, each fitted and scored on its own
-  # (READOUTS in the script): ridge, ridge_pairs, knn, mlp, gradient_boosting.
+  # (READOUTS in the script): ridge, logistic, ridge_pairs, knn, mlp,
+  # gradient_boosting.
   readouts: [ridge, ridge_pairs, knn, mlp, gradient_boosting]
   # Features the readouts read, each on its own: M (the record), X, Y, Z
   # (<P_k> of the final state, after R is measured), XX, YY, ZZ (<P_i P_j>
-  # on every pair i < j), all (the six observable sets side by side).
+  # on every pair i < j), all (the six observable sets side by side), M_all
+  # (M and all). QELM benchmark (FEATURE_SETS in the script): local2 (every
+  # 1- and 2-site Pauli string), born (Z-basis probabilities), reservoir
+  # (the same after a fixed Haar unitary), shot (one Z-basis bitstring),
+  # M_shot (M and that bitstring), M_x_all (M, all and their products).
   features: [M]
