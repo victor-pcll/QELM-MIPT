@@ -2,11 +2,12 @@
 """Figures of a sweep of ``haar_readouts.sh``: one figure per readout.
 
 Reads every run folder of the sweep (one per circuit, gate draw, ``N`` and
-seed),
+seed), or of several sweeps whose runs share these settings (their scores
+are merged, so that readouts run apart end up in the same figures),
 averages over the seeds (standard error as error bars) and writes, for each
 readout of the runs, ``<readout>.png`` and its JSON
-(:func:`QELM.utils.plots.save_figure`) in the sweep folder unless ``--out``
-is given. Each figure has three panels against ``p``, one curve per gate draw
+(:func:`QELM.utils.plots.save_figure`) in the (first) sweep folder unless
+``--out`` is given. Each figure has three panels against ``p``, one curve per gate draw
 (new gates per trajectory, ``random``, or one fixed circuit, ``fixed``) and
 ``N``:
 
@@ -23,10 +24,14 @@ figures, ``<circuit>_<readout>.png``. When the runs score the ridge on the
 record ``M``, on the observables of the final state (the QELM, set ``all``)
 and on both (the QELM-M, set ``M_all``), ``compare_<circuit>.png`` draws the
 three on the same panels: one color per feature set, solid lines for a fixed
-circuit and dashed lines for new gates per trajectory.
+circuit and dashed lines for new gates per trajectory. When the runs score
+readouts of the QELM benchmark (:data:`BENCHMARK`),
+``benchmark_<circuit>_<gates>_<readout>.png`` draws, for one gate draw and
+one linear readout (``ridge`` or ``logistic``), every feature set of the
+benchmark on the same panels, with the purification curve of those runs.
 
     uv run python experiments/haar_readouts/plot_haar_readouts.py \\
-        outputs/haar_readouts/<date_time>
+        outputs/haar_readouts/<date_time> [outputs/haar_readouts/<other>]
 """
 
 from __future__ import annotations
@@ -50,6 +55,7 @@ CIRCUIT_TITLES = {"haar": "Haar", "clifford": "Clifford"}
 # Panel titles of the readouts.
 TITLES = {
     "ridge": "Ridge (linear)",
+    "logistic": "Logistic regression (linear)",
     "ridge_pairs": "Ridge on outcomes and their pairwise products",
     "knn": "k nearest neighbors",
     "mlp": "Neural network (MLP 64-64)",
@@ -67,7 +73,28 @@ FEATURE_LABELS = {
     "ZZ": "<Z_i Z_j>",
     "all": "all six observable sets",
     "M_all": "M and all six observable sets",
+    "local2": "all 1- and 2-site Pauli strings",
+    "born": "Z-basis probabilities",
+    "reservoir": "Z-basis probabilities after a fixed Haar reservoir",
+    "shot": "one Z-basis shot",
+    "M_shot": "M and one Z-basis shot",
+    "M_x_all": "M, all six sets and their products",
 }
+# Feature sets of the QELM benchmark, with their legend, in drawing order.
+BENCHMARK = {
+    "all": "QELM: <P_k>, <P_i P_j>",
+    "local2": "all 2-site Pauli strings",
+    "born": "Z-basis probabilities",
+    "reservoir": "fixed Haar reservoir, Z probabilities",
+    "shot": "one Z-basis shot",
+    "M_shot": "M + one Z-basis shot",
+    "M_all": "QELM-M",
+    "M_x_all": "QELM x M (feedforward)",
+}
+# Readouts of the benchmark figures; the ridge figure also draws the ridge
+# quadratic in the observables, under this legend.
+BENCHMARK_READOUTS = ("ridge", "logistic")
+QUADRATIC = ("ridge_pairs_all", "QELM quadratic: products of <.>")
 
 
 def title(name: str) -> str:
@@ -98,6 +125,22 @@ def load_rows(sweep_dir: str | Path) -> list[dict[str, Any]]:
         row["circuit"] = model.removesuffix("_circuit")
         row["gates"] = "fixed" if cfg[model].get("fixed_instance") else "random"
     return rows
+
+
+def merge_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Merge the runs of several sweeps that share circuit, gate draw, ``N``
+    and seed: one row each, holding the scores of all of them.
+
+    Raises:
+        ValueError: If two merged runs differ in their ``p`` values.
+    """
+    merged: dict[tuple[Any, ...], dict[str, Any]] = {}
+    for row in rows:
+        key = (row["circuit"], row["gates"], row["N"], row["seed"])
+        if key in merged and merged[key]["p_values"] != row["p_values"]:
+            raise ValueError(f"Runs {key} differ in their p values.")
+        merged.setdefault(key, {}).update(row)
+    return list(merged.values())
 
 
 def readouts(rows: list[dict[str, Any]]) -> list[str]:
@@ -248,13 +291,41 @@ def draw_comparison(
     )
 
 
+def draw_benchmark(
+    rows: list[dict[str, Any]], circuit: str, gates: str, readout: str
+) -> tuple[plt.Figure, dict[str, Any]] | None:
+    """One circuit and gate draw: ``readout`` on every feature set of
+    :data:`BENCHMARK` the runs score, one color each (plus the quadratic
+    ridge for ``ridge``). ``None`` if the runs score fewer than two.
+    """
+    runs = [r for r in rows if r["circuit"] == circuit and r["gates"] == gates]
+    scores = {f"{readout}_{s}": label for s, label in BENCHMARK.items()}
+    if readout == "ridge":
+        scores[QUADRATIC[0]] = QUADRATIC[1]
+    present = [s for s in scores if any(f"accuracy_{s}_p0" in r for r in runs)]
+    if len(present) < 2:
+        return None
+    # Up to nine sets: tab10 keeps them all apart, unlike color_map.
+    palette = plt.get_cmap("tab10").colors
+    colors = {scores[s]: palette[i % len(palette)] for i, s in enumerate(present)}
+    lines = []
+    for label, group in _by_run(runs).items():
+        for s in present:
+            style = {"color": colors[scores[s]], "s_label": label, "s_color": "0.2"}
+            lines.append((scores[s], group, s, style))
+    name = CIRCUIT_TITLES.get(circuit, circuit)
+    return _three_panels(lines, f"{name}, {gates} gates: {TITLES[readout]}")
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("sweep", type=Path, help="folder of one haar_readouts.sh sweep")
+    parser.add_argument(
+        "sweeps", type=Path, nargs="+", help="folders of haar_readouts.sh sweeps"
+    )
     parser.add_argument("--out", type=Path, default=None, help="figure folder")
     args = parser.parse_args(argv)
-    out = args.out or args.sweep
-    rows = load_rows(args.sweep)
+    out = args.out or args.sweeps[0]
+    rows = merge_rows([row for sweep in args.sweeps for row in load_rows(sweep)])
     many = len({row["circuit"] for row in rows}) > 1
     for circuit in sorted({row["circuit"] for row in rows}):
         rows_c = [row for row in rows if row["circuit"] == circuit]
@@ -269,6 +340,14 @@ def main(argv: Sequence[str] | None = None) -> None:
             fig, table = compared
             save_figure(fig, out, f"compare_{circuit}", data=table)
             plt.close(fig)
+        for gates in sorted({row["gates"] for row in rows_c}):
+            for readout in BENCHMARK_READOUTS:
+                bench = draw_benchmark(rows, circuit, gates, readout)
+                if bench is not None:
+                    fig, table = bench
+                    stem = f"benchmark_{circuit}_{gates}_{readout}"
+                    save_figure(fig, out, stem, data=table)
+                    plt.close(fig)
     print(f"Figures written to {out}")
 
 

@@ -916,7 +916,9 @@ the `R2` of its output against the label (`r2_<readout>_p<p>`; a
 classifier outputs `2 P(Y = +1) - 1`):
 
 - `ridge`: the linear readout, `RidgeCV` with leave-one-out alpha;
-- `ridge_pairs`: the same ridge on the outcomes and the products of every
+- `logistic`: a logistic regression on the standardized features, `C` by
+  5-fold cross-validation;
+- `ridge_pairs`: the same ridge on the features and the products of every
   pair of them;
 - `knn`: `sqrt(n_train)` nearest neighbors, weighted by distance;
 - `mlp`: a neural network with two hidden layers of 64 units;
@@ -948,6 +950,35 @@ its `R2` on the right (`<circuit>_<readout>.png` when the sweep holds both
 circuits). With `READOUTS=ridge FEATURES="M all M_all"`,
 `compare_<circuit>.png` draws the ridge on `M`, on the QELM features and on
 the QELM-M features on the same panels, one per circuit.
+
+### Benchmark of QELM readouts
+
+More feature maps of the final state benchmark what a readout of the QELM
+can read: `local2` (every one- and two-site Pauli string, cross terms
+included), `born` (the `2**N` Z-basis probabilities of the system),
+`reservoir` (the same after one fixed Haar unitary on the system, drawn once
+per run), `shot` (one Z-basis bitstring, what one run of the experiment
+gives), `M_shot` (the record and that bitstring) and `M_x_all` (the record,
+the six observable sets and their products: weights of the observables that
+depend on the record). They draw from their own generators, so the
+trajectories stay those of a run without them. The ridge quadratic in the
+observables is `READOUTS=ridge_pairs FEATURES=all`; run it as a second
+sweep and give both folders to the plot script, which merges the runs that
+share circuit, gate draw, `N` and seed:
+
+```bash
+OUT_DIR=outputs/haar_readouts/linear READOUTS="ridge logistic" \
+  FEATURES="all local2 born reservoir shot M_shot M_all M_x_all" \
+  MAX_JOBS=4 ./experiments/haar_readouts/haar_readouts.sh
+OUT_DIR=outputs/haar_readouts/pairs READOUTS=ridge_pairs FEATURES=all \
+  MAX_JOBS=4 ./experiments/haar_readouts/haar_readouts.sh
+uv run python experiments/haar_readouts/plot_haar_readouts.py \
+  outputs/haar_readouts/linear outputs/haar_readouts/pairs
+```
+
+`benchmark_<circuit>_<gates>_<readout>.png` then draws, for one gate draw and
+the `ridge` (with the quadratic ridge) or the `logistic` readout, every
+benchmark set on the same panels, with the purification curve.
 
 ## Check the chaos and the locality of the reservoirs (issue #243)
 
