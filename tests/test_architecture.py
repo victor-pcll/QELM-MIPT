@@ -20,6 +20,7 @@ def test_physics_only_exposes_primitives() -> None:
         "local_expectation",
         "partial_trace",
         "qubit_counts",
+        "QubitCounts",
         "pauli",
         "batch_charge_leakage",
         "charge_distribution",

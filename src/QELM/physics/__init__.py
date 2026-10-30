@@ -17,6 +17,7 @@ from QELM.physics.charge import (
 from QELM.physics.operators import (
     PAULIS,
     I,
+    QubitCounts,
     X,
     Y,
     Z,
@@ -30,6 +31,7 @@ from QELM.physics.partial_trace import partial_trace
 __all__ = [
     "PAULIS",
     "I",
+    "QubitCounts",
     "X",
     "Y",
     "Z",

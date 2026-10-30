@@ -20,6 +20,11 @@ def _mul(*factors: float) -> float:
     return math.prod(factors)
 
 
+def _add(*terms: float) -> float:
+    """Return the sum of the terms, as ``${add:a,b,...}``."""
+    return sum(terms)
+
+
 def _sub(a: float, b: float) -> float:
     """Return ``a - b``, as ``${sub:a,b}``."""
     return a - b
@@ -37,6 +42,7 @@ def _int(value: float) -> int:
 
 RESOLVERS: dict[str, Callable[..., Any]] = {
     "mul": _mul,
+    "add": _add,
     "sub": _sub,
     "div": _div,
     "int": _int,
@@ -44,7 +50,7 @@ RESOLVERS: dict[str, Callable[..., Any]] = {
 
 
 def register_resolvers() -> None:
-    """Register ``mul``, ``sub``, ``div`` and ``int`` with OmegaConf.
+    """Register ``mul``, ``add``, ``sub``, ``div`` and ``int`` with OmegaConf.
 
     Safe to call more than once. ``import QELM`` calls it, so ``main.py``,
     ``load_config`` and the tests see the resolvers before Hydra resolves

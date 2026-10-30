@@ -132,7 +132,7 @@ class WeakMeasurement(Readout):
         gamma: Strength from ``params["gamma"]``, used by :meth:`measure`
             when no ``gamma`` is passed; 1.0 (projective) if absent.
         qubits: Measured qubits in order, from ``params["qubits"]``, or
-            ``None`` for every system qubit ``Nr .. N-1``.
+            ``None`` for every system qubit, sites ``Nr .. N_total - 1``.
         Nr: Number of ancilla qubits at the start of the chain, never
             measured when ``qubits`` is ``None``; 0 by default.
     """
@@ -159,9 +159,9 @@ class WeakMeasurement(Readout):
         if self.Nr < 0:
             raise ValueError(f"Nr must be >= 0, got {self.Nr}.")
 
-    def targets(self, N: int) -> list[int]:
-        """Return the measured qubits for an ``N``-qubit state."""
-        return list(range(self.Nr, N)) if self.qubits is None else self.qubits
+    def targets(self, N_total: int) -> list[int]:
+        """Return the measured qubits for a state of ``N_total`` qubits."""
+        return list(range(self.Nr, N_total)) if self.qubits is None else self.qubits
 
     def measure(
         self,
@@ -172,7 +172,8 @@ class WeakMeasurement(Readout):
         """Weakly measure every target qubit once, in order.
 
         Args:
-            rho: State vector ``(2**N,)`` or density matrix ``(2**N, 2**N)``.
+            rho: State vector ``(2**N_total,)`` or density matrix
+                ``(2**N_total, 2**N_total)``.
             p: Strength ``gamma`` for this call (the name follows
                 :meth:`Readout.measure`). ``None`` uses ``self.gamma``.
             rng: Random generator for the outcomes. ``None`` uses the global
@@ -188,10 +189,12 @@ class WeakMeasurement(Readout):
         """
         gamma = self.gamma if p is None else _check_gamma(p)
         state = np.asarray(rho, dtype=complex)
-        N = state.shape[0].bit_length() - 1
-        if N < self.Nr:
-            raise ValueError(f"State has N={N} qubits, fewer than Nr={self.Nr}.")
-        targets = self.targets(N)
+        N_total = state.shape[0].bit_length() - 1
+        if N_total < self.Nr:
+            raise ValueError(
+                f"State has N_total={N_total} qubits, fewer than Nr={self.Nr}."
+            )
+        targets = self.targets(N_total)
         outcomes = np.zeros(len(targets), dtype=np.float64)
         for k, q in enumerate(targets):
             state, outcomes[k] = measure_weak(state, q, gamma, rng)

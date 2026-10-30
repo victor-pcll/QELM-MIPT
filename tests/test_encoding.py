@@ -22,18 +22,19 @@ from QELM.models import TransverseFieldIsingModel
 NS = [2, 3, 4, 5, 6]
 
 
-# N total : 1 ancilla + Ns = N - 1 qubits de système.
-NS_TOTAL = [3, 4, 5, 6, 7]
+# N qubits de système (issue #235) : l'état a N_total = N + 1 qubits avec
+# l'ancilla.
+NS_SYSTEM = [2, 3, 4, 5, 6]
 
 
-def _rho_R(rho: np.ndarray, Ns: int) -> np.ndarray:
+def _rho_R(rho: np.ndarray, N: int) -> np.ndarray:
     """Trace partielle sur S : état réduit de l'ancilla (site 0)."""
-    return np.einsum("aibi->ab", rho.reshape(2, 2**Ns, 2, 2**Ns))
+    return np.einsum("aibi->ab", rho.reshape(2, 2**N, 2, 2**N))
 
 
-def _rho_S(rho: np.ndarray, Ns: int) -> np.ndarray:
+def _rho_S(rho: np.ndarray, N: int) -> np.ndarray:
     """Trace partielle sur R : état réduit du système."""
-    return np.einsum("aiaj->ij", rho.reshape(2, 2**Ns, 2, 2**Ns))
+    return np.einsum("aiaj->ij", rho.reshape(2, 2**N, 2, 2**N))
 
 
 @pytest.mark.parametrize("N", NS)
@@ -58,15 +59,17 @@ def test_charge_sector_state_normalized(N: int) -> None:
     assert np.isclose(np.linalg.norm(charge_sector_state(N, N // 2)), 1.0)
 
 
-@pytest.mark.parametrize("N", NS_TOTAL)
+@pytest.mark.parametrize("N", NS_SYSTEM)
 def test_ancilla_state_physical(N: int) -> None:
+    """N qubits de système, N + 1 qubits alloués avec l'ancilla (issue #235)."""
     emb = AncillaChargeSectorEncoding({"N": N})
     psi = emb.state()
     rho = emb.density_matrix()
-    assert emb.Ns == N - 1
-    assert emb.dim == 2**N
-    assert psi.shape == (2**N,)
-    assert rho.shape == (2**N, 2**N)
+    assert (emb.N, emb.Nr, emb.N_total) == (N, 1, N + 1)
+    assert not hasattr(emb, "Ns")
+    assert emb.dim == 2 ** (N + 1)
+    assert psi.shape == (2 ** (N + 1),)
+    assert rho.shape == (2 ** (N + 1), 2 ** (N + 1))
     assert np.isclose(np.linalg.norm(psi), 1.0)
     assert np.isclose(np.trace(rho), 1.0)
     assert np.allclose(rho, rho.conj().T)
@@ -74,36 +77,34 @@ def test_ancilla_state_physical(N: int) -> None:
     assert np.all(np.linalg.eigvalsh(rho) > -1e-12)
 
 
-@pytest.mark.parametrize("N", NS_TOTAL)
+@pytest.mark.parametrize("N", NS_SYSTEM)
 def test_ancilla_components_in_right_sector(N: int) -> None:
-    Ns = N - 1
     psi = AncillaChargeSectorEncoding({"N": N}).state()
     nonzero = np.flatnonzero(np.abs(psi) > 1e-12)
     for i in nonzero:
-        ancilla, system = divmod(int(i), 2**Ns)
-        expected = Ns // 2 if ancilla == 0 else Ns // 2 - 1
+        ancilla, system = divmod(int(i), 2**N)
+        expected = N // 2 if ancilla == 0 else N // 2 - 1
         assert bin(system).count("1") == expected
     # Chaque branche porte exactement le poids 1/2.
-    assert np.isclose(np.sum(np.abs(psi[: 2**Ns]) ** 2), 0.5)
-    assert np.isclose(np.sum(np.abs(psi[2**Ns :]) ** 2), 0.5)
-    assert nonzero.size == comb(Ns, Ns // 2) + comb(Ns, Ns // 2 - 1)
+    assert np.isclose(np.sum(np.abs(psi[: 2**N]) ** 2), 0.5)
+    assert np.isclose(np.sum(np.abs(psi[2**N :]) ** 2), 0.5)
+    assert nonzero.size == comb(N, N // 2) + comb(N, N // 2 - 1)
 
 
-@pytest.mark.parametrize("N", NS_TOTAL)
+@pytest.mark.parametrize("N", NS_SYSTEM)
 def test_ancilla_reduced_states(N: int) -> None:
-    Ns = N - 1
     rho = AncillaChargeSectorEncoding({"N": N}).density_matrix()
-    assert np.allclose(_rho_R(rho, Ns), np.eye(2) / 2)
-    q1 = charge_sector_state(Ns, Ns // 2)
-    q2 = charge_sector_state(Ns, Ns // 2 - 1)
+    assert np.allclose(_rho_R(rho, N), np.eye(2) / 2)
+    q1 = charge_sector_state(N, N // 2)
+    q2 = charge_sector_state(N, N // 2 - 1)
     expected_S = (np.outer(q1, q1.conj()) + np.outer(q2, q2.conj())) / 2
-    assert np.allclose(_rho_S(rho, Ns), expected_S)
+    assert np.allclose(_rho_S(rho, N), expected_S)
 
 
-def test_ancilla_known_values_N3() -> None:
-    # N = 3 : ancilla + 2 qubits de système.
+def test_ancilla_known_values_N2() -> None:
+    # N = 2 qubits de système + l'ancilla, 3 qubits en tout.
     # (|0>(|01> + |10>)/sqrt(2) + |1>|00>) / sqrt(2)
-    psi = AncillaChargeSectorEncoding({"N": 3}).state()
+    psi = AncillaChargeSectorEncoding({"N": 2}).state()
     expected = np.zeros(8, dtype=complex)
     expected[[0b001, 0b010]] = 0.5
     expected[0b100] = 1 / np.sqrt(2)
@@ -111,12 +112,12 @@ def test_ancilla_known_values_N3() -> None:
 
 
 def test_ancilla_odd_system_charges() -> None:
-    # N = 6 : Ns = 5, charges 2 et 1.
-    emb = AncillaChargeSectorEncoding({"N": 6})
-    assert (emb.Ns, emb.Q1, emb.Q2) == (5, 2, 1)
+    # N = 5 qubits de système : charges 2 et 1.
+    emb = AncillaChargeSectorEncoding({"N": 5})
+    assert (emb.N, emb.Q1, emb.Q2) == (5, 2, 1)
 
 
-@pytest.mark.parametrize("N", [0, 1, 2])
+@pytest.mark.parametrize("N", [0, 1])
 def test_ancilla_rejects_small_N(N: int) -> None:
     with pytest.raises(ValueError):
         AncillaChargeSectorEncoding({"N": N})
@@ -133,7 +134,7 @@ def test_from_config_and_registry() -> None:
     assert cls is AncillaChargeSectorEncoding
     emb = cls.from_config(cfg)
     assert isinstance(emb, Encoding)
-    assert (emb.N, emb.Ns, emb.dim) == (4, 3, 16)
+    assert (emb.N, emb.N_total, emb.dim) == (4, 5, 32)
 
 
 def test_from_config_rejects_scalar() -> None:
@@ -149,17 +150,19 @@ def test_unknown_encoding() -> None:
 
 def test_base_without_ancilla() -> None:
     emb = Encoding({"N": 2})
-    assert (emb.N, emb.Ns, emb.dim) == (2, 2, 4)
+    assert (emb.N, emb.N_total, emb.dim) == (2, 2, 4)
     with pytest.raises(NotImplementedError):
         emb.state()
 
 
-def test_same_dimension_as_model() -> None:
-    # Le même N dans la config donne la même dimension que le modèle.
+def test_same_system_as_model() -> None:
+    # Le même N donne le même système : le modèle agit sur les N qubits du
+    # système, l'état y ajoute l'ancilla (issue #235).
     model = TransverseFieldIsingModel({"N": 4, "J": 1.0, "h": 0.5})
     emb = AncillaChargeSectorEncoding({"N": model.N})
-    assert emb.dim == model.dim
-    assert model.hamiltonian().shape == emb.density_matrix().shape
+    assert emb.dim == 2 * model.dim
+    H = np.kron(np.eye(2), model.hamiltonian().toarray())
+    assert H.shape == emb.density_matrix().shape
 
 
 # --- Config composée (issue #22) ---
@@ -182,7 +185,7 @@ def test_from_full_config_follows_the_model() -> None:
         cfg = load_config(overrides)
         emb = AncillaChargeSectorEncoding.from_config(cfg)
         assert emb.N == N
-        assert emb.state().shape == (2**N,)
+        assert emb.state().shape == (2 ** (N + 1),)
 
 
 def test_from_config_missing_block_is_explicit() -> None:
@@ -193,15 +196,15 @@ def test_from_config_missing_block_is_explicit() -> None:
         AncillaChargeSectorEncoding.from_config(cfg)
 
 
-@pytest.mark.parametrize("N", [3, 4, 5, 6])
+@pytest.mark.parametrize("N", [2, 3, 4, 5])
 def test_sparse_state_matches_dense(N: int) -> None:
-    """state(sparse=True) est une colonne CSR (2**N, 1) égale à state()."""
+    """state(sparse=True) est une colonne CSR (2**N_total, 1) égale à state()."""
     emb = AncillaChargeSectorEncoding({"N": N})
     psi = emb.state()
     psi_sp = emb.state(sparse=True)
     assert isinstance(psi_sp, sp.csr_matrix)
-    assert psi.shape == (2**N,)
-    assert psi_sp.shape == (2**N, 1)
+    assert psi.shape == (emb.dim,) == (2 ** (N + 1),)
+    assert psi_sp.shape == (emb.dim, 1)
     assert psi_sp.dtype == complex
     np.testing.assert_allclose(psi_sp.toarray().ravel(), psi, atol=1e-15)
     # Seules les amplitudes non nulles sont stockées.
@@ -220,21 +223,22 @@ def test_sparse_charge_sector_state_matches_dense(N: int, Q: int) -> None:
     assert np.isclose(sparse_norm(psi_sp), 1.0)
 
 
-@pytest.mark.parametrize("N", [3, 4, 5])
+@pytest.mark.parametrize("N", [2, 3, 4])
 def test_sparse_density_matrix_matches_dense(N: int) -> None:
     """density_matrix(sparse=True) est la CSR de density_matrix()."""
     emb = AncillaChargeSectorEncoding({"N": N})
     rho = emb.density_matrix()
     rho_sp = emb.density_matrix(sparse=True)
-    assert isinstance(rho, np.ndarray) and rho.shape == (2**N, 2**N)
-    assert isinstance(rho_sp, sp.csr_matrix) and rho_sp.shape == (2**N, 2**N)
+    dim = 2 ** (N + 1)
+    assert isinstance(rho, np.ndarray) and rho.shape == (dim, dim)
+    assert isinstance(rho_sp, sp.csr_matrix) and rho_sp.shape == (dim, dim)
     np.testing.assert_allclose(rho_sp.toarray(), rho, atol=1e-15)
     assert rho_sp.nnz == np.count_nonzero(rho)
 
 
 def test_dense_is_the_default_state() -> None:
     """Sans argument, state() et density_matrix() sont des tableaux numpy."""
-    emb = AncillaChargeSectorEncoding({"N": 3})
+    emb = AncillaChargeSectorEncoding({"N": 2})
     assert isinstance(emb.state(), np.ndarray)
     assert isinstance(emb.density_matrix(), np.ndarray)
     assert isinstance(charge_sector_state(3, 1), np.ndarray)

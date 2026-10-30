@@ -108,7 +108,7 @@ def test_unitary_qelm_has_no_linear_x_or_y_feature() -> None:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     for h in (10.0, 1.0):
-        cfg = load_config(["models=TFIM", "N=4", f"TFIM.h={h}", "samples.L=12"])
+        cfg = load_config(["models=TFIM", "N=3", f"TFIM.h={h}", "samples.L=12"])
         out = module.run(cfg)
         blocks = linear_observables(out["X"], ["Z", "Y", "X"], 3)
         np.testing.assert_allclose(blocks["X"], 0.0, atol=1e-10)

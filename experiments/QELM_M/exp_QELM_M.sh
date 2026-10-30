@@ -15,7 +15,7 @@
 #     OUT_ROOT=/tmp/qelm      write under /tmp/qelm instead of outputs
 #     L=1000                  number of samples per run
 #     ALPHA=1e-2              ridge regularization (training.alpha, default 1e-3)
-#     N_VALUES="4 6"          total numbers of qubits, ancilla included
+#     N_VALUES="4 6"          numbers of system qubits, ancilla excluded
 #     SEEDS="42 43 44"        seeds (one disorder and measurement draw each)
 #     P_VALUES="0.1 0.5 1.0"  measurement probabilities
 #     H_VALUES="1 10"         transverse fields TFIM.h, in units of TFIM.J = 1
@@ -44,7 +44,7 @@ unset VIRTUAL_ENV
 # ---- Parameters -------------------------------------------------------------
 EXPERIMENT="exp_QELM_M"
 MODEL="${MODEL:-TFIM}"
-read -r -a N_VALUES <<< "${N_VALUES:-4}"   # number of qubits, ancilla included
+read -r -a N_VALUES <<< "${N_VALUES:-4}"   # system qubits, ancilla excluded (issue #235)
 L="${L:-12}"                                # samples per run (samples.L)
 # ALPHA, when set, overrides training.alpha; otherwise the default of
 # conf/training/regression/ridge.yaml (1e-3) applies (issue #92).

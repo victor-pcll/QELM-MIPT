@@ -13,7 +13,7 @@ Phys. Rev. Lett. 129, 200602 (2022), arXiv:2206.12429.
 `plot_learnability.py` reads every file of this folder named after one of
 its panels (`PANELS`), with `QELM.utils.load_wpd_csv`. The paper writes
 its chain length `L`; there is no ancilla, so a curve named `L = 6` is
-renamed `N = 6` (our total number of qubits) and compared with our curve of
+renamed `N = 6` (our number of system qubits) and compared with our curve of
 the same `N`; the other curves are drawn for reference only. If the axes were calibrated the other
 way round when digitizing, so that the columns hold (value, p), set
 `SWAP_XY = True` in `plot_learnability.py`, as for the Fig. 7 curves of

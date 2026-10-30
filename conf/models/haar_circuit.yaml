@@ -4,15 +4,15 @@
 # measure on U(4) (QELM.models.circuits.haar.HaarBrickworkCircuit, issue #171).
 # It replaces the TFIM as the unitary dynamics of the QELM experiments on the
 # measurement record (experiments/QELM_M), with models=haar_circuit. The gates
-# act on the Ns system qubits only, never on the Nr ancillas.
+# act on the N system qubits only, never on the Nr ancillas.
 models: haar_circuit
 
-# Total number of qubits, ancilla included (N = Ns + Nr, see conf/config.yaml).
-# Override it with N=6, not haar_circuit.N=6.
+# Number of system qubits, ancilla excluded (N_total = N + Nr, see
+# conf/config.yaml). Override it with N=6, not haar_circuit.N=6.
 N: 10
 
 haar_circuit:
-  N: ${N} # number of qubits, always the top-level N
+  N: ${N} # number of system qubits, always the top-level N
   Nr: ${Nr} # ancillas, left untouched by the gates
   # Brickwork layers per time-evolution step, each a full period (gates on
   # the even bonds, then on the odd ones), each with its own gates. A sample

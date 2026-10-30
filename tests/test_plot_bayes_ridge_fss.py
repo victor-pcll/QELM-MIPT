@@ -58,7 +58,8 @@ def _run(script: Path, *overrides: str) -> None:
 
 
 def test_figures_from_small_sweeps(tmp_path: Path) -> None:
-    for N in (4, 5):
+    # Both sweeps are labeled by the system size N (issue #235).
+    for N in (3, 4):
         for p in (0.0, 0.5, 1.0):
             _run(
                 EXP_Q,
@@ -71,14 +72,14 @@ def test_figures_from_small_sweeps(tmp_path: Path) -> None:
             )
             _run(
                 EXP_SEP,
-                f"N={N - 1}",
+                f"N={N}",
                 "samples.L=40",
                 "learnability.n_boot=5",
                 "learnability.batch=20",
                 "learnability.depth=5",
                 "learnability.measure_every=period",
                 f"learnability.p={p}",
-                f"hydra.run.dir={tmp_path / 'sep' / f'N{N - 1}_p{p}'}",
+                f"hydra.run.dir={tmp_path / 'sep' / f'N{N}_p{p}'}",
             )
     out = tmp_path / "figures"
     subprocess.run(
@@ -99,13 +100,13 @@ def test_figures_from_small_sweeps(tmp_path: Path) -> None:
     data = json.loads((out / "bayes_ridge_asymptotics.json").read_text())["extra"]
     tfim = data["TFIM Bayes-Ridge"]
     assert tfim["metric"] == "accuracy_M_bayes_ridge"
-    assert tfim["N"] == [4, 5] and tfim["p"] == [0.0, 0.5, 1.0]
-    # The SEP sweep is labeled by the TFIM size N = Ns + 1.
+    assert tfim["N"] == [3, 4] and tfim["p"] == [0.0, 0.5, 1.0]
+    # The SEP sweep has the same system sizes, with no offset.
     (sep,) = [v for k, v in data.items() if k.startswith("SEP")]
-    assert sep["N"] == [4, 5]
+    assert sep["N"] == [3, 4]
 
 
 def test_refuses_a_sweep_without_the_final_measurement(tmp_path: Path) -> None:
-    _run(EXP_Q, "N=4", "samples.L=20", f"hydra.run.dir={tmp_path / 'run'}")
+    _run(EXP_Q, "N=3", "samples.L=20", f"hydra.run.dir={tmp_path / 'run'}")
     with pytest.raises(ValueError, match="final_measurement"):
         _load().tfim_summary(tmp_path)

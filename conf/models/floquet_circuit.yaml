@@ -10,16 +10,17 @@
 # no conserved charge (not even the Z parity). One layer is one time step of the
 # paper, the bricks on the even bonds or on the odd ones in turn (two layers
 # make a period); measuring after each layer is the protocol of the paper.
-# Selected with models=floquet_circuit. The gates act on the Ns system qubits
+# Selected with models=floquet_circuit. The gates act on the N system qubits
 # only, never on the Nr ancillas.
 models: floquet_circuit
 
-# Total number of qubits, ancilla included (N = Ns + Nr, see conf/config.yaml).
+# Number of system qubits, ancilla excluded (N_total = N + Nr, see
+# conf/config.yaml).
 # Override it with N=6, not floquet_circuit.N=6.
 N: 10
 
 floquet_circuit:
-  N: ${N} # number of qubits, always the top-level N
+  N: ${N} # number of system qubits, always the top-level N
   Nr: ${Nr} # ancillas, left untouched by the gates
   # The values of Sec. II of the paper, in the chaotic regime.
   phi_xx: 0.3

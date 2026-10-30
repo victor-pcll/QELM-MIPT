@@ -8,7 +8,7 @@ defaults:
   - _self_
 
 # alpha_ratio = n_train / n_features: the number of training samples per
-# learnable weight of the ridge readout. n_features = nbr_time_evolution * Ns
+# learnable weight of the ridge readout. n_features = nbr_time_evolution * N
 # + 1 (the flattened record M and the bias column) does not depend on p, an
 # unmeasured qubit still being a feature, equal to 0. The script sets
 #   samples.train_size = max(1, round(alpha_ratio * n_features))

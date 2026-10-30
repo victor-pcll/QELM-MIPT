@@ -59,8 +59,9 @@ def test_default_composition_keeps_the_runtime_keys() -> None:
     assert cfg.projective_measurement.qubits is None
     assert list(cfg.single_observable.observables) == ["Z"]
     assert [list(pair) for pair in cfg.double_observable.pairs] == [["Z", "Z"]]
-    assert cfg.single_observable.N == cfg.TFIM.N
-    assert cfg.double_observable.N == cfg.TFIM.N
+    # The readouts act on the whole state, ancilla included (issue #235).
+    assert cfg.single_observable.n_qubits == cfg.N_total == cfg.TFIM.N + cfg.Nr
+    assert cfg.double_observable.n_qubits == cfg.N_total
 
 
 @pytest.mark.parametrize(
@@ -82,7 +83,7 @@ def test_group_overrides_select_the_files(
     cfg = load_config(overrides)
     assert cfg.models == model
     assert cfg.training.name == trainer
-    assert cfg.single_observable.N == cfg[model].N
+    assert cfg.single_observable.n_qubits == cfg[model].N + cfg.Nr
 
 
 @pytest.mark.parametrize("override", ["sim_type=TFIM", "training=linear"])

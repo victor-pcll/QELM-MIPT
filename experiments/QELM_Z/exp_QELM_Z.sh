@@ -33,7 +33,7 @@ unset VIRTUAL_ENV
 # ---- Parameters -------------------------------------------------------------
 EXPERIMENT="exp_QELM_Z"
 MODEL="TFIM"
-N_VALUES=(4 6)          # number of qubits, ancilla included
+N_VALUES=(4 6)          # system qubits, ancilla excluded (issue #235)
 SEEDS=(42)            # one run per seed and per N
 L="${L:-500}"         # samples per run (samples.L)
 # ALPHA, when set, overrides training.alpha; otherwise the default of

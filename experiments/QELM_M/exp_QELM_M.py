@@ -3,8 +3,8 @@
 
 For each sample ``i`` (``samples.L`` in total):
 
-1. Draw a new TFIM (new disorder ``J_ij``) on the ``Ns = N - 1`` system
-   qubits and start from the state of :class:`AncillaChargeSectorEncoding`:
+1. Draw a new TFIM (new disorder ``J_ij``) on the ``N`` system qubits and
+   start from the state of :class:`AncillaChargeSectorEncoding`:
    the ancilla ``R`` (qubit 0) entangled with the charge of the system.
    ``R`` is a reference qubit, as in Barratt et al. (2022) and Agrawal et
    al. (2024): the TFIM acts on the system only, ``U = 1_R (x) U_S``
@@ -19,12 +19,12 @@ For each sample ``i`` (``samples.L`` in total):
    ``projective_measurement.p``) and keep the collapsed state: row ``j`` of
    ``M[i]`` is the record of the ``j``-th measurement (issue #102).
 3. The features ``X[i]`` are the flattened record ``M[i]`` of shape
-   ``(nbr_time_evolution, Ns)``, an unmeasured qubit counting as 0 (issue #91).
+   ``(nbr_time_evolution, N)``, an unmeasured qubit counting as 0 (issue #91).
    The target ``Y[i]`` is the outcome, +1 or -1, of a projective measurement
    of ``R`` in Z after the last step, drawn with the Born rule (issue #104).
    ``R`` never evolves, so measuring it at the end or at the start gives the
    same statistics: ``Y[i]`` is the initial charge sector of the system
-   (+1 for ``Ns // 2``, -1 for ``Ns // 2 - 1``), a label fixed before any
+   (+1 for ``N // 2``, -1 for ``N // 2 - 1``), a label fixed before any
    measurement of the system, +1 or -1 with probability 1/2 whatever ``p``.
    The readout learns that hidden charge from the record, the learnability
    task of Barratt et al.
@@ -45,7 +45,7 @@ For each sample ``i`` (``samples.L`` in total):
    entangled with the system: the purification order parameter of the
    measurement-induced phase transition.
 
-5. The system sector ``S`` (the ``Ns`` qubits, ancilla excluded) gets its
+5. The system sector ``S`` (the ``N`` qubits, ancilla excluded) gets its
    own entropies in the final state (issue #124): the von Neumann entropy
    ``S_vN_sys[i]`` and the Rényi entropy of order 2 ``S_renyi_2_sys[i]`` of
    ``rho_S = Tr_R(rho)``, and the mean over the system qubits ``k`` of the
@@ -58,7 +58,7 @@ For each sample ``i`` (``samples.L`` in total):
    track how entangled each system qubit is with the rest. All in bits.
 
 6. The half-system entropy ``S_half[i]``, the von Neumann entropy of the
-   first ``Ns // 2`` system qubits in the final state (issue #174), as in
+   first ``N // 2`` system qubits in the final state (issue #174), as in
    ``experiments/QELM_Q/exp_QELM_Q.py``. Its complement holds the other
    system qubits and the ancilla. It measures the entanglement across the
    middle of the chain, which the measurements destroy as ``p`` grows: the
@@ -189,16 +189,16 @@ CIRCUITS: dict[str, type[BrickworkCircuit]] = {
 Step = Callable[[np.ndarray, int], np.ndarray]
 
 
-def _tfim_sampler(cfg: DictConfig, Ns: int, Nr: int, dt: float) -> Callable[[], Step]:
+def _tfim_sampler(cfg: DictConfig, N: int, Nr: int, dt: float) -> Callable[[], Step]:
     """Return a function that draws a TFIM and its evolution step, per sample.
 
-    The TFIM acts on the ``Ns`` system qubits only, ``U = 1_R (x) U_S(dt)``
+    The TFIM acts on the ``N`` system qubits only, ``U = 1_R (x) U_S(dt)``
     (issue #104), and every step of a sample applies the same ``U``.
     """
     # The TFIM block with the system size: R does not evolve (issue #104).
     tfim = OmegaConf.to_container(cfg[TransverseFieldIsingModel.name], resolve=True)
     assert isinstance(tfim, dict)
-    tfim_params = {**{str(k): v for k, v in tfim.items()}, "N": Ns}
+    tfim_params = {**{str(k): v for k, v in tfim.items()}, "N": N}
     identity_R = np.eye(2**Nr)
 
     def draw() -> Step:
@@ -264,7 +264,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     Returns:
         The arrays and metrics of the run: ``M`` (record of shape
-        ``(L, nbr_time_evolution, Ns)``, ``NaN`` for an unmeasured qubit), ``X`` (with
+        ``(L, nbr_time_evolution, N)``, ``NaN`` for an unmeasured qubit), ``X`` (with
         the bias column), ``Y`` (the measured label of ``R``, +-1),
         ``y_test``, ``y_pred``, ``W``, ``nmse``, ``nmse_err``, ``r2``,
         ``accuracy``, ``accuracy_baseline``, ``balanced_accuracy``,
@@ -276,10 +276,10 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     sector = AncillaChargeSectorEncoding.from_config(cfg)
     solver = RidgeReadout.from_config(cfg)
     # Qubit counts from the config, not from the model or the encoding
-    # (issue #88): N in total, Ns system qubits, Nr ancillas.
-    N, Ns, Nr = check_qubit_counts(cfg)
+    # (issues #88 and #235): N system qubits, Nr ancillas, N_total in all.
+    N, Nr, N_total = check_qubit_counts(cfg)
     # The number of time-evolution steps is its own parameter, not tied to
-    # N, Ns or Nr (issue #123). It sets when the system is measured, so it
+    # N, Nr or N_total (issue #123). It sets when the system is measured, so it
     # lives in the measurement block (issue #132). The old keys fail loudly
     # instead of being silently ignored.
     for old in ("experiment.n_measurements", "experiment.nbr_time_evolution"):
@@ -296,7 +296,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     model_name = str(cfg.models)
     if model_name == TransverseFieldIsingModel.name:
         dt = float(cfg.evolution.t) / nbr_time_evolution
-        draw_evolution = _tfim_sampler(cfg, Ns, Nr, dt)
+        draw_evolution = _tfim_sampler(cfg, N, Nr, dt)
     elif model_name in CIRCUITS:
         draw_evolution = _circuit_sampler(cfg, nbr_time_evolution)
     else:
@@ -308,13 +308,13 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     P = ProjectiveMeasurement.from_config(cfg)
 
     L = int(cfg.samples.L)
-    M = np.zeros((L, nbr_time_evolution, Ns))
+    M = np.zeros((L, nbr_time_evolution, N))
     Y = np.zeros(L)
     S = {name: np.zeros(L) for name in ENTROPIES}
     # The system sector: every qubit but the Nr ancillas.
-    system = list(range(Nr, N))
+    system = list(range(Nr, N_total))
     # The first half of the system qubits, for S_half (issue #174).
-    half = system[: Ns // 2]
+    half = system[: N // 2]
 
     for i in tqdm(range(L)):
         # A new TFIM disorder, or new circuit gates, for every sample.
@@ -334,7 +334,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         S["S_half"][i] = von_neumann_entropy(rho, half)
         # The label: R measured in Z, after the entropies of the final state
         # (issue #104). R never evolves, so this is its initial outcome.
-        _, Y[i] = measure_projective_rho(rho, 0, N)
+        _, Y[i] = measure_projective_rho(rho, 0, N_total)
 
     # Unmeasured qubits (p < 1) have NaN outcomes; the regression needs
     # numbers, so they count as 0, <Z> of a fully mixed qubit (issue #91).

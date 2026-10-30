@@ -119,15 +119,16 @@ def test_charge_sharpening_overlay_matches_the_paper(tmp_path: Path) -> None:
     for (metric, n_points), panel in zip(
         (("S_R_mean", 18), ("S_R_var", 18), ("binder", 12)), panels, strict=True
     ):
-        # Our N = 7 (6 sites + the ancilla) against the paper's 6-site curve.
-        assert set(comparison[metric]) == {"N7"}
-        assert set(comparison[metric]["N7"]) == {"N = 7"}
-        _assert_deviation_is_delta(comparison[metric]["N7"]["N = 7"], n_points)
+        # Our N = 6 system sites (plus the ancilla) against the paper's 6-site
+        # curve: the same size, with no offset since issue #235.
+        assert set(comparison[metric]) == {"N6"}
+        assert set(comparison[metric]["N6"]) == {"N = 6"}
+        _assert_deviation_is_delta(comparison[metric]["N6"]["N = 6"], n_points)
         x_ref, y_ref = refs[metric]
-        paper = _curve(panel, "Agrawal et al. 2024: N = 7")
+        paper = _curve(panel, "Agrawal et al. 2024: N = 6")
         np.testing.assert_allclose(paper["x"], x_ref, atol=1e-12)
         np.testing.assert_allclose(paper["y"], y_ref, atol=1e-12)
-        ours = _curve(panel, "this work, N = 7")
+        ours = _curve(panel, "this work, N = 6")
         np.testing.assert_allclose(
             ours["y"], np.interp(ours["x"], x_ref, y_ref) + DELTA, atol=1e-12
         )

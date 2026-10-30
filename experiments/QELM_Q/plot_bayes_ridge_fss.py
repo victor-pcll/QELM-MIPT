@@ -7,7 +7,7 @@ ending on a collapse, exactly half of the samples per charge sector),
 averages over the seeds and, when ``--sep`` points to sweeps of
 ``experiments/learnability/learnability.py``, the Bayes accuracy of the
 symmetric exclusion process (SEP) on random U(1) circuits of the same
-number of system qubits ``Ns = N - 1`` and the same two charges.
+number ``N`` of system qubits and the same two charges.
 
 Three figures, each with its data (:func:`QELM.utils.plots.save_figure`), in
 the TFIM sweep folder (or ``--out``):
@@ -22,7 +22,7 @@ the TFIM sweep folder (or ``--out``):
   discriminability of the two charges under the scrambled model
   (:func:`draw_collapse`), with the prediction ``Phi(d' / 2)`` of that
   model: if the points of every ``N`` fall on one curve, the accuracy
-  depends on ``R p / ((1 - p) Ns)`` alone (``R`` the number of rounds),
+  depends on ``R p / ((1 - p) N)`` alone (``R`` the number of rounds),
   and at a fixed ``R`` goes to 1/2 as ``N`` grows.
 - ``bayes_ridge_asymptotics.png``: the test of an asymptotic behavior in
   ``N``. Left, the accuracy at each ``p`` against ``1 / N``, with the fit
@@ -202,10 +202,12 @@ def tfim_summary(sweep: Path) -> list[dict[str, Any]]:
 
 
 def sep_summary(sweep: Path) -> list[dict[str, Any]]:
-    """Average a learnability sweep, labeled by the TFIM size ``N = Ns + 1``."""
+    """Average a learnability sweep, labeled by its number of system qubits ``N``.
+
+    The chain of the learnability sweep has no ancilla, so its ``N`` is the
+    ``N`` of the TFIM sweep with the same system (issue #235).
+    """
     rows = load_sweep(sweep, SEP_KEYS)
-    for row in rows:
-        row["N"] = int(row["N"]) + 1
     summary = summarize(rows, by=("N", "p"), metrics=("accuracy", "accuracy_err"))
     first = rows[0]
     per_step = 2 if first["measure_every"] == "layer" else 1
@@ -218,19 +220,19 @@ def _sep_title(rows: Sequence[dict[str, Any]]) -> str:
     first = rows[0]
     if first["measure_every"] == "period":
         return f"SEP Bayes, U(1) circuit, {first['depth']} rounds"
-    return "SEP Bayes, U(1) circuit, $t_f = N_s$ (paper)"
+    return "SEP Bayes, U(1) circuit, $t_f = N$ (paper)"
 
 
 def draw_fss(
     tfim: list[dict[str, Any]], seps: Sequence[tuple[str, list[dict[str, Any]]]]
 ) -> tuple[Any, dict[str, Any]]:
     """Draw ``bayes_ridge_fss.png``; return the figure and its extra data."""
-    Ns = sizes(tfim)
-    colors = color_map([str(n) for n in Ns])
+    n_values = sizes(tfim)
+    colors = color_map([str(n) for n in n_values])
     fig, axes = subplots(1, 1 + len(seps), figsize=(7 * (1 + len(seps)), 5.5))
     axes = np.atleast_1d(axes)
     ax = axes[0]
-    for n in Ns:
+    for n in n_values:
         for metric, label, style in TFIM_CURVES:
             curve = sweep_curve(tfim, n, "p", metric)
             draw_curve(
@@ -251,9 +253,7 @@ def draw_fss(
     for ax, (title, rows) in zip(axes[1:], seps, strict=True):
         for n in sizes(rows):
             curve = sweep_curve(rows, n, "p", "accuracy")
-            draw_curve(
-                ax, curve, color=colors.get(str(n)), label=f"N = {n} (Ns = {n - 1})"
-            )
+            draw_curve(ax, curve, color=colors.get(str(n)), label=f"N = {n}")
         ax.axhline(0.5, color="0.6", linestyle=":", lw=1)
         ax.set_title(title)
         ax.set_xlabel("measurement probability $p$")
@@ -273,9 +273,9 @@ def draw_collapse(
 
     ``d'`` is the discriminability of the two charges under the scrambled
     model (:func:`QELM.evaluation.bayes_ridge.scrambled_discriminability`),
-    ``~ 2 sqrt(rounds p / ((1 - p) Ns))``. If the scrambled model holds,
+    ``~ 2 sqrt(rounds p / ((1 - p) N))``. If the scrambled model holds,
     every ``(N, p)`` falls on ``Phi(d' / 2)``, whatever ``N``: the
-    accuracy is a function of ``rounds p / ((1 - p) Ns)`` alone, and goes
+    accuracy is a function of ``rounds p / ((1 - p) N)`` alone, and goes
     to 1/2 at fixed ``rounds`` as ``N`` grows. ``p = 0`` and ``p = 1`` are
     left out (``d' = 0`` and infinite).
 
@@ -293,16 +293,15 @@ def draw_collapse(
     x = np.linspace(0, 3, 200)
     extra: dict[str, Any] = {}
     for ax, (title, rows, metric) in zip(axes, datasets, strict=True):
-        Ns = sizes(rows)
-        colors = color_map([str(n) for n in Ns])
+        n_values = sizes(rows)
+        colors = color_map([str(n) for n in n_values])
         points = []
-        for n in Ns:
+        for n in n_values:
             curve = sweep_curve(rows, n, "p", metric)
-            ns = n - 1
-            charges = (ns // 2, ns // 2 - 1)
+            charges = (n // 2, n // 2 - 1)
             keep = (curve.x > 0) & (curve.x < 1)
             half_d = [
-                scrambled_discriminability(ns, float(p), int(r["rounds"]), charges) / 2
+                scrambled_discriminability(n, float(p), int(r["rounds"]), charges) / 2
                 for p, r in zip(curve.x[keep], np.array(curve.rows)[keep], strict=True)
             ]
             ax.errorbar(
@@ -321,7 +320,7 @@ def draw_collapse(
         ax.plot(
             x, 0.5 * (1 + erf(x / np.sqrt(2))), color="k", lw=1, label=r"$\Phi(d'/2)$"
         )
-        ax.set_xlabel(r"$d'/2 \approx \sqrt{R\,p / ((1-p) N_s)}$")
+        ax.set_xlabel(r"$d'/2 \approx \sqrt{R\,p / ((1-p) N)}$")
         ax.set_ylabel("accuracy")
         ax.set_title(title)
         ax.set_ylim(0.45, 1.02)
@@ -333,8 +332,8 @@ def draw_collapse(
 
 def asymptotics(rows: list[dict[str, Any]], metric: str) -> dict[str, Any]:
     """Fits in ``1 / N``, gaps between sizes, crossings and slopes of a metric."""
-    Ns = sizes(rows)
-    curves = {n: sweep_curve(rows, n, "p", metric) for n in Ns}
+    n_values = sizes(rows)
+    curves = {n: sweep_curve(rows, n, "p", metric) for n in n_values}
     ps = sorted(set.intersection(*(set(c.x.tolist()) for c in curves.values())))
     at = {
         n: {
@@ -345,31 +344,37 @@ def asymptotics(rows: list[dict[str, Any]], metric: str) -> dict[str, Any]:
     }
     per_p = []
     for p in ps:
-        A = [at[n][p][0] for n in Ns]
-        err = [at[n][p][1] for n in Ns]
+        A = [at[n][p][0] for n in n_values]
+        err = [at[n][p][1] for n in n_values]
         gaps = [
             {
                 "N": [a, b],
                 "gap": at[b][p][0] - at[a][p][0],
                 "gap_err": float(np.hypot(at[a][p][1], at[b][p][1])),
             }
-            for a, b in zip(Ns[:-1], Ns[1:], strict=True)
+            for a, b in zip(n_values[:-1], n_values[1:], strict=True)
         ]
         per_p.append(
-            {"p": p, "A": A, "err": err, "gaps": gaps, **fit_inverse_size(Ns, A, err)}
+            {
+                "p": p,
+                "A": A,
+                "err": err,
+                "gaps": gaps,
+                **fit_inverse_size(n_values, A, err),
+            }
         )
     cross = {}
-    for a, b in zip(Ns[:-1], Ns[1:], strict=True):
+    for a, b in zip(n_values[:-1], n_values[1:], strict=True):
         cross[f"{a}-{b}"] = crossings(
             ps,
             [at[a][p][0] for p in ps],
             [at[b][p][0] for p in ps],
             [float(np.hypot(at[a][p][1], at[b][p][1])) for p in ps],
         )
-    slopes = {n: max_slope(ps, [at[n][p][0] for p in ps]) for n in Ns}
+    slopes = {n: max_slope(ps, [at[n][p][0] for p in ps]) for n in n_values}
     return {
         "metric": metric,
-        "N": Ns,
+        "N": n_values,
         "p": ps,
         "per_p": per_p,
         "crossings": cross,
@@ -384,15 +389,15 @@ def draw_asymptotics(
     fig, axes = subplots(len(results), 2, figsize=(13, 5 * len(results)))
     axes = np.atleast_2d(axes)
     for (title, res), (ax_fit, ax_slope) in zip(results, axes, strict=True):
-        Ns = np.array(res["N"], dtype=float)
-        inv = np.linspace(0, 1.05 / Ns.min(), 50)
+        n_values = np.array(res["N"], dtype=float)
+        inv = np.linspace(0, 1.05 / n_values.min(), 50)
         colors = color_map([f"{p:g}" for p in res["p"]])
         for row in res["per_p"]:
             if row["p"] == 0:
                 continue
             color = colors[f"{row['p']:g}"]
             ax_fit.errorbar(
-                1 / Ns, row["A"], yerr=row["err"], color=color, marker="o", ls=""
+                1 / n_values, row["A"], yerr=row["err"], color=color, marker="o", ls=""
             )
             ax_fit.plot(
                 inv,

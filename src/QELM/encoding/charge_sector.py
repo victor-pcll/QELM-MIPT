@@ -9,17 +9,17 @@ system ``S``::
 
     |psi> = ( |0>_R |Q1>_S + |1>_R |Q2>_S ) / sqrt(2)
 
-on ``N`` qubits in total: one ancilla and ``Ns = N - 1`` system qubits.
-``Q1 = Ns // 2``, ``Q2 = Ns // 2 - 1``, and ``|Q>_S`` is the uniform
+on ``N_total = N + 1`` qubits: one ancilla and ``N`` system qubits
+(issue #235). ``Q1 = N // 2``, ``Q2 = N // 2 - 1``, and ``|Q>_S`` is the uniform
 superposition of the basis states of sector ``Q``. The two sectors are
 orthogonal, so the reduced state of ``R`` is ``I / 2``: the ancilla is
 maximally entangled with the charge of ``S``.
 
 With ``initial: product`` the sector states are the product states of
 Agrawal et al., PRX 14, 041012 (2024), Eq. (B1) (issue #137): the system
-qubits alternate ``|0>, |1>, |0>, |1>, ...`` (charge ``Ns // 2``), and the
-last ``|1>`` is flipped to ``|0>`` for the charge ``Ns // 2 - 1``. For
-``Ns = 6``: ``|010101>`` and ``|010100>``. The paper then scrambles the
+qubits alternate ``|0>, |1>, |0>, |1>, ...`` (charge ``N // 2``), and the
+last ``|1>`` is flipped to ``|0>`` for the charge ``N // 2 - 1``. For
+``N = 6``: ``|010101>`` and ``|010100>``. The paper then scrambles the
 charge with random U(1) gates (:class:`QELM.models.circuits.haar.U1BrickworkCircuit`).
 """
 
@@ -115,15 +115,16 @@ def _sparse_column(rows: np.ndarray, values: np.ndarray, dim: int) -> sp.csr_mat
 
 
 class AncillaChargeSectorEncoding(Encoding):
-    """``( |0>_R |Ns//2>_S + |1>_R |Ns//2 - 1>_S ) / sqrt(2)`` on ``N`` qubits.
+    """``( |0>_R |N//2>_S + |1>_R |N//2 - 1>_S ) / sqrt(2)`` on ``N + 1`` qubits.
 
     The ancilla ``R`` is site 0 (most significant bit), as in
-    ``np.kron(ancilla, psi_S)``, and the system ``S`` is sites ``1 .. N-1``,
-    so ``Ns = N - 1``. The state does not depend on the input.
+    ``np.kron(ancilla, psi_S)``, and the ``N`` system qubits ``S`` are sites
+    ``1 .. N``, so ``N_total = N + 1``. The state does not depend on the
+    input.
 
     Attributes:
-        Q1: Charge paired with ``|0>_R``, ``Ns // 2``.
-        Q2: Charge paired with ``|1>_R``, ``Ns // 2 - 1``.
+        Q1: Charge paired with ``|0>_R``, ``N // 2``.
+        Q2: Charge paired with ``|1>_R``, ``N // 2 - 1``.
         initial: ``"uniform"`` (default) for the uniform superposition of
             each sector, ``"product"`` for the alternating product state of
             each charge (:func:`product_charge_index`).
@@ -136,19 +137,19 @@ class AncillaChargeSectorEncoding(Encoding):
         """Store ``N`` and the two charges.
 
         Args:
-            params: Parameter names mapped to scalar values. ``N``, the total
-                number of qubits, is required and must be at least 3, so that
-                ``Ns >= 2`` and ``Ns // 2 - 1 >= 0``. ``initial`` is optional,
+            params: Parameter names mapped to scalar values. ``N``, the
+                number of system qubits, is required and must be at least 2,
+                so that ``N // 2 - 1 >= 0``. ``initial`` is optional,
                 ``"uniform"`` or ``"product"``.
 
         Raises:
-            ValueError: If ``N < 3`` or ``initial`` is unknown.
+            ValueError: If ``N < 2`` or ``initial`` is unknown.
         """
         super().__init__(params)
-        if self.Ns < 2:
-            raise ValueError(f"N={self.N} must be at least 3.")
-        self.Q1: int = self.Ns // 2
-        self.Q2: int = self.Ns // 2 - 1
+        if self.N < 2:
+            raise ValueError(f"N={self.N} system qubits, must be at least 2.")
+        self.Q1: int = self.N // 2
+        self.Q2: int = self.N // 2 - 1
         self.initial: str = str(params.get("initial") or "uniform")
         if self.initial not in ("uniform", "product"):
             raise ValueError(
@@ -169,26 +170,27 @@ class AncillaChargeSectorEncoding(Encoding):
         """Return the entangled state on ``R + S``.
 
         Basis index ``b`` of ``|0>_R |Q1>_S`` stays ``b``; for ``|1>_R |Q2>_S``
-        the ancilla bit adds ``2**Ns``. Both branches have amplitude
-        ``1 / sqrt(2 binom(Ns, Q))`` for ``initial="uniform"``, and
+        the ancilla bit adds ``2**N``. Both branches have amplitude
+        ``1 / sqrt(2 binom(N, Q))`` for ``initial="uniform"``, and
         ``1 / sqrt(2)`` on a single basis state for ``initial="product"``.
 
         Args:
             x: Ignored; the state is fixed.
             sparse: ``True`` for a CSR column built without any dense vector
-                of size ``2**N``, ``False`` (default) for a NumPy vector.
+                of size ``2**N_total``, ``False`` (default) for a NumPy vector.
 
         Returns:
-            Normalized complex state: a CSR column of shape ``(2**N, 1)`` if
-            ``sparse``, otherwise a vector of shape ``(2**N,)``.
+            Normalized complex state: a CSR column of shape
+            ``(2**N_total, 1)`` if ``sparse``, otherwise a vector of shape
+            ``(2**N_total,)``.
         """
         if self.initial == "product":
-            idx1 = np.array([product_charge_index(self.Ns, self.Q1)])
-            idx2 = np.array([product_charge_index(self.Ns, self.Q2)])
+            idx1 = np.array([product_charge_index(self.N, self.Q1)])
+            idx2 = np.array([product_charge_index(self.N, self.Q2)])
         else:
-            idx1 = charge_sector_indices(self.Ns, self.Q1)
-            idx2 = charge_sector_indices(self.Ns, self.Q2)
-        rows = np.concatenate([idx1, idx2 + 2**self.Ns])
+            idx1 = charge_sector_indices(self.N, self.Q1)
+            idx2 = charge_sector_indices(self.N, self.Q2)
+        rows = np.concatenate([idx1, idx2 + 2**self.N])
         values = np.concatenate(
             [
                 np.full(idx1.size, 1.0 / np.sqrt(2 * idx1.size), dtype=complex),

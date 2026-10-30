@@ -2,6 +2,8 @@
 # <O_i> for each label in `observables`. The list can hold several entries, or
 # be empty ([]) for no such features. Placed at `single_observable` by the
 # defaults list in conf/config.yaml.
-# N is the top-level N (total qubits); operators() uses it when no N is passed.
-N: ${N}
+# n_qubits is the number of qubits of the state the readout acts on, ancillas
+# included: the top-level N_total. operators() uses it when no n_qubits is
+# passed.
+n_qubits: ${N_total}
 observables: [Z]

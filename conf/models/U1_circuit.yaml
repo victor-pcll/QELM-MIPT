@@ -5,17 +5,18 @@
 # issues #137 and #239): the charge-conserving circuit of Agrawal et al. (2022)
 # and Barratt et al. (2022). It is the U(1) reference next to the Haar
 # brickwork and the Floquet chain in the entropy experiment
-# (experiments/QELM_S), with models=U1_circuit. The gates act on the Ns system
+# (experiments/QELM_S), with models=U1_circuit. The gates act on the N system
 # qubits only, never on the Nr ancillas. conf/charge_sharpening.yaml has its
 # own U1_circuit block, with the scrambling layers of the paper.
 models: U1_circuit
 
-# Total number of qubits, ancilla included (N = Ns + Nr, see conf/config.yaml).
+# Number of system qubits, ancilla excluded (N_total = N + Nr, see
+# conf/config.yaml).
 # Override it with N=6, not U1_circuit.N=6.
 N: 10
 
 U1_circuit:
-  N: ${N} # number of qubits, always the top-level N
+  N: ${N} # number of system qubits, always the top-level N
   Nr: ${Nr} # ancillas, left untouched by the gates
   # Brickwork layers per time-evolution step, each a full period (gates on
   # the even bonds, then on the odd ones), each with its own gates.
