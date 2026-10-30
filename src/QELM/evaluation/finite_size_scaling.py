@@ -113,7 +113,23 @@ def crossing_errors(
     }
 
 
-def collapse_quality(curves: Mapping[int, Curve], p_c: float, nu: float) -> float:
+def subtract_at(curves: Mapping[int, Curve], p_c: float) -> dict[int, Curve]:
+    """Return ``O(p, N) - O(p_c, N)``, ``O(p_c, N)`` interpolated linearly in ``p``.
+
+    For an order parameter that grows with ``N`` at the critical point, like
+    the half-chain entropy ``~ log N`` (Li, Chen & Fisher 2019), the scaling
+    form is ``O(p, N) - O(p_c, N) = F((p - p_c) N**(1 / nu))``. The error
+    bars are kept as they are.
+    """
+    return {
+        N: (np.asarray(p), np.asarray(y) - np.interp(p_c, p, y), np.asarray(e))
+        for N, (p, y, e) in curves.items()
+    }
+
+
+def collapse_quality(
+    curves: Mapping[int, Curve], p_c: float, nu: float, subtract: bool = False
+) -> float:
     """Houdayer-Hartmann quality of the collapse with ``(p_c, nu)``.
 
     Every point ``(x_i, y_i, dy_i)``, with ``x = (p - p_c) N**(1 / nu)``, is
@@ -125,12 +141,16 @@ def collapse_quality(curves: Mapping[int, Curve], p_c: float, nu: float) -> floa
         curves: ``{N: (p, O, err)}``, at least two sizes.
         p_c: Trial critical point.
         nu: Trial exponent, positive.
+        subtract: Collapse ``O(p, N) - O(p_c, N)`` (:func:`subtract_at`)
+            instead of ``O``.
 
     Returns:
         The quality, ``inf`` if no two sizes overlap or ``nu <= 0``.
     """
     if nu <= 0:
         return float("inf")
+    if subtract:
+        curves = subtract_at(curves, p_c)
     scaled = {
         N: ((np.asarray(p) - p_c) * N ** (1 / nu), np.asarray(y), np.asarray(e))
         for N, (p, y, e) in curves.items()
@@ -171,12 +191,12 @@ class Collapse:
 
 
 def _optimum(
-    curves: Mapping[int, Curve], starts: list[tuple[float, float]]
+    curves: Mapping[int, Curve], starts: list[tuple[float, float]], subtract: bool
 ) -> tuple[float, float, float]:
     """Best Nelder-Mead minimum of the quality over ``starts``: ``(p_c, nu, q)``."""
 
     def quality(v: np.ndarray) -> float:
-        return collapse_quality(curves, float(v[0]), float(v[1]))
+        return collapse_quality(curves, float(v[0]), float(v[1]), subtract)
 
     best = (float("nan"), float("nan"), float("inf"))
     for start in starts:
@@ -197,6 +217,7 @@ def fit_collapse(
     nu0: float,
     n_boot: int = 50,
     rng: np.random.Generator | None = None,
+    subtract: bool = False,
 ) -> Collapse:
     """Find the ``(p_c, nu)`` that minimize :func:`collapse_quality`.
 
@@ -210,6 +231,8 @@ def fit_collapse(
         nu0: Starting exponent.
         n_boot: Bootstrap resamples; 0 gives ``nan`` errors.
         rng: Random generator of the bootstrap.
+        subtract: Collapse ``O(p, N) - O(p_c, N)`` (:func:`subtract_at`),
+            for the half-chain entropy.
 
     Returns:
         The :class:`Collapse`.
@@ -230,14 +253,14 @@ def fit_collapse(
     starts = [(p_c0, nu0)] + [
         (p_c0 + dp, nu0 * f) for dp in (-0.02, 0.02) for f in (0.7, 1.4)
     ]
-    p_c, nu, quality = _optimum(data, starts)
+    p_c, nu, quality = _optimum(data, starts, subtract)
     gen = rng if rng is not None else np.random.default_rng(0)
     boot = []
     for _ in range(n_boot):
         noisy: dict[int, Curve] = {
             N: (p, y + gen.normal(size=y.shape) * e, e) for N, (p, y, e) in data.items()
         }
-        b = _optimum(noisy, [(p_c, nu)])
+        b = _optimum(noisy, [(p_c, nu)], subtract)
         boot.append(b[:2])
     arr = np.array(boot) if boot else np.full((1, 2), np.nan)
     return Collapse(

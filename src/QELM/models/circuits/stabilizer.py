@@ -36,6 +36,7 @@ same ``S_Q`` at every step.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cache
 
@@ -179,8 +180,6 @@ def reference_entropy_history(
     site = N // 2 if site is None else int(site)
     if not 0 <= site < N:
         raise ValueError(f"site must be in [0, {N - 1}], got {site}.")
-    programs = clifford_gate_programs()
-    bonds = [periodic_bonds(N, 0), periodic_bonds(N, 1)]
     sim = stim.TableauSimulator(seed=seed)
     # The encoding: (|00> + |11>) / sqrt(2) on R and the site.
     sim.h(REFERENCE)
@@ -188,14 +187,142 @@ def reference_entropy_history(
     identity = stim.PauliString(1)
     S = np.zeros(history.T)
     for t in range(history.T):
-        lines = [
-            programs[g].format(a=a + 1, b=b + 1)
-            for g, (a, b) in zip(history.gates[t], bonds[t % 2], strict=True)
-        ]
-        sites = np.flatnonzero(history.measured[t])
-        if sites.size:
-            lines.append("M " + " ".join(str(k + 1) for k in sites))
-        sim.do_circuit(stim.Circuit("\n".join(lines)))
+        _do_step(sim, history, t)
         # R is mixed iff no stabilizer acts on it alone: its Bloch vector is I.
         S[t] = 1.0 if sim.peek_bloch(REFERENCE) == identity else 0.0
     return S
+
+
+def _do_step(sim: stim.TableauSimulator, history: ProbeHistory, t: int) -> None:
+    """Apply the gates, then the measurements, of step ``t`` of ``history``."""
+    programs = clifford_gate_programs()
+    bonds = periodic_bonds(history.N, t)
+    lines = [
+        programs[g].format(a=a + 1, b=b + 1)
+        for g, (a, b) in zip(history.gates[t], bonds, strict=True)
+    ]
+    sites = np.flatnonzero(history.measured[t])
+    if sites.size:
+        lines.append("M " + " ".join(str(k + 1) for k in sites))
+    sim.do_circuit(stim.Circuit("\n".join(lines)))
+
+
+def gf2_rank(M: np.ndarray) -> int:
+    """Return the rank of a binary matrix over GF(2).
+
+    Args:
+        M: Matrix of 0 and 1 (or booleans), shape ``(rows, cols)``.
+
+    Returns:
+        The number of linearly independent rows, with addition modulo 2.
+    """
+    A = np.array(M, dtype=bool)
+    rank = 0
+    rows, cols = A.shape
+    for col in range(cols):
+        pivots = np.flatnonzero(A[rank:, col])
+        if pivots.size == 0:
+            continue
+        pivot = rank + int(pivots[0])
+        A[[rank, pivot]] = A[[pivot, rank]]
+        below = np.flatnonzero(A[rank + 1 :, col]) + rank + 1
+        A[below] ^= A[rank]
+        rank += 1
+        if rank == rows:
+            break
+    return rank
+
+
+def stabilizer_entropy(stabilizers: np.ndarray, region: Sequence[int]) -> float:
+    """Entanglement entropy of a region of a pure stabilizer state, in bits.
+
+    For ``n`` independent generators of the stabilizer group of a pure state,
+    ``S_A = rank(G_A) - |A|``, where ``G_A`` keeps the X and Z bits of the
+    qubits of ``A`` (Fattal et al. 2004; Li, Chen & Fisher 2019). Every
+    Renyi entropy takes this value.
+
+    Args:
+        stabilizers: ``[x | z]`` bits of the generators, shape ``(n, 2 n)``
+            (:func:`stabilizer_matrix`).
+        region: Qubits of ``A``.
+
+    Returns:
+        ``S_A`` in bits, an integer from 0 to ``min(|A|, n - |A|)``.
+    """
+    n = stabilizers.shape[0]
+    cols = list(region) + [n + q for q in region]
+    return float(gf2_rank(stabilizers[:, cols]) - len(region))
+
+
+def stabilizer_matrix(sim: stim.TableauSimulator) -> np.ndarray:
+    """Return the ``[x | z]`` bits of the stabilizer generators of ``sim``.
+
+    Returns:
+        Boolean array of shape ``(n, 2 n)``, one row per generator, for the
+        ``n`` qubits of the simulator.
+    """
+    tableau = sim.current_inverse_tableau().inverse()
+    _, _, z2x, z2z, _, _ = tableau.to_numpy()
+    return np.concatenate([z2x, z2z], axis=1)
+
+
+def quarters(N: int) -> list[list[int]]:
+    """Split the periodic chain into four contiguous quarters ``A, B, C, D``.
+
+    Args:
+        N: Number of system sites, a multiple of 4.
+
+    Returns:
+        Four lists of ``N // 4`` consecutive system sites (from 0).
+
+    Raises:
+        ValueError: If ``N`` is not a multiple of 4.
+    """
+    if N % 4:
+        raise ValueError(f"Four equal quarters need N divisible by 4, got {N}.")
+    q = N // 4
+    return [list(range(k * q, (k + 1) * q)) for k in range(4)]
+
+
+def steady_state_entropies(history: ProbeHistory, seed: int = 0) -> dict[str, float]:
+    """Replay a history from ``|0...0>`` and return the final entanglement.
+
+    The steady-state probe of Li, Chen & Fisher (2019) and Zabalo et al.
+    (2020): no reference qubit, the chain starts in a product state and is
+    monitored from the first step (draw the history with
+    ``scramble_steps = 0``). At the final step, with the quarters ``A, B, C,
+    D`` of :func:`quarters`:
+
+    - ``S_half``: entropy of the half chain ``A B``;
+    - ``I3``: tripartite mutual information
+      ``S_A + S_B + S_C - S_AB - S_BC - S_AC + S_ABC``, negative in the
+      volume-law phase and 0 in the area-law phase.
+
+    Args:
+        history: Output of :func:`draw_probe_history`, ``N`` divisible by 4.
+        seed: Seed of the ``stim`` outcomes; the entropies do not depend on
+            them.
+
+    Returns:
+        ``{"S_half": ..., "I3": ...}`` in bits.
+    """
+    A, B, C, _ = quarters(history.N)
+    sim = stim.TableauSimulator(seed=seed)
+    for t in range(history.T):
+        _do_step(sim, history, t)
+    # Qubit 0 (R) stays in |0> and is left out: system site k is qubit k + 1.
+    stab = stabilizer_matrix(sim)
+    S = {
+        name: stabilizer_entropy(stab, [k + 1 for k in region])
+        for name, region in {
+            "A": A,
+            "B": B,
+            "C": C,
+            "AB": A + B,
+            "BC": B + C,
+            "AC": A + C,
+            "ABC": A + B + C,
+        }.items()
+    }
+    I3 = S["A"] + S["B"] + S["C"] - S["AB"] - S["BC"] - S["AC"] + S["ABC"]
+    return {"S_half": S["AB"], "I3": I3}
