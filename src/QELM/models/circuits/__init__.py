@@ -48,7 +48,10 @@ The package is split by the nature of the gates (issue #189):
 - :mod:`QELM.models.circuits.haar`: Haar-measure gates, U(1) and U(4), and
   :class:`U1BrickworkCircuit`, :class:`HaarBrickworkCircuit`;
 - :mod:`QELM.models.circuits.clifford`: the two-qubit Clifford group and
-  :class:`CliffordBrickworkCircuit`.
+  :class:`CliffordBrickworkCircuit`;
+- :mod:`QELM.models.circuits.stabilizer`: the same Clifford gates on the
+  periodic brickwork, simulated with stabilizer tableaux, for the
+  reference-qubit probe of Gullans & Huse (2020) (issue #185).
 
 Everything is re-exported here, so ``from QELM.models.circuits import ...``
 keeps working.
@@ -75,6 +78,13 @@ from QELM.models.circuits.haar import (
     haar_unitary,
     random_u1_gate,
 )
+from QELM.models.circuits.stabilizer import (
+    ProbeHistory,
+    clifford_gate_programs,
+    draw_probe_history,
+    periodic_bonds,
+    reference_entropy_history,
+)
 
 __all__ = [
     "BrickworkCircuit",
@@ -82,12 +92,17 @@ __all__ = [
     "Gate",
     "HaarBrickworkCircuit",
     "Layer",
+    "ProbeHistory",
     "U1BrickworkCircuit",
     "apply_layer",
     "apply_two_qubit_gate",
+    "clifford_gate_programs",
     "clifford_group_2q",
+    "draw_probe_history",
     "haar_gate",
     "haar_unitary",
+    "periodic_bonds",
     "random_clifford_gate",
     "random_u1_gate",
+    "reference_entropy_history",
 ]
