@@ -11,6 +11,7 @@ import pytest
 from QELM.evaluation.bayes_ridge import (
     BayesRidge,
     bayes_accuracy,
+    frozen_log_likelihood,
     log_likelihood_features,
     scrambled_accuracy,
     scrambled_discriminability,
@@ -213,3 +214,53 @@ def test_scrambled_accuracy_limits_and_scaling() -> None:
         scrambled_discriminability(11, 1.0, 5, charges)
     with pytest.raises(ValueError):
         scrambled_discriminability(11, 0.3, 5, (4, 4))
+
+
+def _frozen_brute_force(M: np.ndarray, Q: int) -> float:
+    """log P(M | Q): one uniform configuration of charge Q for every round."""
+    Ns = M.shape[-1]
+    configs = [c for c in itertools.product((0, 1), repeat=Ns) if sum(c) == Q]
+    agree = sum(
+        all(
+            o == 0 or (o == -1) == (b == 1)
+            for m in M
+            for o, b in zip(m, c, strict=True)
+        )
+        for c in configs
+    )
+    return math.log(agree / len(configs)) if agree else -math.inf
+
+
+@pytest.mark.parametrize("Q", [1, 2, 3])
+def test_frozen_matches_the_brute_force_enumeration(Q: int) -> None:
+    """One configuration for every round: only distinct qubits count (#253)."""
+    rng = np.random.default_rng(1)
+    for _ in range(20):
+        config = rng.permutation([1] * Q + [0] * (4 - Q))
+        mask = rng.random((3, 4)) < 0.5
+        M = np.where(mask, np.where(config == 1, -1, 1), 0)
+        got = frozen_log_likelihood(M[None], Q, epsilon=0.0)[0]
+        assert got == pytest.approx(_frozen_brute_force(M, Q))
+        for other in range(5):
+            want = _frozen_brute_force(M, other)
+            got = frozen_log_likelihood(M[None], other, epsilon=0.0)[0]
+            assert got == pytest.approx(want) or got == want == -math.inf
+
+
+def test_frozen_ignores_a_repeated_measurement() -> None:
+    """Measuring the same qubit twice adds nothing; the scrambled model counts it."""
+    once = _record([-1, 0, 0, 0], [0, 0, 0, 0])
+    twice = _record([-1, 0, 0, 0], [-1, 0, 0, 0])
+    np.testing.assert_allclose(
+        frozen_log_likelihood(once, 2, epsilon=0.0),
+        frozen_log_likelihood(twice, 2, epsilon=0.0),
+    )
+    assert scrambled_log_likelihood(twice, 2, epsilon=0.0)[0] == pytest.approx(
+        2 * scrambled_log_likelihood(once, 2, epsilon=0.0)[0]
+    )
+    # Two outcomes that disagree: the last one is kept.
+    flip = _record([-1, 0, 0, 0], [1, 0, 0, 0])
+    np.testing.assert_allclose(
+        frozen_log_likelihood(flip, 2, epsilon=0.0),
+        frozen_log_likelihood(_record([1, 0, 0, 0]), 2, epsilon=0.0),
+    )

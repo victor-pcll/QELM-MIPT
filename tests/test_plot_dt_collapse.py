@@ -61,7 +61,7 @@ def test_mean_gap_leaves_out_p_zero_and_one() -> None:
 
 
 def test_figures_from_small_sweeps(tmp_path: Path) -> None:
-    """Two steps dt = t / 5 and the Haar control give the three figures."""
+    """Two steps dt = t / 5 and the Haar control give the four figures."""
     _sweep(tmp_path / "tfim", (0.5, 10.0))
     _sweep(tmp_path / "haar", (10.0,), "unitary_step=haar_u1")
     module = _load()
@@ -82,7 +82,7 @@ def test_figures_from_small_sweeps(tmp_path: Path) -> None:
         check=True,
         capture_output=True,
     )
-    for name in ("dt_accuracy_vs_p", "dt_collapse", "dt_deviation"):
+    for name in ("dt_accuracy_vs_p", "dt_collapse", "dt_deviation", "dt_two_rules"):
         assert (out / f"{name}.png").is_file()
     data = json.loads((out / "dt_deviation.json").read_text())["extra"]
     assert data["reference"] == "Haar"
@@ -93,6 +93,10 @@ def test_figures_from_small_sweeps(tmp_path: Path) -> None:
             assert point["gap"] == pytest.approx(0.0, abs=0.2)
     assert set(data["mean_gap"]) == {
         f"N={n}, dt={dt}" for n in (3, 4) for dt in ("0.1", "2")
+    }
+    rules = json.loads((out / "dt_two_rules.json").read_text())["extra"]
+    assert set(rules) == {
+        f"N={n}, dt={dt}" for n in (3, 4) for dt in ("0.1", "2", "haar_u1")
     }
 
 

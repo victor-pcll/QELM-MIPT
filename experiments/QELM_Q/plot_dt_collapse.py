@@ -12,7 +12,7 @@ sweep of ``exp_QELM_Q.sh`` over ``T_VALUES`` at a fixed
 sweep with ``STEP=haar_u1``: a Haar U(1) unitary at each step, which
 realizes the scrambled model exactly, discreteness of the counts included.
 
-Three figures, each with its data (:func:`QELM.utils.plots.save_figure`), in
+Four figures, each with its data (:func:`QELM.utils.plots.save_figure`), in
 the sweep folder (or ``--out``):
 
 - ``dt_accuracy_vs_p.png``: the Bayes-Ridge accuracy against ``p``, one
@@ -21,6 +21,13 @@ the sweep folder (or ``--out``):
 - ``dt_collapse.png``: the same points against ``d' / 2``, one panel per
   ``dt`` (and one for the control), with ``Phi(d' / 2)``
   (``plot_bayes_ridge_fss.draw_collapse``).
+- ``dt_two_rules.png``: the memory left in the record. The frozen Bayes
+  rule (:func:`QELM.evaluation.bayes_ridge.frozen_log_likelihood`: the
+  configuration does not move between rounds, the opposite limit of the
+  scrambled model) on the same test records, against the Bayes-Ridge
+  accuracy. Left, the mean over ``p`` of ``A_frozen - A_scrambled``
+  against ``dt``, the Haar control dashed; right, both against ``p`` at the
+  largest ``N``, one color per ``dt``.
 - ``dt_deviation.png``: the gap ``A_TFIM - A_ref`` to the scrambled model,
   ``A_ref`` the Haar U(1) control at the same ``(N, p)`` when given, else
   ``Phi(d' / 2)``. Left, its mean over ``p`` against ``dt`` (log scale), one
@@ -50,7 +57,11 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 
-from QELM.evaluation.bayes_ridge import scrambled_accuracy
+from QELM.evaluation.bayes_ridge import (
+    bayes_accuracy,
+    frozen_log_likelihood,
+    scrambled_accuracy,
+)
 from QELM.utils import load_sweep
 from QELM.utils.plots import (
     color_map,
@@ -75,9 +86,41 @@ def _load_fss() -> ModuleType:
 fss = _load_fss()
 KEYS = (*fss.TFIM_KEYS, ("t", "evolution.t"), ("step", "unitary_step"))
 METRIC = fss.MAIN
+# Bayes rule of the frozen model on the same test records (issue #253),
+# computed here from the saved records M.
+FROZEN = "accuracy_M_frozen"
+METRICS = (METRIC, FROZEN, "accuracy_M")
 # Scrambling time of the TFIM reservoir at N_total = 11, in units of 1 / J
 # (issue #243).
 T_SCR = 2.25
+
+
+def frozen_accuracy(run_dir: Path, n_test: int) -> float:
+    """Return the accuracy of the frozen Bayes rule on the test records of a run.
+
+    The rule is ``argmax_Q`` of
+    :func:`QELM.evaluation.bayes_ridge.frozen_log_likelihood`, the Bayes rule
+    when the configuration does not move between rounds; the test records
+    are the last ``n_test`` ones, as in ``exp_QELM_Q``.
+
+    Args:
+        run_dir: Folder of one run, with its ``exp_QELM_Q.npz``.
+        n_test: Number of test samples (``n_test`` of ``metrics.json``).
+    """
+    data = np.load(run_dir / "exp_QELM_Q.npz")
+    M, Y = data["M"].astype(int), data["Y"]
+    N = M.shape[2]
+    charges = (N // 2, N // 2 - 1)
+    log_lik = np.stack([frozen_log_likelihood(M, q) for q in charges], axis=1)
+    return bayes_accuracy(log_lik[-n_test:], Y[-n_test:], charges)
+
+
+def load_rows(sweep: Path) -> list[dict[str, Any]]:
+    """:func:`load_sweep` with :data:`KEYS`, plus :data:`FROZEN` in each row."""
+    rows = load_sweep(sweep, KEYS)
+    for row in rows:
+        row[FROZEN] = frozen_accuracy(sweep / row["run"], int(row["n_test"]))
+    return rows
 
 
 def dt_summaries(sweep: Path) -> dict[float, list[dict[str, Any]]]:
@@ -91,14 +134,14 @@ def dt_summaries(sweep: Path) -> dict[float, list[dict[str, Any]]]:
         ``dt -> summary``, in increasing ``dt``, each summary with one row per
         ``(N, p)`` (:func:`plot_bayes_ridge_fss.summarize_tfim`) and ``dt``.
     """
-    rows = load_sweep(sweep, KEYS)
+    rows = load_rows(sweep)
     groups: dict[float, list[dict[str, Any]]] = {}
     for row in rows:
         dt = round(float(row["t"]) / int(row["steps"]), 12)
         groups.setdefault(dt, []).append(row)
     out = {}
     for dt in sorted(groups):
-        summary = fss.summarize_tfim(groups[dt])
+        summary = fss.summarize_tfim(groups[dt], METRICS)
         for row in summary:
             row["dt"] = dt
         out[dt] = summary
@@ -120,11 +163,13 @@ def haar_summary(sweep: Path) -> list[dict[str, Any]]:
                 f"{row['run']}: the control needs unitary_step=haar_u1, "
                 f"got {row['step']!r}."
             )
-    return fss.summarize_tfim(rows)
+    return fss.summarize_tfim(load_rows(sweep), METRICS)
 
 
-def _point(rows: Sequence[dict[str, Any]], N: int, p: float) -> tuple[float, float]:
-    curve = sweep_curve(rows, N, "p", METRIC)
+def _point(
+    rows: Sequence[dict[str, Any]], N: int, p: float, metric: str = METRIC
+) -> tuple[float, float]:
+    curve = sweep_curve(rows, N, "p", metric)
     (k,) = np.flatnonzero(np.isclose(curve.x, p))
     return float(curve.mean[k]), float(curve.err[k])
 
@@ -281,8 +326,100 @@ def draw_deviation(gaps: list[dict[str, Any]], t_scr: float, ref: str) -> Any:
     return fig
 
 
+def rule_gaps(
+    by_dt: dict[float, list[dict[str, Any]]],
+    reference: list[dict[str, Any]] | None,
+) -> dict[str, Any]:
+    """Mean over ``p`` of ``A_frozen - A_scrambled`` per ``N`` and ``dt``.
+
+    ``A_scrambled`` is the Bayes-Ridge accuracy, ``A_frozen`` the frozen rule
+    (:func:`frozen_accuracy`) on the same records. A positive gap means that
+    the record keeps a memory between rounds that the scrambled model throws
+    away. The Haar U(1) control, when given, is under ``"haar_u1"``.
+    """
+    sets = {f"{dt:g}": rows for dt, rows in by_dt.items()}
+    if reference is not None:
+        sets["haar_u1"] = reference
+    out: dict[str, Any] = {}
+    for key, rows in sets.items():
+        for n in sizes(rows):
+            points = []
+            for row in (r for r in rows if int(r["N"]) == n):
+                p = float(row["p"])
+                a, ea = _point(rows, n, p, FROZEN)
+                b, eb = _point(rows, n, p, METRIC)
+                points.append(
+                    {"p": p, "gap": a - b, "gap_err": float(np.hypot(ea, eb))}
+                )
+            out[f"N={n}, dt={key}"] = {"N": n, "dt": key, **mean_gap(points)}
+    return out
+
+
+def draw_rules(
+    by_dt: dict[float, list[dict[str, Any]]],
+    gaps: dict[str, Any],
+    t_scr: float,
+) -> Any:
+    """Draw ``dt_two_rules.png``: the frozen rule against the scrambled one."""
+    fig, (ax_dt, ax_p) = subplots(1, 2, figsize=(13, 5))
+    dts = list(by_dt)
+    n_values = sorted({g["N"] for g in gaps.values()})
+    colors = color_map([str(n) for n in n_values])
+    for n in n_values:
+        means = [gaps.get(f"N={n}, dt={dt:g}") for dt in dts]
+        kept = [(dt, m) for dt, m in zip(dts, means, strict=True) if m is not None]
+        ax_dt.errorbar(
+            [dt for dt, _ in kept],
+            [m["gap"] for _, m in kept],
+            yerr=[m["gap_err"] for _, m in kept],
+            color=colors[str(n)],
+            marker="o",
+            capsize=3,
+            label=f"N = {n}",
+        )
+        haar = gaps.get(f"N={n}, dt=haar_u1")
+        if haar is not None:
+            ax_dt.axhline(haar["gap"], color=colors[str(n)], ls="--", lw=1)
+    if any(g["dt"] == "haar_u1" for g in gaps.values()):
+        ax_dt.plot([], [], color="0.4", ls="--", label="Haar U(1) step")
+    ax_dt.axvline(
+        t_scr, color="0.4", ls=":", lw=1, label=f"$t_{{scr}}$ = {t_scr:g} / J"
+    )
+    ax_dt.axhline(0.0, color="0.6", ls=":", lw=1)
+    ax_dt.set_xscale("log")
+    ax_dt.set_xlabel("step $dt$ (units of 1 / J)")
+    ax_dt.set_ylabel(r"mean over $p$ of $A_{frozen} - A_{scrambled}$")
+    ax_dt.set_title("memory in the record: frozen rule minus Bayes-Ridge")
+    ax_dt.legend(fontsize=8)
+    largest = max(n_values)
+    dt_colors = color_map([f"{dt:g}" for dt in dts])
+    for dt, rows in by_dt.items():
+        if largest not in sizes(rows):
+            continue
+        color = dt_colors[f"{dt:g}"]
+        draw_curve(
+            ax_p,
+            sweep_curve(rows, largest, "p", METRIC),
+            color=color,
+            label=f"dt = {dt:g} / J",
+        )
+        draw_curve(
+            ax_p, sweep_curve(rows, largest, "p", FROZEN), color=color, linestyle="--"
+        )
+    ax_p.plot([], [], color="0.4", ls="-", label="Bayes-Ridge (scrambled)")
+    ax_p.plot([], [], color="0.4", ls="--", label="frozen Bayes rule")
+    ax_p.axhline(0.5, color="0.6", ls=":", lw=1)
+    ax_p.set_ylim(0.45, 1.02)
+    ax_p.set_xlabel("measurement probability $p$")
+    ax_p.set_ylabel("accuracy on $Q$")
+    ax_p.set_title(f"two rules on the same records, N = {largest}")
+    ax_p.legend(fontsize=8)
+    fig.tight_layout()
+    return fig
+
+
 def main() -> None:
-    """Parse the command line and draw the three figures."""
+    """Parse the command line and draw the four figures."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("sweep", type=Path, help="exp_QELM_Q sweep over T_VALUES")
     parser.add_argument(
@@ -325,6 +462,13 @@ def main() -> None:
     plt.close(fig)
     for key, m in summary.items():
         print(f"{key:<16} mean gap {m['gap']:+.4f} ± {m['gap_err']:.4f}")
+
+    rules = rule_gaps(by_dt, reference)
+    fig = draw_rules(by_dt, rules, args.t_scr)
+    print(f"Wrote {save_figure(fig, out, 'dt_two_rules', rules)}")
+    plt.close(fig)
+    for key, m in rules.items():
+        print(f"{key:<22} frozen - scrambled {m['gap']:+.4f} ± {m['gap_err']:.4f}")
 
 
 if __name__ == "__main__":
