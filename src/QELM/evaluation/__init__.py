@@ -22,6 +22,7 @@ from QELM.evaluation.entropy import (
     entanglement_spectrum,
     mean_single_qubit_entropy,
     renyi_entropy,
+    tripartite_mutual_information,
     von_neumann_entropy,
 )
 from QELM.evaluation.metrics import metric_status
@@ -94,6 +95,7 @@ __all__ = [
     "metric_status",
     "render_plot",
     "renyi_entropy",
+    "tripartite_mutual_information",
     "sharpening_statistics",
     "von_neumann_entropy",
 ]
