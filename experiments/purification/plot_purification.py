@@ -69,7 +69,8 @@ def pooled_curves(sweep_dir: Path) -> tuple[dict[int, Curve], dict[int, Any]]:
         ``{N: (p, S_Q, err)}`` at the final time, and ``{N: (p, t / N,
         S_Q(t))}`` at the ``p`` closest to :data:`P_C_PAPER`.
     """
-    rows = load_sweep(sweep_dir, keys=KEYS)
+    # The steady-state runs of the same sweep (issue #257) have no S_Q.
+    rows = [r for r in load_sweep(sweep_dir, keys=KEYS) if "S_Q_mean" in r]
     groups: dict[tuple[int, float], list[dict[str, Any]]] = {}
     for row in rows:
         groups.setdefault((int(row["N"]), float(row["p"])), []).append(row)

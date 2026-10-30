@@ -119,3 +119,55 @@ def test_history_draws() -> None:
         draw_probe_history(6, 0.5, -1, 3, np.random.default_rng(0))
     with pytest.raises(ValueError):
         reference_entropy_history(history, site=6)
+
+
+def test_gf2_rank() -> None:
+    from QELM.models.circuits.stabilizer import gf2_rank
+
+    assert gf2_rank(np.eye(3, dtype=bool)) == 3
+    # Rows 1 + 2 = row 3 modulo 2.
+    assert gf2_rank(np.array([[1, 1, 0], [0, 1, 1], [1, 0, 1]])) == 2
+    assert gf2_rank(np.zeros((2, 4))) == 0
+
+
+def test_stabilizer_entropies_match_the_state_vector() -> None:
+    """S of contiguous and split regions, from the tableau and from psi."""
+    from QELM.models.circuits.stabilizer import (
+        _do_step,
+        stabilizer_entropy,
+        stabilizer_matrix,
+    )
+
+    rng = np.random.default_rng(5)
+    for p in (0.05, 0.2):
+        history = draw_probe_history(8, p, 0, 16, rng)
+        sim = stim.TableauSimulator(seed=0)
+        for t in range(history.T):
+            _do_step(sim, history, t)
+        stab = stabilizer_matrix(sim)
+        psi = sim.state_vector(endian="big")
+        for region in ([1, 2], [1, 2, 3, 4], [1, 2, 5, 6], [3, 7, 8], [0]):
+            assert stabilizer_entropy(stab, region) == pytest.approx(
+                # stim returns a float32 state vector.
+                von_neumann_entropy(psi, region),
+                abs=1e-5,
+            )
+
+
+def test_steady_state_entropies() -> None:
+    from QELM.models.circuits.stabilizer import quarters, steady_state_entropies
+
+    assert quarters(8) == [[0, 1], [2, 3], [4, 5], [6, 7]]
+    with pytest.raises(ValueError):
+        quarters(6)
+    rng = np.random.default_rng(0)
+    # p = 1: every site measured at the last step, a product state.
+    out = steady_state_entropies(draw_probe_history(8, 1.0, 0, 8, rng))
+    assert out == {"S_half": 0.0, "I3": 0.0}
+    # p = 0: volume law, S_half close to N / 2 and I3 negative on average.
+    runs = [
+        steady_state_entropies(draw_probe_history(16, 0.0, 0, 64, rng))
+        for _ in range(20)
+    ]
+    assert np.mean([r["S_half"] for r in runs]) > 6
+    assert np.mean([r["I3"] for r in runs]) < -1
