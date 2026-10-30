@@ -15,7 +15,7 @@ written before issue #235").
 
 Next to `metrics.json`, every Python experiment script (`projective/`,
 `QELM_Z/`, `QELM_M/`, `QELM_Q/`, `QELM_S/`, `QELM_R/`, `charge_sharpening/`,
-`learnability/`, `double_descent/`) writes
+`purification/`, `learnability/`, `double_descent/`) writes
 `resolved_config.json`, the config of the run with every interpolation
 evaluated (`QELM.utils.save_config`, issue #85). `.hydra/config.yaml` keeps the
 formulas as written in `conf/`, such as `depth: ${int:${div:${N},2}}`;
@@ -858,6 +858,57 @@ Two exact limits are checked by the tests: `S_R = 1` in every trajectory at
 `gamma = 0` (gates on the system cannot change the ancilla's entropy) and
 `S_R = 0` at `gamma = 1` (a projective record of every qubit reveals the
 charge).
+
+## Run the reference-qubit purification benchmark (issue #185)
+
+```bash
+MAX_JOBS=4 ./experiments/purification/purification.sh
+```
+
+A test of the library on a published result: the reference-qubit probe of
+Gullans & Huse, "Scalable probes of measurement-induced criticality", PRL
+125, 070606 (2020), arXiv:1910.00020, Fig. 1. The paper's chain length `L`
+is our `N` (issue #235). The config is `conf/purification_gullans_huse.yaml`:
+
+- the encoding: the reference qubit `R` in a Bell pair with the middle
+  system site, the other system qubits in `|0>`
+  (`QELM.encoding.AncillaBellPairEncoding`, block `ancilla_bell_pair`);
+- `probe.scramble_steps = 2N` steps without measurement (the paper's
+  `t0 = 2L`), then `probe.steps = 2N` steps each followed by a Z
+  measurement of every system qubit with probability `probe.p`;
+- a step is one half-layer of two-qubit gates drawn uniformly from the
+  Clifford group on the periodic brickwork (every site gets one gate per
+  step, the paper's time unit), with new gates for every trajectory: the
+  paper averages over circuits.
+
+The state is a stabilizer state, simulated with the tableaux of `stim`
+(`QELM.models.circuits.stabilizer`), which reaches the paper's sizes in
+polynomial time. The gates are the elements of the library's
+`clifford_group_2q`, and `tests/test_stabilizer_probe.py` replays the same
+gates and measured sites on the state vector and finds the same entropy of
+`R` at every step. In each trajectory `S_Q` is 0 or 1 bit and does not
+depend on the measurement outcomes.
+
+The launcher sweeps `N_VALUES` (default `8 16 32 64`, even), `P_VALUES`
+(default `0.10` to `0.22`, finer near `0.16`) and `SEEDS` (default `0`;
+several seeds split the trajectories of a point, which the plot pools), with
+`L = 2000` trajectories per run. `MAX_JOBS=n` runs `n` runs at once. Timing
+on one core: about 0.07 s per trajectory at `N = 64` and 0.35 s at
+`N = 128`.
+
+Each run lands in `outputs/purification_gullans_huse/<date_time>/N<N>_p<p>_seed<seed>/`
+with `purification.npz` (`S_Q` after each step of each trajectory),
+`metrics.json` (`S_Q_mean` at `t = 4N`, its error, the mean `S_Q_t` after
+each step) and the config. At the end, `plot_purification.py` writes
+`purification_gullans_huse.png` (and `.json`): (a) `S_Q` against `p`, (b) the
+data collapse against `(p - p_c) N^(1/nu)` fitted on `N >= 16`
+(`QELM.evaluation.finite_size_scaling`), (c) the crossing of consecutive
+sizes against `1 / N`, (d) `S_Q(t)` near `p_c`; and `fss.json` with the
+crossings and the collapses, next to the paper's `p_c = 0.1598(5)`,
+`nu = 1.30(5)`.
+
+`notebooks/benchmarks/04_reference_qubit_purification.ipynb` runs this sweep
+from Jupyter, in `outputs/purification_gullans_huse/<date_time>/`.
 
 ## Charge conservation check (issue #134)
 
