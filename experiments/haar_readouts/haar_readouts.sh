@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
 # Charge of a fully random Haar circuit read by several readouts
 # (experiments/haar_readouts/haar_readouts.py), swept over the gate draw
-# (new gates per trajectory or one fixed circuit), N and the seed.
+# (new gates per trajectory or one fixed circuit), the circuit (Haar or
+# Clifford), N and the seed.
 #
 # Run from anywhere, after `uv sync`:
 #
 #     ./experiments/haar_readouts/haar_readouts.sh
 #
 # Each run writes its arrays, metrics.json and Hydra config to
-#     outputs/haar_readouts/<date_time>/<gates>_N<N>_seed<seed>/
-# with <gates> random (haar_circuit.fixed_instance=false) or fixed (true),
+#     outputs/haar_readouts/<date_time>/<circuit>_<gates>_N<N>_seed<seed>/
+# with <circuit> haar or clifford and <gates> random
+# (<model>.fixed_instance=false) or fixed (true),
 # which git ignores; experiments/haar_readouts/plot_haar_readouts.py draws
 # the figures from that folder. Environment variables change the defaults
 # (lists are space-separated):
 #     OUT_ROOT=/tmp/qelm          write under /tmp/qelm instead of outputs
 #     OUT_DIR=...                 write the sweep exactly there
+#     MODELS="haar_circuit clifford_circuit"  circuits (models; default haar_circuit)
 #     GATES="random fixed"        gate draws
 #     N_VALUES="8"                numbers of system qubits
 #     SEEDS="42 43 44"            seeds
@@ -36,6 +39,7 @@ unset VIRTUAL_ENV
 
 # ---- Parameters -------------------------------------------------------------
 EXPERIMENT="haar_readouts"
+read -r -a MODELS <<< "${MODELS:-haar_circuit}"
 read -r -a GATES <<< "${GATES:-random fixed}"
 read -r -a N_VALUES <<< "${N_VALUES:-8}"
 read -r -a SEEDS <<< "${SEEDS:-42 43 44}"
@@ -72,11 +76,20 @@ OUT_DIR="${OUT_DIR:-$OUT_ROOT/$EXPERIMENT/$STAMP}"
 mkdir -p "$OUT_DIR"
 echo "Writing outputs to $OUT_DIR"
 
+for MODEL in "${MODELS[@]}"; do
+  if [[ "$MODEL" != "haar_circuit" && "$MODEL" != "clifford_circuit" ]]; then
+    echo "MODELS must hold haar_circuit and/or clifford_circuit, got '$MODEL'" >&2
+    exit 2
+  fi
+done
+
 RUNS=()
-for G in "${GATES[@]}"; do
-  for N in "${N_VALUES[@]}"; do
-    for SEED in "${SEEDS[@]}"; do
-      RUNS+=("$G $N $SEED")
+for MODEL in "${MODELS[@]}"; do
+  for G in "${GATES[@]}"; do
+    for N in "${N_VALUES[@]}"; do
+      for SEED in "${SEEDS[@]}"; do
+        RUNS+=("$MODEL $G $N $SEED")
+      done
     done
   done
 done
@@ -84,18 +97,19 @@ done
 FAILED_LOG="${FAILED_LOG:-$OUT_DIR/failed_runs.txt}"
 : > "$FAILED_LOG"
 
-# One run of the grid, called by xargs with its line "gates N seed".
+# One run of the grid, called by xargs with its line "model gates N seed".
 run_one() {
   set -uo pipefail
-  local G N SEED FIXED RUN_DIR status
-  read -r G N SEED <<< "$1"
+  local MODEL G N SEED FIXED RUN_DIR status
+  read -r MODEL G N SEED <<< "$1"
   if [[ "$G" == "fixed" ]]; then FIXED=true; else FIXED=false; fi
-  RUN_DIR="$OUT_DIR/${G}_N${N}_seed${SEED}"
-  echo "--- gates=$G N=$N seed=$SEED samples_per_p=$PER_P"
+  RUN_DIR="$OUT_DIR/${MODEL%_circuit}_${G}_N${N}_seed${SEED}"
+  echo "--- model=$MODEL gates=$G N=$N seed=$SEED samples_per_p=$PER_P"
   uv run python experiments/haar_readouts/haar_readouts.py \
+    "models=$MODEL" \
     "N=$N" \
     "seed=$SEED" \
-    "haar_circuit.fixed_instance=$FIXED" \
+    "$MODEL.fixed_instance=$FIXED" \
     "readouts_task.samples_per_p=$PER_P" \
     ${P_LIST:+"readouts_task.p_values=$P_LIST"} \
     ${R_LIST:+"readouts_task.readouts=$R_LIST"} \
@@ -104,7 +118,7 @@ run_one() {
   status=$?
   if (( status != 0 )); then
     echo "exit $status: $1" >> "$FAILED_LOG"
-    echo "!!! run failed (exit $status): gates=$G N=$N seed=$SEED" >&2
+    echo "!!! run failed (exit $status): model=$MODEL gates=$G N=$N seed=$SEED" >&2
     return 1
   fi
 }
@@ -127,4 +141,4 @@ if (( QUEUE_STATUS != 0 )); then
   exit "$QUEUE_STATUS"
 fi
 
-echo "Done: ${#GATES[@]} x ${#N_VALUES[@]} x ${#SEEDS[@]} runs in $OUT_DIR"
+echo "Done: ${#MODELS[@]} x ${#GATES[@]} x ${#N_VALUES[@]} x ${#SEEDS[@]} runs in $OUT_DIR"

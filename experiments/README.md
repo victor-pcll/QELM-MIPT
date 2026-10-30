@@ -892,12 +892,13 @@ several sizes `N` cross at `p_success ~ 0.2` in the paper. The figure is
 `outputs/learnability_fig2c/<date_time>/` with `FIGURES=2c`, and plots
 Fig. 2c.
 
-## Run the charge of a random Haar circuit with several readouts
+## Run the charge of a random Haar or Clifford circuit with several readouts
 
 `experiments/haar_readouts/haar_readouts.py` (config `conf/haar_readouts.yaml`)
 asks the question of `QELM_M` (can a readout of the measurement record `M`
 tell the initial charge sector of the system, `N // 2` or `N // 2 - 1`?) for
-gates that conserve nothing: a brickwork of Haar-random U(4) gates. With the
+gates that conserve nothing: a brickwork of Haar-random U(4) gates, or of
+random two-qubit Clifford gates with `models=clifford_circuit`. With the
 TFIM of `QELM_M` (`h = 10 J`) or U(1) gates, the charge is (almost)
 conserved and a sum of outcomes, so a linear readout reads it; here it is
 not. The reference qubit `R` holds the charge sector
@@ -924,7 +925,8 @@ classifier outputs `2 P(Y = +1) - 1`):
 `readouts_task.features` sets what the readouts read, each set on its own:
 `M`, the record (default); `X`, `Y`, `Z`, the `<P_k>` of the system qubits in
 the final state after `R` is measured; `XX`, `YY`, `ZZ`, the `<P_i P_j>` on
-every pair; `all`, the six observable sets side by side. The scores of a set
+every pair; `all`, the six observable sets side by side (the QELM);
+`M_all`, the record and the six sets (the QELM-M). The scores of a set
 other than `M` are named `<readout>_<set>` (`accuracy_ridge_ZZ_p<p>`).
 `S_R_mean_p<p>` is the mean entropy of `R` (bits), the purification curve.
 `haar_circuit.fixed_instance=false` (the default) draws new gates for every
@@ -936,12 +938,16 @@ MAX_JOBS=4 ./experiments/haar_readouts/haar_readouts.sh
 uv run python experiments/haar_readouts/plot_haar_readouts.py outputs/haar_readouts/<date_time>
 ```
 
-The launcher sweeps `GATES` (`random fixed`), `N_VALUES` (`8`) and `SEEDS`
+The launcher sweeps `MODELS` (`haar_circuit`, add `clifford_circuit`),
+`GATES` (`random fixed`), `N_VALUES` (`8`) and `SEEDS`
 (`PER_P`, `P_VALUES`, `READOUTS`, `FEATURES`, `MAX_JOBS` change the defaults), one folder per run,
-`<gates>_N<N>_seed<seed>/`. The plot script writes one figure per readout,
+`<circuit>_<gates>_N<N>_seed<seed>/`. The plot script writes one figure per readout,
 `<readout>.png` with its JSON: the purification curve `S_R(p)` on the left,
 the accuracy of the readout in the middle, with the chance level 1/2, and
-its `R2` on the right.
+its `R2` on the right (`<circuit>_<readout>.png` when the sweep holds both
+circuits). With `READOUTS=ridge FEATURES="M all M_all"`,
+`compare_<circuit>.png` draws the ridge on `M`, on the QELM features and on
+the QELM-M features on the same panels, one per circuit.
 
 ## Check the chaos and the locality of the reservoirs (issue #243)
 

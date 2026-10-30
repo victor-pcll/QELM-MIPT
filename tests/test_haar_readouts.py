@@ -194,6 +194,7 @@ def test_fixed_instance_and_reproducibility() -> None:
         ("readouts_task.n_rounds=0", "n_rounds"),
         ("readouts_task.readouts=[ridge,svm]", "Unknown readouts"),
         ("readouts_task.features=[M,XY]", "features"),
+        ("models=TFIM", "models"),
     ],
 )
 def test_rejects_bad_settings(override: str, match: str) -> None:
@@ -245,12 +246,12 @@ def test_bash_sweep_and_figures(tmp_path: Path) -> None:
     )
     runs = sorted(p.parent.name for p in tmp_path.glob("*/metrics.json"))
     assert runs == [
-        "fixed_N3_seed1",
-        "fixed_N3_seed2",
-        "random_N3_seed1",
-        "random_N3_seed2",
+        "haar_fixed_N3_seed1",
+        "haar_fixed_N3_seed2",
+        "haar_random_N3_seed1",
+        "haar_random_N3_seed2",
     ]
-    cfg = (tmp_path / "fixed_N3_seed1" / ".hydra" / "config.yaml").read_text()
+    cfg = (tmp_path / "haar_fixed_N3_seed1" / ".hydra" / "config.yaml").read_text()
     assert "fixed_instance: true" in cfg
     _load(PLOT_SCRIPT).main([str(tmp_path)])
     for name in READOUTS:
@@ -259,7 +260,7 @@ def test_bash_sweep_and_figures(tmp_path: Path) -> None:
 
 
 def test_bash_sweep_refuses_bad_settings(tmp_path: Path) -> None:
-    for key, value in (("MAX_JOBS", "0"), ("GATES", "clifford")):
+    for key, value in (("MAX_JOBS", "0"), ("GATES", "clifford"), ("MODELS", "tfim")):
         result = subprocess.run(
             ["bash", str(BASH_SCRIPT)],
             env={**os.environ, "OUT_DIR": str(tmp_path), key: value},
@@ -289,9 +290,53 @@ def test_bash_sweep_with_observables(tmp_path: Path) -> None:
         cwd=tmp_path,
         capture_output=True,
     )
-    metrics = json.loads((tmp_path / "fixed_N3_seed1" / "metrics.json").read_text())
+    metrics = json.loads(
+        (tmp_path / "haar_fixed_N3_seed1" / "metrics.json").read_text()
+    )
     assert "accuracy_ridge_ZZ_p1" in metrics and "accuracy_ridge_p1" not in metrics
     plot = _load(PLOT_SCRIPT)
     plot.main([str(tmp_path)])
     assert sorted(p.stem for p in tmp_path.glob("*.png")) == ["ridge_Z", "ridge_ZZ"]
     assert plot.title("ridge_ZZ") == "Ridge (linear) on <Z_i Z_j>"
+
+
+def test_clifford_circuit_and_qelm_m_comparison(tmp_path: Path) -> None:
+    out = _run(
+        "models=clifford_circuit",
+        "readouts_task.readouts=[ridge]",
+        "readouts_task.features=[M,all,M_all]",
+    )
+    metrics = out["metrics"]
+    for name in ("ridge", "ridge_all", "ridge_M_all"):
+        assert 0.0 <= metrics[f"accuracy_{name}_p0.5"] <= 1.0
+    np.testing.assert_allclose(out["S_R"][out["p"] == 0.0], 1.0, atol=1e-9)
+    env = {
+        **os.environ,
+        "OUT_DIR": str(tmp_path),
+        "MODELS": "haar_circuit clifford_circuit",
+        "GATES": "fixed",
+        "N_VALUES": "3",
+        "SEEDS": "1",
+        "PER_P": "20",
+        "P_VALUES": "0 1",
+        "READOUTS": "ridge",
+        "FEATURES": "M all M_all",
+        "TQDM_DISABLE": "1",
+    }
+    subprocess.run(
+        ["bash", str(BASH_SCRIPT)],
+        check=True,
+        env=env,
+        cwd=tmp_path,
+        capture_output=True,
+    )
+    cfg = (tmp_path / "clifford_fixed_N3_seed1" / ".hydra" / "config.yaml").read_text()
+    assert "models: clifford_circuit" in cfg
+    plot = _load(PLOT_SCRIPT)
+    plot.main([str(tmp_path)])
+    for circuit in ("haar", "clifford"):
+        assert (tmp_path / f"compare_{circuit}.png").is_file()
+        assert (tmp_path / f"{circuit}_ridge_M_all.png").is_file()
+    assert (
+        plot.title("ridge_M_all") == "Ridge (linear) on M and all six observable sets"
+    )

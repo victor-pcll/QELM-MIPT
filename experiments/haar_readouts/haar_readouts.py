@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Learn the charge of a fully random Haar circuit with several readouts.
+"""Learn the charge of a random Haar or Clifford circuit with several readouts.
 
 The task of ``experiments/QELM_M`` (the measurement record ``M`` against the
 initial charge sector, learnability of Barratt et al. 2022), with gates that
@@ -7,7 +7,8 @@ conserve nothing: Haar-random U(4) gates instead of the TFIM, whose large
 transverse field makes the charge almost conserved, or U(1) gates. Without a
 conserved charge the record no longer holds ``Q`` as a sum of outcomes, so a
 linear readout may miss what it holds. Several readouts of the same record
-are compared, each on its own.
+are compared, each on its own. ``models=clifford_circuit`` draws random
+two-qubit Clifford gates instead (:class:`CliffordBrickworkCircuit`).
 
 For each measurement probability ``p`` of ``readouts_task.p_values`` and
 each of its ``readouts_task.samples_per_p`` trajectories:
@@ -17,11 +18,12 @@ each of its ``readouts_task.samples_per_p`` trajectories:
    ``Q2 = N // 2 - 1``: the reference qubit ``R`` (qubit 0, ``Nr = 1``)
    entangled with the charge of the ``N`` system qubits.
 2. Run ``readouts_task.n_rounds`` rounds, each one brickwork layer of
-   Haar-random two-qubit gates (:class:`HaarBrickworkCircuit`, a full
+   random two-qubit gates (:class:`HaarBrickworkCircuit` by default,
+   :class:`CliffordBrickworkCircuit` with ``models=clifford_circuit``, a full
    period: even bonds, then odd bonds) on the system qubits, followed by a
    Z measurement of each system qubit with probability ``p``. Row ``j`` of
    ``M`` holds the outcomes of round ``j``, +-1, and 0 for an unmeasured
-   qubit. With ``haar_circuit.fixed_instance: false`` (the default) every
+   qubit. With ``<model>.fixed_instance: false`` (the default) every
    trajectory draws new gates; ``true`` keeps one draw for the whole run.
 3. At the end, the entropy ``S_R`` of ``R`` (von Neumann, bits: 1 while the
    system hides the charge, 0 once the record fixes it, the purification
@@ -42,7 +44,8 @@ The readouts read one or several feature sets (``readouts_task.features``,
   of both sectors for every label);
 - ``XX``, ``YY``, ``ZZ``: the two-site correlators ``<P_i P_j>`` of the
   same state, on every pair ``i < j`` of system qubits;
-- ``all``: the six sets above side by side.
+- ``all``: the six sets above side by side, the features of the QELM;
+- ``M_all``: the record and the six sets side by side, the QELM-M.
 
 At each ``p``, the trajectories are split into training and test sets
 (``samples.train_fraction``, stratified on ``Y``) and every readout of
@@ -109,6 +112,8 @@ from QELM import check_qubit_counts, set_seed
 from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.evaluation.entropy import von_neumann_entropy
 from QELM.evaluation.entropy_regression import stratified_split
+from QELM.models.circuits.base import BrickworkCircuit
+from QELM.models.circuits.clifford import CliffordBrickworkCircuit
 from QELM.models.circuits.haar import HaarBrickworkCircuit
 from QELM.physics.operators import PAULIS, get_site_operator
 from QELM.training.measurements.projective import measure_projective_psi
@@ -181,7 +186,12 @@ def _gradient_boosting(
 
 # Feature sets of the readouts: the record, and observables of the final state.
 OBSERVABLE_SETS = ("X", "Y", "Z", "XX", "YY", "ZZ")
-FEATURE_SETS = ("M", *OBSERVABLE_SETS, "all")
+FEATURE_SETS = ("M", *OBSERVABLE_SETS, "all", "M_all")
+# Circuits of the system, by models.
+CIRCUITS: dict[str, type[BrickworkCircuit]] = {
+    HaarBrickworkCircuit.name: HaarBrickworkCircuit,
+    CliffordBrickworkCircuit.name: CliffordBrickworkCircuit,
+}
 
 
 def observables(N: int) -> dict[str, list[sp.csr_matrix]]:
@@ -223,7 +233,7 @@ READOUTS: dict[str, Readout] = {
 
 def trajectory(
     psi0: np.ndarray,
-    circuit: HaarBrickworkCircuit,
+    circuit: BrickworkCircuit,
     p: float,
     rng: np.random.Generator,
 ) -> tuple[np.ndarray, float, float, np.ndarray]:
@@ -253,7 +263,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     Args:
         cfg: Composed config (``load_config(..., config_name="haar_readouts")``
-            or Hydra). Reads ``N``, ``Nr`` (must be 1), ``haar_circuit``,
+            or Hydra). Reads ``N``, ``Nr`` (must be 1), ``models`` and its block,
             ``readouts_task`` and ``samples.train_fraction``.
 
     Returns:
@@ -289,17 +299,24 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         raise ValueError(
             f"readouts_task.features must hold sets of {FEATURE_SETS}, got {sets}."
         )
-    needed = [name for name in OBSERVABLE_SETS if name in sets or "all" in sets]
+    needed = [
+        name
+        for name in OBSERVABLE_SETS
+        if name in sets or "all" in sets or "M_all" in sets
+    ]
+    model = str(cfg.models)
+    if model not in CIRCUITS:
+        raise ValueError(f"models must be one of {tuple(CIRCUITS)}, got {model!r}.")
     ops = observables(N)
 
     seed = int(cfg.seed)
     gate_rng = np.random.default_rng([seed, RNG_TAG, 0])
     rng = np.random.default_rng([seed, RNG_TAG, 1])
-    block = OmegaConf.to_container(cfg.haar_circuit, resolve=True)
+    block = OmegaConf.to_container(cfg[model], resolve=True)
     assert isinstance(block, dict)
     params = {str(k): v for k, v in block.items()}
     params["depth"] = n_rounds
-    circuit = HaarBrickworkCircuit(params, gate_rng)
+    circuit = CIRCUITS[model](params, gate_rng)
     fixed = bool(params.get("fixed_instance", False))
     psi0 = AncillaChargeSectorEncoding.from_config(cfg).state()
 
@@ -319,8 +336,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     split_rng = np.random.default_rng([seed, RNG_TAG, 2])
     fit_rng = np.random.default_rng([seed, RNG_TAG, 3])
     features = {"M": M.reshape(L, -1), **obs}
-    if "all" in sets:
+    if "all" in sets or "M_all" in sets:
         features["all"] = np.hstack([obs[name] for name in OBSERVABLE_SETS])
+        features["M_all"] = np.hstack([features["M"], features["all"]])
     metrics: dict[str, float] = {"n_rounds": float(n_rounds)}
     for level in levels:
         idx = np.flatnonzero(p == level)
