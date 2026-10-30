@@ -99,7 +99,7 @@ def test_bash_script_and_plot(tmp_path: Path) -> None:
             "N_VALUES": "4 8",
             "P_VALUES": "0.0 0.2 1.0",
             "SEEDS": "0 1",
-            "JOBS": "2",
+            "MAX_JOBS": "2",
             "VIRTUAL_ENV": str(FOREIGN_VENV),
         },
         capture_output=True,

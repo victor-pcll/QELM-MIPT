@@ -74,6 +74,45 @@ def crossings(curves: Mapping[int, Curve]) -> dict[tuple[int, int], float | None
     return out
 
 
+def crossing_errors(
+    curves: Mapping[int, Curve],
+    n_boot: int = 200,
+    rng: np.random.Generator | None = None,
+) -> dict[tuple[int, int], float]:
+    """Return the bootstrap error of each crossing of :func:`crossings`.
+
+    Each point is redrawn from a normal law of its error bar, the crossings
+    are located again, and the error is half the 16-84 % range of the
+    resamples where the pair still crosses: a robust standard deviation,
+    since a resample can cross a second time far from the first crossing.
+
+    Args:
+        curves: ``{N: (p, O, err)}``.
+        n_boot: Bootstrap resamples.
+        rng: Random generator of the bootstrap.
+
+    Returns:
+        ``{(N_a, N_b): error}``, ``nan`` when fewer than two resamples cross.
+    """
+    gen = rng if rng is not None else np.random.default_rng(0)
+    samples: dict[tuple[int, int], list[float]] = {}
+    for _ in range(n_boot):
+        noisy = {
+            N: (p, np.asarray(y) + gen.normal(size=np.shape(y)) * np.asarray(e), e)
+            for N, (p, y, e) in curves.items()
+        }
+        for pair, value in crossings(noisy).items():
+            samples.setdefault(pair, [])
+            if value is not None:
+                samples[pair].append(value)
+    return {
+        pair: float(np.subtract(*np.percentile(v, [84, 16])) / 2)
+        if len(v) > 1
+        else float("nan")
+        for pair, v in samples.items()
+    }
+
+
 def collapse_quality(curves: Mapping[int, Curve], p_c: float, nu: float) -> float:
     """Houdayer-Hartmann quality of the collapse with ``(p_c, nu)``.
 

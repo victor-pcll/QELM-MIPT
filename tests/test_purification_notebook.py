@@ -32,7 +32,7 @@ def test_notebook_runs_the_sweep_and_plots(
         "N_VALUES": "4 8 16",
         "P_VALUES": "0.1 0.2 0.3",
         "SEEDS": "0",
-        "JOBS": "2",
+        "MAX_JOBS": "2",
         "OUT_ROOT": str(tmp_path),
         "RUN": "1",
     }.items():

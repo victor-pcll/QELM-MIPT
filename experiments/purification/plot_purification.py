@@ -41,6 +41,7 @@ from matplotlib.figure import Figure
 from QELM.evaluation.finite_size_scaling import (
     Curve,
     collapse_quality,
+    crossing_errors,
     crossings,
     fit_collapse,
 )
@@ -96,10 +97,15 @@ def analyse(curves: dict[int, Curve], n_boot: int = 50) -> dict[str, Any]:
     """Crossings and collapses of the pooled curves, for ``fss.json``."""
     sizes = sorted(curves)
     pairs = crossings(curves)
+    pair_errors = crossing_errors(curves, n_boot=4 * n_boot)
     out: dict[str, Any] = {
         "paper": {"p_c": P_C_PAPER, "nu": NU_PAPER},
         "crossings": {
             f"N{a}-N{b}": pairs[(a, b)] for a, b in zip(sizes, sizes[1:], strict=False)
+        },
+        "crossing_errors": {
+            f"N{a}-N{b}": pair_errors[(a, b)]
+            for a, b in zip(sizes, sizes[1:], strict=False)
         },
         "quality_at_paper_values": collapse_quality(curves, P_C_PAPER, NU_PAPER),
     }
@@ -178,11 +184,14 @@ def draw_sweep(sweep_dir: Path, n_boot: int = 50) -> tuple[Figure, dict[str, Any
     pairs = [(a, b) for a, b in zip(sizes, sizes[1:], strict=False)]
     xs = [2 / (a + b) for a, b in pairs]
     ys = [fss["crossings"][f"N{a}-N{b}"] for a, b in pairs]
+    es = [fss["crossing_errors"][f"N{a}-N{b}"] for a, b in pairs]
     keep = [y is not None for y in ys]
-    ax.plot(
+    ax.errorbar(
         np.array(xs)[keep],
         np.array(ys, dtype=float)[keep],
-        "o-",
+        yerr=np.nan_to_num(np.array(es, dtype=float)[keep]),
+        marker="o",
+        capsize=3,
         color="C0",
         label="crossing of consecutive sizes",
     )

@@ -8,6 +8,7 @@ import pytest
 from QELM.evaluation.finite_size_scaling import (
     collapse_quality,
     crossing,
+    crossing_errors,
     crossings,
     fit_collapse,
 )
@@ -52,3 +53,11 @@ def test_collapse_recovers_p_c_and_nu() -> None:
     assert fit.p_c_err > 0
     with pytest.raises(ValueError):
         fit_collapse({16: curves[16]}, 0.16, 1.3)
+
+
+def test_crossing_errors_grow_with_the_noise() -> None:
+    small = crossing_errors(_synthetic(0.16, 1.3, noise=0.002), n_boot=50)
+    large = crossing_errors(_synthetic(0.16, 1.3, noise=0.02), n_boot=50)
+    assert set(small) == {(16, 32), (16, 64), (32, 64)}
+    for pair in small:
+        assert 0 < small[pair] < large[pair]

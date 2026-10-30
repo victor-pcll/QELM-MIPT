@@ -17,7 +17,8 @@
 #     N_VALUES="8 16 32 64"       system qubits, the paper's L, even
 #     P_VALUES="0.10 ... 0.22"    measurement probabilities
 #     SEEDS="0"                   several seeds split the trajectories of a point
-#     JOBS=1                      runs in parallel
+#     MAX_JOBS=1                  runs at once, one core each (JOBS, the
+#                                 former name, works when MAX_JOBS is unset)
 
 # Stop at the first failing command, unset variable or failing pipe.
 set -euo pipefail
@@ -41,7 +42,11 @@ read -r -a N_VALUES <<< "${N_VALUES:-8 16 32 64}"
 read -r -a P_VALUES <<< "${P_VALUES:-0.10 0.12 0.14 0.15 0.16 0.17 0.18 0.20 0.22}"
 read -r -a SEEDS <<< "${SEEDS:-0}"
 L="${L:-2000}"
-JOBS="${JOBS:-1}"
+MAX_JOBS="${MAX_JOBS:-${JOBS:-1}}"
+if ! [[ "$MAX_JOBS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "MAX_JOBS must be a positive integer, got $MAX_JOBS." >&2
+  exit 1
+fi
 # -----------------------------------------------------------------------------
 
 STAMP="$(date +%Y-%m-%d_%H-%M-%S)"
@@ -68,7 +73,7 @@ PIDS=()
 for N in "${SORTED_N[@]}"; do
   for P in "${P_VALUES[@]}"; do
     for SEED in "${SEEDS[@]}"; do
-      while (( $(jobs -rp | wc -l) >= JOBS )); do
+      while (( $(jobs -rp | wc -l) >= MAX_JOBS )); do
         sleep 0.2
       done
       run_one "$N" "$P" "$SEED" &
