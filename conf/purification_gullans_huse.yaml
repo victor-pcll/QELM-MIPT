@@ -1,0 +1,36 @@
+# Reference-qubit purification benchmark against Gullans & Huse, PRL 125,
+# 070606 (2020), arXiv:1910.00020, Fig. 1 (issue #185). Primary config of
+# experiments/purification/purification.py: the main config with the blocks
+# below.
+#
+#   uv run python experiments/purification/purification.py N=16 probe.p=0.16
+defaults:
+  - config
+  - _self_
+
+# Number of system qubits, the paper's chain length L (issue #235: our L is
+# the number of trajectories). Even, for the periodic brickwork.
+N: 16
+
+# The encoding: R (qubit 0) in a Bell pair with one system site, the other
+# system qubits in |0> (QELM.encoding.AncillaBellPairEncoding). site: null is
+# the middle of the chain, N // 2.
+ancilla_bell_pair:
+  N: ${N}
+  site: null
+
+# The probe (QELM.models.circuits.stabilizer). A step is one half-layer of
+# random two-qubit Clifford gates on the periodic brickwork, then a Z
+# measurement of each system qubit with probability p. New gates for every
+# trajectory: the paper averages over circuits.
+# scramble_steps: steps without measurement after the encoding, the paper's
+#   t0 = 2L = 2N.
+# steps: measured steps after the scrambling, the paper's t - t0 = 2L = 2N.
+probe:
+  p: 0.16
+  scramble_steps: ${int:${mul:2,${N}}}
+  steps: ${int:${mul:2,${N}}}
+
+# Number of trajectories (circuits) per run.
+samples:
+  L: 2000
