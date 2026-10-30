@@ -196,3 +196,44 @@ def mean_single_qubit_entropy(
     if not sites:
         raise ValueError("sites must hold at least one qubit.")
     return float(np.mean([renyi_entropy(state, n, [k], base, eps) for k in sites]))
+
+
+def tripartite_mutual_information(
+    state: np.ndarray | sp.spmatrix,
+    base: float = 2.0,
+    eps: float = 1e-12,
+) -> float:
+    """Return ``I_3(A:B:C)`` of the four contiguous quarters of the chain.
+
+    The qubits ``0 .. N-1`` are cut into ``A, B, C, D`` of ``N / 4`` qubits
+    each, in order, and ``I_3 = S_A + S_B + S_C - S_AB - S_AC - S_BC +
+    S_ABC``, with von Neumann entropies. For a pure state ``S_ABC = S_D``.
+    ``I_3`` is negative in the volume-law phase of a monitored circuit and
+    tends to 0 in the area-law phase; its curves for several ``N`` cross
+    near ``p_c`` with small finite-size drift, so the crossing locates the
+    transition without fitting an exponent (Zabalo et al., PRB 101, 060301
+    (2020)). Issue #251.
+
+    Args:
+        state: State or density matrix on ``N`` qubits, ``N`` a multiple of
+            4; see :func:`entanglement_spectrum`.
+        base: Logarithm base: 2 for bits (default), ``np.e`` for nats.
+        eps: Eigenvalues ``<= eps`` are dropped.
+
+    Returns:
+        ``I_3``, in units of ``log_base(2)``.
+
+    Raises:
+        ValueError: If ``N`` is not a positive multiple of 4, or if
+            ``state`` or ``base`` is invalid.
+    """
+    N = state_qubits(state)
+    if N < 4 or N % 4:
+        raise ValueError(f"I_3 of four quarters needs N a multiple of 4, got N={N}.")
+    q = N // 4
+    A, B, C, D = (list(range(k * q, (k + 1) * q)) for k in range(4))
+
+    def S(sites: list[int]) -> float:
+        return von_neumann_entropy(state, sites, base, eps)
+
+    return S(A) + S(B) + S(C) - S(A + B) - S(A + C) - S(B + C) + S(A + B + C)

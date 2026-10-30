@@ -23,13 +23,23 @@ entropy_task:
   # Rounds of (unitary step, measurement of every qubit with probability p).
   # null: 2 * N, long enough for the half-chain entropy of a brickwork
   # circuit to saturate. A circuit applies <model>.layers_per_step brickwork
-  # layers per round.
+  # layers per round. floquet_circuit (issue #239): a round is one half-layer,
+  # the time step of Skinner et al. (2019), and null gives 4 * N of them, the
+  # same 2 N periods, plus one when N / 2 is odd so that the last half-layer
+  # holds the bond across the cut of S (exp_QELM_S.floquet_rounds).
   n_rounds: null
+  # Late-time averages for the finite-size scaling (issue #251): from round
+  # floor(average_from * n_rounds) (one earlier if needed, so that an even
+  # number of rounds is averaged) to the last, average S_1, S_2, S_inf of the
+  # half chain and, when 4 divides N, the tripartite mutual information I_3
+  # of the four quarters. null skips them. 0.5 averages the second half.
+  average_from: null
   # TFIM only: time of one unitary step, in units of 1 / TFIM.J.
   dt: 1.0
   # Phase boundary of the derived classification (+1 below p_c, volume law;
   # -1 above, area law). null skips the classification. About 0.17 for the
-  # Haar brickwork (von Neumann entropy, Zabalo et al. 2020); not known for
+  # Haar brickwork (von Neumann entropy, Zabalo et al. 2020), 0.21 +- 0.16
+  # for the Floquet chain (S_1, Table I of Skinner et al. 2019); not known for
   # the TFIM reservoir, where the sweep itself has to locate it.
   p_c: null
   # K-NN regression on the same features, for comparison (not a ceiling: it

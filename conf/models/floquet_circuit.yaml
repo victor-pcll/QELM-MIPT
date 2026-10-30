@@ -1,0 +1,36 @@
+# @package _global_
+
+# Local Floquet Ising chain of Skinner, Ruhman and Nahum, PRX 9, 031009 (2019),
+# their Eq. (1) (QELM.models.circuits.floquet.FloquetBrickworkCircuit, issue
+# #239). Every brick of the running-bond circuit, on the sites x and x + 1, is
+#   U = exp{-i [phi_xx X_x X_x+1 + theta_x (X_x + X_x+1)]}
+#     x exp{-i [phi_zz Z_x Z_x+1 + theta_z (Z_x + Z_x+1)]},
+# the same deterministic unitary everywhere: nearest-neighbour Ising couplings
+# in a transverse (theta_x) and a longitudinal (theta_z) field, chaotic, with
+# no conserved charge (not even the Z parity). One layer is one time step of the
+# paper, the bricks on the even bonds or on the odd ones in turn (two layers
+# make a period); measuring after each layer is the protocol of the paper.
+# Selected with models=floquet_circuit. The gates act on the N system qubits
+# only, never on the Nr ancillas.
+models: floquet_circuit
+
+# Number of system qubits, ancilla excluded (N_total = N + Nr, see
+# conf/config.yaml).
+# Override it with N=6, not floquet_circuit.N=6.
+N: 10
+
+floquet_circuit:
+  N: ${N} # number of system qubits, always the top-level N
+  Nr: ${Nr} # ancillas, left untouched by the gates
+  # The values of Sec. II of the paper, in the chaotic regime.
+  phi_xx: 0.3
+  phi_zz: 0.6
+  theta_x: 0.2
+  theta_z: 0.4
+  # Half-layers (time steps of the paper) per time-evolution step. A sample
+  # runs n_rounds * layers_per_step half-layers, a measurement round after
+  # each step.
+  layers_per_step: 1
+  boundary: open # open or periodic
+  # The gates are fixed, so true and false give the same circuit.
+  fixed_instance: true
