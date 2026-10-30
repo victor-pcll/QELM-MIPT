@@ -37,6 +37,13 @@ ancilla_charge_sector:
 # Override with state_representation=vector.
 state_representation: density
 
+# One step of the evolution of experiments/QELM_Q/exp_QELM_Q.py (issue #253):
+# tfim evolves for dt with the Hamiltonian of the model, haar_u1 applies a
+# new Haar unitary on each charge sector of the system (a fully scrambling
+# step, which ignores dt; needs state_representation=vector). Override with
+# unitary_step=haar_u1.
+unitary_step: tfim
+
 # The evolution block (evolution.t, evolution.dt, evolution.n_steps) depends on the
 # Hamiltonian, so it lives in conf/models/ next to it.
 

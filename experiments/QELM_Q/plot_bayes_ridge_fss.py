@@ -174,7 +174,17 @@ def crossings(
 
 def tfim_summary(sweep: Path) -> list[dict[str, Any]]:
     """Average the TFIM runs of ``sweep`` over the seeds, one row per ``(N, p)``."""
-    rows = load_sweep(sweep, TFIM_KEYS)
+    return summarize_tfim(load_sweep(sweep, TFIM_KEYS))
+
+
+def summarize_tfim(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Average rows of :func:`load_sweep` over the seeds, one row per ``(N, p)``.
+
+    The error of a point is the larger of the standard error over the seeds
+    and the binomial error of the pooled test sets; ``rounds`` is the number
+    of measurement rounds. The rows must share every other parameter (the
+    ``dt`` sweep of issue #253 calls it once per ``dt``).
+    """
     for row in rows:
         if row["final"] is not True:
             raise ValueError(
