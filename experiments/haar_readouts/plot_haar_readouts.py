@@ -47,6 +47,29 @@ TITLES = {
 }
 
 
+# Feature sets other than the record, as written in the panel titles.
+FEATURE_LABELS = {
+    "X": "<X_k>",
+    "Y": "<Y_k>",
+    "Z": "<Z_k>",
+    "XX": "<X_i X_j>",
+    "YY": "<Y_i Y_j>",
+    "ZZ": "<Z_i Z_j>",
+    "all": "the six sets of observables",
+}
+
+
+def title(name: str) -> str:
+    """Panel title of a readout of the record (``ridge``) or of a feature set
+    of the final state (``ridge_ZZ``)."""
+    if name in TITLES:
+        return TITLES[name]
+    readout, _, feature = name.rpartition("_")
+    if readout in TITLES and feature in FEATURE_LABELS:
+        return f"{TITLES[readout]} on {FEATURE_LABELS[feature]}"
+    return name
+
+
 def load_rows(sweep_dir: str | Path) -> list[dict[str, Any]]:
     """Return one row per run, with its folder, gate draw and ``p`` values.
 
@@ -72,7 +95,7 @@ def readouts(rows: list[dict[str, Any]]) -> list[str]:
         if (m := re.fullmatch(r"accuracy_(.+)_p[0-9.e+-]+", key))
         and m.group(1) != "baseline"
     }
-    order = list(TITLES)
+    order = [*TITLES] + [f"{r}_{f}" for r in TITLES for f in FEATURE_LABELS]
     return sorted(
         found, key=lambda n: (order.index(n) if n in order else len(order), n)
     )
@@ -130,7 +153,7 @@ def draw_readout(
     ax_a.axhline(0.5, color="0.6", lw=1)
     ax_a.set_ylim(0.4, 1.02)
     ax_a.set_ylabel("accuracy on the charge sector (test)")
-    ax_a.set_title(TITLES.get(readout, readout))
+    ax_a.set_title(title(readout))
     ax_r.axhline(0.0, color="0.6", lw=1)
     # Overfitted outputs can fall well below 0: keep every point in view.
     r2_low = min(
@@ -139,7 +162,7 @@ def draw_readout(
     )
     ax_r.set_ylim(min(-0.3, float(np.nan_to_num(r2_low)) - 0.05), 1.02)
     ax_r.set_ylabel(r"$R^2$ of the output (test)")
-    ax_r.set_title(TITLES.get(readout, readout))
+    ax_r.set_title(title(readout))
     for ax in (ax_s, ax_a, ax_r):
         ax.set_xlabel("p")
         ax.legend(frameon=False, fontsize=9)

@@ -921,6 +921,11 @@ classifier outputs `2 P(Y = +1) - 1`):
 - `mlp`: a neural network with two hidden layers of 64 units;
 - `gradient_boosting`: gradient-boosted trees.
 
+`readouts_task.features` sets what the readouts read, each set on its own:
+`M`, the record (default); `X`, `Y`, `Z`, the `<P_k>` of the system qubits in
+the final state after `R` is measured; `XX`, `YY`, `ZZ`, the `<P_i P_j>` on
+every pair; `all`, the six observable sets side by side. The scores of a set
+other than `M` are named `<readout>_<set>` (`accuracy_ridge_ZZ_p<p>`).
 `S_R_mean_p<p>` is the mean entropy of `R` (bits), the purification curve.
 `haar_circuit.fixed_instance=false` (the default) draws new gates for every
 trajectory; `true` keeps one circuit for the run.
@@ -932,7 +937,7 @@ uv run python experiments/haar_readouts/plot_haar_readouts.py outputs/haar_reado
 ```
 
 The launcher sweeps `GATES` (`random fixed`), `N_VALUES` (`8`) and `SEEDS`
-(`PER_P`, `P_VALUES`, `MAX_JOBS` change the defaults), one folder per run,
+(`PER_P`, `P_VALUES`, `READOUTS`, `FEATURES`, `MAX_JOBS` change the defaults), one folder per run,
 `<gates>_N<N>_seed<seed>/`. The plot script writes one figure per readout,
 `<readout>.png` with its JSON: the purification curve `S_R(p)` on the left,
 the accuracy of the readout in the middle, with the chance level 1/2, and

@@ -16,6 +16,7 @@ import pytest
 from QELM import load_config
 from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.models.circuits.haar import HaarBrickworkCircuit
+from QELM.physics.operators import PAULIS, get_site_operator
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FOLDER = REPO_ROOT / "experiments" / "haar_readouts"
@@ -62,15 +63,59 @@ def test_trajectory_record_and_purification() -> None:
     rng = np.random.default_rng(0)
     # p = 0: nothing is measured, the gates never touch R, which stays
     # maximally entangled with the charge of the system.
-    M, S_R, Y = exp.trajectory(psi0, _circuit(3, 1), 0.0, rng)
+    M, S_R, Y, psi = exp.trajectory(psi0, _circuit(3, 1), 0.0, rng)
     assert M.shape == (3, N) and not M.any()
     assert S_R == pytest.approx(1.0)
     assert Y in (1.0, -1.0)
+    # The final state is the one after R is measured: R is in |0> for +1.
+    weight = np.abs(psi.reshape(2, -1)) ** 2
+    assert weight[0 if Y > 0 else 1].sum() == pytest.approx(1.0)
     # p = 1: every system qubit is measured at every round, the last round
     # fixes the state of the system, so R is purified.
-    M, S_R, Y = exp.trajectory(psi0, _circuit(3, 1), 1.0, rng)
+    M, S_R, Y, _ = exp.trajectory(psi0, _circuit(3, 1), 1.0, rng)
     assert set(np.unique(M)) <= {-1.0, 1.0} and np.all(M != 0)
     assert S_R == pytest.approx(0.0, abs=1e-9)
+
+
+def test_observables_match_dense_operators() -> None:
+    exp = _load(SCRIPT)
+    ops = exp.observables(N)
+    assert [len(ops[name]) for name in exp.OBSERVABLE_SETS] == [N] * 3 + [
+        N * (N - 1) // 2
+    ] * 3
+    rng = np.random.default_rng(5)
+    psi = rng.normal(size=2 ** (N + 1)) + 1j * rng.normal(size=2 ** (N + 1))
+    psi /= np.linalg.norm(psi)
+    # <Y_1 Y_3> of system qubits 1 and 3, state qubits 2 and 4.
+    YY = get_site_operator(PAULIS["Y"], 2, N + 1) @ get_site_operator(
+        PAULIS["Y"], 4, N + 1
+    )
+    pairs = [(i, j) for i in range(N) for j in range(i + 1, N)]
+    values = exp.expectation_values(psi, ops["YY"])
+    assert values[pairs.index((1, 3))] == pytest.approx(np.real(psi.conj() @ YY @ psi))
+    Z0 = get_site_operator(PAULIS["Z"], 1, N + 1)
+    assert exp.expectation_values(psi, ops["Z"])[0] == pytest.approx(
+        np.real(psi.conj() @ Z0 @ psi)
+    )
+
+
+def test_observable_feature_sets() -> None:
+    out = _run(
+        "readouts_task.readouts=[ridge]",
+        "readouts_task.features=[M,Z,XX,all]",
+    )
+    L = 3 * PER_P
+    assert out["features_Z"].shape == (L, N)
+    assert out["features_XX"].shape == (L, N * (N - 1) // 2)
+    # "all" needs every observable set.
+    for name in ("X", "Y", "YY", "ZZ"):
+        assert f"features_{name}" in out
+    assert np.all(np.abs(out["features_Z"]) <= 1.0 + 1e-9)
+    metrics = out["metrics"]
+    for name in ("ridge", "ridge_Z", "ridge_XX", "ridge_all"):
+        assert 0.0 <= metrics[f"accuracy_{name}_p0.5"] <= 1.0
+        assert f"r2_{name}_p1" in metrics
+    assert "accuracy_ridge_X_p0.5" not in metrics
 
 
 def test_haar_gates_do_not_conserve_the_charge() -> None:
@@ -148,6 +193,7 @@ def test_fixed_instance_and_reproducibility() -> None:
         ("readouts_task.samples_per_p=5", "samples_per_p"),
         ("readouts_task.n_rounds=0", "n_rounds"),
         ("readouts_task.readouts=[ridge,svm]", "Unknown readouts"),
+        ("readouts_task.features=[M,XY]", "features"),
     ],
 )
 def test_rejects_bad_settings(override: str, match: str) -> None:
@@ -221,3 +267,31 @@ def test_bash_sweep_refuses_bad_settings(tmp_path: Path) -> None:
             text=True,
         )
         assert result.returncode == 2, key
+
+
+def test_bash_sweep_with_observables(tmp_path: Path) -> None:
+    env = {
+        **os.environ,
+        "OUT_DIR": str(tmp_path),
+        "GATES": "fixed",
+        "N_VALUES": "3",
+        "SEEDS": "1",
+        "PER_P": "20",
+        "P_VALUES": "0 1",
+        "READOUTS": "ridge",
+        "FEATURES": "Z ZZ",
+        "TQDM_DISABLE": "1",
+    }
+    subprocess.run(
+        ["bash", str(BASH_SCRIPT)],
+        check=True,
+        env=env,
+        cwd=tmp_path,
+        capture_output=True,
+    )
+    metrics = json.loads((tmp_path / "fixed_N3_seed1" / "metrics.json").read_text())
+    assert "accuracy_ridge_ZZ_p1" in metrics and "accuracy_ridge_p1" not in metrics
+    plot = _load(PLOT_SCRIPT)
+    plot.main([str(tmp_path)])
+    assert sorted(p.stem for p in tmp_path.glob("*.png")) == ["ridge_Z", "ridge_ZZ"]
+    assert plot.title("ridge_ZZ") == "Ridge (linear) on <Z_i Z_j>"

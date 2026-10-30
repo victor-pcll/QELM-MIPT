@@ -20,6 +20,8 @@
 #     SEEDS="42 43 44"            seeds
 #     PER_P=2000                  trajectories per p (readouts_task.samples_per_p)
 #     P_VALUES="0 0.1 0.2"        overrides readouts_task.p_values
+#     READOUTS="ridge"            overrides readouts_task.readouts
+#     FEATURES="X Z ZZ all"       overrides readouts_task.features
 #     MAX_JOBS=4                  runs at once (default 1)
 #
 # A failed run does not stop the others: the sweep goes to the end, lists the
@@ -53,6 +55,14 @@ done
 P_LIST=""
 if [[ -n "${P_VALUES:-}" ]]; then
   P_LIST="[$(echo "$P_VALUES" | xargs | tr ' ' ',')]"
+fi
+R_LIST=""
+if [[ -n "${READOUTS:-}" ]]; then
+  R_LIST="[$(echo "$READOUTS" | xargs | tr ' ' ',')]"
+fi
+F_LIST=""
+if [[ -n "${FEATURES:-}" ]]; then
+  F_LIST="[$(echo "$FEATURES" | xargs | tr ' ' ',')]"
 fi
 # -----------------------------------------------------------------------------
 
@@ -88,6 +98,8 @@ run_one() {
     "haar_circuit.fixed_instance=$FIXED" \
     "readouts_task.samples_per_p=$PER_P" \
     ${P_LIST:+"readouts_task.p_values=$P_LIST"} \
+    ${R_LIST:+"readouts_task.readouts=$R_LIST"} \
+    ${F_LIST:+"readouts_task.features=$F_LIST"} \
     "hydra.run.dir=$RUN_DIR"
   status=$?
   if (( status != 0 )); then
@@ -97,7 +109,7 @@ run_one() {
   fi
 }
 export -f run_one
-export OUT_DIR PER_P P_LIST FAILED_LOG
+export OUT_DIR PER_P P_LIST R_LIST F_LIST FAILED_LOG
 
 QUEUE_STATUS=0
 printf '%s\0' "${RUNS[@]}" \

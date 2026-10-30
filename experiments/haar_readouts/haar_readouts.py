@@ -31,9 +31,22 @@ each of its ``readouts_task.samples_per_p`` trajectories:
 
 The state stays pure, so it is simulated as a state vector.
 
+The readouts read one or several feature sets (``readouts_task.features``,
+:data:`FEATURE_SETS`):
+
+- ``M``: the flattened record (default);
+- ``X``, ``Y``, ``Z``: the expectation values ``<P_k>`` of the system qubits
+  in the final state, conditioned on the record and on the outcome of
+  ``R`` (the state after ``R`` is measured, as in ``experiments/QELM_Q``:
+  without that projection the state of the system would be the same mixture
+  of both sectors for every label);
+- ``XX``, ``YY``, ``ZZ``: the two-site correlators ``<P_i P_j>`` of the
+  same state, on every pair ``i < j`` of system qubits;
+- ``all``: the six sets above side by side.
+
 At each ``p``, the trajectories are split into training and test sets
 (``samples.train_fraction``, stratified on ``Y``) and every readout of
-``readouts_task.readouts`` is fitted on the flattened record and scored by
+``readouts_task.readouts`` is fitted on every feature set and scored by
 two scores on the test set: its ``accuracy`` (the sign of its output
 against ``Y``) and the ``R2`` of its output ``s`` against ``Y``
 (``sklearn.metrics.r2_score``). The output of a ridge is its prediction of
@@ -66,8 +79,9 @@ Everything is written to the Hydra run directory, by default
   ``(L,)``;
 - ``metrics.json``: per ``p``, ``S_R_mean_p<p>``, ``S_R_std_p<p>``,
   ``accuracy_baseline_p<p>`` (the majority label of the training set) and
-  ``accuracy_<readout>_p<p>`` and ``r2_<readout>_p<p>`` for each readout;
-  ``n_rounds``;
+  ``accuracy_<name>_p<p>`` and ``r2_<name>_p<p>`` for each readout and
+  feature set, with ``<name>`` the readout for ``M`` and
+  ``<readout>_<set>`` for the other sets (``ridge_ZZ``); ``n_rounds``;
 - ``.hydra/config.yaml`` and ``resolved_config.json``: the config of the run.
 """
 
@@ -80,6 +94,7 @@ from typing import Any
 
 import hydra
 import numpy as np
+import scipy.sparse as sp
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 from sklearn.ensemble import HistGradientBoostingClassifier
@@ -95,6 +110,7 @@ from QELM.encoding import AncillaChargeSectorEncoding
 from QELM.evaluation.entropy import von_neumann_entropy
 from QELM.evaluation.entropy_regression import stratified_split
 from QELM.models.circuits.haar import HaarBrickworkCircuit
+from QELM.physics.operators import PAULIS, get_site_operator
 from QELM.training.measurements.projective import measure_projective_psi
 from QELM.utils import save_config
 
@@ -163,6 +179,39 @@ def _gradient_boosting(
     return _mean_label(model, X_test)
 
 
+# Feature sets of the readouts: the record, and observables of the final state.
+OBSERVABLE_SETS = ("X", "Y", "Z", "XX", "YY", "ZZ")
+FEATURE_SETS = ("M", *OBSERVABLE_SETS, "all")
+
+
+def observables(N: int) -> dict[str, list[sp.csr_matrix]]:
+    """Return the Pauli operators of every set of :data:`OBSERVABLE_SETS`.
+
+    The state holds ``R`` (qubit 0) and the ``N`` system qubits (``1 .. N``):
+    ``P_k`` on each system qubit, ``P_i P_j`` on each pair ``i < j``, sparse.
+    """
+    n_total = N + 1
+    single = {
+        name: [get_site_operator(op, k + 1, n_total, sparse=True) for k in range(N)]
+        for name, op in PAULIS.items()
+    }
+    ops: dict[str, list[sp.csr_matrix]] = {}
+    for name in OBSERVABLE_SETS:
+        if len(name) == 1:
+            ops[name] = single[name]
+        else:
+            P = single[name[0]]
+            ops[name] = [
+                sp.csr_matrix(P[i] @ P[j]) for i in range(N) for j in range(i + 1, N)
+            ]
+    return ops
+
+
+def expectation_values(psi: np.ndarray, ops: list[sp.csr_matrix]) -> np.ndarray:
+    """Return ``<psi| O |psi>`` for every operator of ``ops``."""
+    return np.array([float(np.real(np.vdot(psi, op @ psi))) for op in ops])
+
+
 READOUTS: dict[str, Readout] = {
     "ridge": _ridge,
     "ridge_pairs": _ridge_pairs,
@@ -177,13 +226,14 @@ def trajectory(
     circuit: HaarBrickworkCircuit,
     p: float,
     rng: np.random.Generator,
-) -> tuple[np.ndarray, float, float]:
+) -> tuple[np.ndarray, float, float, np.ndarray]:
     """Run one trajectory from ``psi0``: ``circuit.depth`` rounds of gates
     and measurements of each system qubit with probability ``p``.
 
     Returns:
-        ``(M, S_R, Y)``: the record ``(depth, N)``, the entropy of ``R`` in
-        bits and its Z outcome, +-1, drawn with the Born rule.
+        ``(M, S_R, Y, psi)``: the record ``(depth, N)``, the entropy of ``R``
+        in bits, its Z outcome, +-1, drawn with the Born rule, and the final
+        state after that measurement of ``R``.
     """
     N, N_total = circuit.N, circuit.N_total
     psi = psi0
@@ -194,8 +244,8 @@ def trajectory(
             if rng.random() < p:
                 psi, M[j, k] = measure_projective_psi(psi, k + 1, N_total, rng)
     S_R = von_neumann_entropy(psi, [0])
-    _, Y = measure_projective_psi(psi, 0, N_total, rng)
-    return M, S_R, float(Y)
+    psi, Y = measure_projective_psi(psi, 0, N_total, rng)
+    return M, S_R, float(Y), psi
 
 
 def run(cfg: DictConfig) -> dict[str, Any]:
@@ -233,6 +283,14 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     unknown = [name for name in names if name not in READOUTS]
     if unknown:
         raise ValueError(f"Unknown readouts {unknown}; known: {', '.join(READOUTS)}.")
+    sets = [str(name) for name in task.get("features", ["M"])]
+    unknown = [name for name in sets if name not in FEATURE_SETS]
+    if unknown or not sets:
+        raise ValueError(
+            f"readouts_task.features must hold sets of {FEATURE_SETS}, got {sets}."
+        )
+    needed = [name for name in OBSERVABLE_SETS if name in sets or "all" in sets]
+    ops = observables(N)
 
     seed = int(cfg.seed)
     gate_rng = np.random.default_rng([seed, RNG_TAG, 0])
@@ -250,14 +308,19 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     M = np.zeros((L, n_rounds, N))
     S_R = np.zeros(L)
     Y = np.zeros(L)
+    obs = {name: np.zeros((L, len(ops[name]))) for name in needed}
     for i in tqdm(range(L)):
         if not fixed and i > 0:
             circuit.redraw(gate_rng)
-        M[i], S_R[i], Y[i] = trajectory(psi0, circuit, float(p[i]), rng)
+        M[i], S_R[i], Y[i], psi = trajectory(psi0, circuit, float(p[i]), rng)
+        for name in needed:
+            obs[name][i] = expectation_values(psi, ops[name])
 
     split_rng = np.random.default_rng([seed, RNG_TAG, 2])
     fit_rng = np.random.default_rng([seed, RNG_TAG, 3])
-    X = M.reshape(L, -1)
+    features = {"M": M.reshape(L, -1), **obs}
+    if "all" in sets:
+        features["all"] = np.hstack([obs[name] for name in OBSERVABLE_SETS])
     metrics: dict[str, float] = {"n_rounds": float(n_rounds)}
     for level in levels:
         idx = np.flatnonzero(p == level)
@@ -270,17 +333,30 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         metrics[f"S_R_std_{key}"] = float(S_R[idx].std())
         majority = 1.0 if np.mean(Y[tr]) >= 0.0 else -1.0
         metrics[f"accuracy_baseline_{key}"] = float(np.mean(Y[te] == majority))
-        for name in names:
-            if np.unique(Y[tr]).size < 2 or not X[tr].any():
-                # Nothing to learn from: a single label, or an empty record
-                # (p = 0). The output is the mean label of the training set,
-                # whose sign is the majority label.
-                score = np.full(te.size, float(np.mean(Y[tr])))
-            else:
-                score = READOUTS[name](X[tr], Y[tr], X[te], fit_rng)
-            metrics[f"accuracy_{name}_{key}"] = float(np.mean(_sign(score) == Y[te]))
-            metrics[f"r2_{name}_{key}"] = float(r2_score(Y[te], score))
-    return {"M": M, "Y": Y, "S_R": S_R, "p": p, "metrics": metrics}
+        for feature in sets:
+            X = features[feature]
+            for readout in names:
+                name = readout if feature == "M" else f"{readout}_{feature}"
+                if np.unique(Y[tr]).size < 2 or np.ptp(X[tr], axis=0).max() < 1e-12:
+                    # Nothing to learn from: a single label, or constant
+                    # features (the empty record at p = 0). The output is
+                    # the mean label of the training set, whose sign is the
+                    # majority label.
+                    score = np.full(te.size, float(np.mean(Y[tr])))
+                else:
+                    score = READOUTS[readout](X[tr], Y[tr], X[te], fit_rng)
+                metrics[f"accuracy_{name}_{key}"] = float(
+                    np.mean(_sign(score) == Y[te])
+                )
+                metrics[f"r2_{name}_{key}"] = float(r2_score(Y[te], score))
+    return {
+        "M": M,
+        "Y": Y,
+        "S_R": S_R,
+        "p": p,
+        **{f"features_{name}": obs[name] for name in needed},
+        "metrics": metrics,
+    }
 
 
 @hydra.main(version_base="1.3", config_path="../../conf", config_name="haar_readouts")
@@ -301,7 +377,11 @@ def main(cfg: DictConfig) -> None:
     metrics = results["metrics"]
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2))
     save_config(cfg, out_dir)
-    names = [str(name) for name in cfg.readouts_task.readouts]
+    names = [
+        readout if feature == "M" else f"{readout}_{feature}"
+        for feature in cfg.readouts_task.get("features", ["M"])
+        for readout in cfg.readouts_task.readouts
+    ]
     print(f"N: {cfg.N}  rounds: {int(metrics['n_rounds'])}")
     print(f"{'p':>6} {'S_R':>6} " + " ".join(f"{name:>17}" for name in names))
     for level in cfg.readouts_task.p_values:
