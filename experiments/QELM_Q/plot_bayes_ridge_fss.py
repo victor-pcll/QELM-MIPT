@@ -174,14 +174,28 @@ def crossings(
 
 def tfim_summary(sweep: Path) -> list[dict[str, Any]]:
     """Average the TFIM runs of ``sweep`` over the seeds, one row per ``(N, p)``."""
-    rows = load_sweep(sweep, TFIM_KEYS)
+    return summarize_tfim(load_sweep(sweep, TFIM_KEYS))
+
+
+def summarize_tfim(
+    rows: list[dict[str, Any]], metrics: Sequence[str] | None = None
+) -> list[dict[str, Any]]:
+    """Average rows of :func:`load_sweep` over the seeds, one row per ``(N, p)``.
+
+    The error of a point is the larger of the standard error over the seeds
+    and the binomial error of the pooled test sets; ``rounds`` is the number
+    of measurement rounds. The rows must share every other parameter (the
+    ``dt`` sweep of issue #253 calls it once per ``dt``). ``metrics``
+    defaults to those of :data:`TFIM_CURVES`.
+    """
     for row in rows:
         if row["final"] is not True:
             raise ValueError(
                 f"{row['run']}: issue #233 needs final_measurement=true, "
                 f"got {row['final']!r}."
             )
-    metrics = [m for m, _, _ in TFIM_CURVES]
+    if metrics is None:
+        metrics = [m for m, _, _ in TFIM_CURVES]
     summary = summarize(rows, by=("N", "p"), metrics=metrics)
     n_test = {(r["N"], r["p"]): r["n_test"] for r in rows}
     steps = {(r["N"], r["p"]): r["steps"] for r in rows}

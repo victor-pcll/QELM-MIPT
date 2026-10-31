@@ -124,6 +124,15 @@ and outcomes from the same generators, so for a given seed they give the
 same features up to rounding (``tests/test_exp_QELM_Q.py``). The vector
 path is what makes ``N_total = 12`` qubits affordable.
 
+``unitary_step=haar_u1`` (issue #253) replaces the TFIM step by a global
+Haar U(1) unitary of the system, ``1_R (x) U_S`` with ``U_S`` block-diagonal
+in the charge: an independent Haar unitary on each charge sector, drawn anew
+at every step of every sample (:func:`haar_u1_step`). It scrambles the
+charge sector completely at each step, so it realizes the scrambled model of
+the Bayes-Ridge readout exactly: the control of the ``dt`` sweep of issue
+#253, where the TFIM step of duration ``dt`` scrambles only partly when
+``dt`` is below the scrambling time. It needs ``state_representation=vector``.
+
 The half-system entanglement entropy of the final state, ``S_half[i]``
 (von Neumann, in bits, of the first ``N // 2`` system qubits; the state of
 ``S`` is pure once ``R`` is measured), tracks how much the measurements
@@ -204,6 +213,7 @@ from QELM.evaluation.metrics import (
     balanced_accuracy,
     majority_accuracy,
 )
+from QELM.models.circuits.haar import haar_unitary
 from QELM.physics import X as PAULI_X
 from QELM.physics import Y as PAULI_Y
 from QELM.physics import Z, local_expectation, partial_trace
@@ -258,6 +268,9 @@ STATE_REPRESENTATION = "state_representation"
 STATE_REPRESENTATIONS = ("density", "vector")
 # Labels alternate Q1, Q2 instead of the Born draw of R (issue #233).
 BALANCED = "samples.balanced"
+# One step of the evolution: the TFIM for dt, or a Haar U(1) unitary (#253).
+UNITARY_STEP = "unitary_step"
+UNITARY_STEPS = ("tfim", "haar_u1")
 
 
 def project_ancilla(state: np.ndarray, r: int, N_total: int) -> np.ndarray:
@@ -440,6 +453,50 @@ def parity_step(
     return step
 
 
+def haar_u1_step(
+    r: int, Nr: int, N: int, rng: np.random.Generator | None = None
+) -> Callable[[np.ndarray], np.ndarray]:
+    """Return ``psi -> (1_R (x) U_S) psi`` with ``U_S`` a Haar U(1) unitary.
+
+    ``U_S`` conserves the charge ``Q`` of the system, the number of qubits in
+    ``|1>``: it is block-diagonal, with an independent Haar unitary on each
+    charge sector, and a new ``U_S`` is drawn at every call (issue #253).
+    After ``R`` is measured the system holds one charge, which the Z
+    measurements keep, so only the block of that sector acts on the state:
+    the step draws that block alone, a Haar unitary of size ``C(N, Q)``,
+    and leaves the other amplitudes, all zero, as they are.
+
+    Args:
+        r: Outcome of ``R``, ``+1`` (``|0>_R``) or ``-1`` (``|1>_R``).
+        Nr: Number of ancilla qubits, the first sites.
+        N: Number of system qubits.
+        rng: Generator of the unitaries; ``None`` draws them from the
+            global NumPy state, as the disorder of the TFIM.
+
+    Returns:
+        The step, a function of a state vector of shape ``(2**(N + Nr),)``.
+
+    Raises:
+        ValueError: When called on a state whose system part is not in one
+            charge sector.
+    """
+    row = 0 if r == 1 else 2**Nr - 1
+    popcount = np.array([bin(b).count("1") for b in range(2**N)])
+
+    def step(state: np.ndarray) -> np.ndarray:
+        system = state.reshape(2**Nr, 2**N)[row]
+        Q = popcount[int(np.argmax(np.abs(system)))]
+        sector = np.flatnonzero(popcount == Q)
+        if not np.allclose(np.delete(system, sector), 0.0, atol=1e-12):
+            raise ValueError("The system state is not in one charge sector.")
+        out = np.zeros_like(state)
+        U = haar_unitary(sector.size, rng)
+        out.reshape(2**Nr, 2**N)[row, sector] = U @ system[sector]
+        return out
+
+    return step
+
+
 def observable_features(rho: np.ndarray, system: list[int], name: str) -> np.ndarray:
     """Return the features of one set of :data:`FEATURE_SETS` for ``rho``.
 
@@ -489,7 +546,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             ``samples.delta`` (default ``None``): when set, ``samples.L`` is
             replaced in ``cfg`` by ``int(delta * N)``, and
             ``samples.train_size`` follows (issue #201), and
-            ``samples.balanced`` (default ``False``, issue #233).
+            ``samples.balanced`` (default ``False``, issue #233) and
+            ``unitary_step`` (default ``"tfim"``, issue #253).
 
     Returns:
         The arrays and metrics of the run: ``X`` (with the bias column),
@@ -526,6 +584,13 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             f"got {representation!r}."
         )
     vector = representation == "vector"
+    unitary_step = str(OmegaConf.select(cfg, UNITARY_STEP, default="tfim"))
+    if unitary_step not in UNITARY_STEPS:
+        raise ValueError(
+            f"{UNITARY_STEP} must be one of {UNITARY_STEPS}, got {unitary_step!r}."
+        )
+    if unitary_step == "haar_u1" and not vector:
+        raise ValueError(f"{UNITARY_STEP}=haar_u1 needs {STATE_REPRESENTATION}=vector.")
     n_rounds = nbr_time_evolution if final else nbr_time_evolution - 1
     state0 = sector.state() if vector else sector.rho()
     delta = sample_ratio(cfg, N)
@@ -559,7 +624,10 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             # The label first: R measured in Z fixes the charge sector of S.
             if not balanced:
                 rho, r = measure_projective_psi(state0, 0, N_total)
-            U = parity_step(model, rho, r, Nr, N, dt)
+            if unitary_step == "haar_u1":
+                U = haar_u1_step(r, Nr, N)
+            else:
+                U = parity_step(model, rho, r, Nr, N, dt)
         else:
             U = np.kron(identity_R, model.propagator(dt=dt))
             if not balanced:
