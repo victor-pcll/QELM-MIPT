@@ -47,6 +47,28 @@ The readouts read one or several feature sets (``readouts_task.features``,
 - ``all``: the six sets above side by side, the features of the QELM;
 - ``M_all``: the record and the six sets side by side, the QELM-M.
 
+Further readouts of the final state, to benchmark what a QELM can read
+(each a feature map of the state, read by a trained classical model):
+
+- ``local2``: every one- and two-site Pauli string, ``<P_k>`` and
+  ``<P_i Q_j>`` for all ``P, Q`` in ``X, Y, Z`` (the two-site reduced
+  states, cross terms such as ``<X_i Z_j>`` included);
+- ``born``: the ``2**N`` Born probabilities of the system in the Z basis,
+  the output of a QELM that measures every qubit in Z;
+- ``reservoir``: the same probabilities after one fixed Haar unitary on the
+  ``N`` system qubits (drawn once per run, even with new circuit gates per
+  trajectory), the fixed scrambling reservoir of a QELM;
+- ``shot``: one Z-basis bitstring of the system drawn with the Born rule,
+  +-1 per qubit: what one run of the experiment gives, since a trajectory
+  state is prepared only once;
+- ``M_shot``: the record and that bitstring side by side;
+- ``M_x_all``: the record, the six observable sets and the product of every
+  entry of the record with every observable: a readout of the observables
+  whose weights depend on the record (feedforward on ``M``).
+
+Every set but ``shot`` and ``M_shot`` assumes the exact expectation values
+of the trajectory state, as the observable sets above.
+
 At each ``p``, the trajectories are split into training and test sets
 (``samples.train_fraction``, stratified on ``Y``) and every readout of
 ``readouts_task.readouts`` is fitted on every feature set and scored by
@@ -60,9 +82,13 @@ record, 1 for a perfect one, negative for one worse than the mean of ``Y``.
 - ``ridge``: the linear readout of the QELM, a ridge regression of ``Y``
   (``RidgeCV``, its alpha chosen by leave-one-out cross-validation over
   :data:`ALPHAS`), the sign of its prediction;
-- ``ridge_pairs``: the same ridge on the record and the products of every
-  pair of its entries, the quadratic features a parity of two outcomes
-  needs;
+- ``logistic``: a logistic regression on the standardized features
+  (``LogisticRegressionCV``, its ``C`` chosen by 5-fold cross-validation
+  over :data:`CS`), the linear classifier of the QELM;
+- ``ridge_pairs``: the same ridge on the features and the products of
+  every pair of them, the quadratic features a parity of two outcomes
+  needs. On observables it is a readout quadratic in the state, as with two
+  copies of it;
 - ``knn``: ``sqrt(n_train)`` nearest neighbors, weighted by distance;
 - ``mlp``: a neural network with two hidden layers of 64 units (ReLU,
   early stopping);
@@ -101,11 +127,12 @@ import scipy.sparse as sp
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 from sklearn.ensemble import HistGradientBoostingClassifier
-from sklearn.linear_model import RidgeCV
+from sklearn.linear_model import LogisticRegressionCV, RidgeCV
 from sklearn.metrics import r2_score
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
-from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from tqdm import tqdm
 
 from QELM import check_qubit_counts, set_seed
@@ -114,7 +141,7 @@ from QELM.evaluation.entropy import von_neumann_entropy
 from QELM.evaluation.entropy_regression import stratified_split
 from QELM.models.circuits.base import BrickworkCircuit
 from QELM.models.circuits.clifford import CliffordBrickworkCircuit
-from QELM.models.circuits.haar import HaarBrickworkCircuit
+from QELM.models.circuits.haar import HaarBrickworkCircuit, haar_unitary
 from QELM.physics.operators import PAULIS, get_site_operator
 from QELM.training.measurements.projective import measure_projective_psi
 from QELM.utils import save_config
@@ -123,6 +150,8 @@ from QELM.utils import save_config
 RNG_TAG = 260
 # Regularizations tried by the ridge readouts.
 ALPHAS = np.logspace(-2, 4, 13)
+# Inverse regularizations tried by the logistic readout.
+CS = np.logspace(-3, 2, 6)
 
 # A readout: (training features, training labels, test features, rng) ->
 # output on the test set, an estimate of Y in [-1, 1] for the classifiers.
@@ -146,6 +175,23 @@ def _ridge(
 ) -> np.ndarray:
     model = RidgeCV(alphas=ALPHAS).fit(X, y)
     return np.asarray(model.predict(X_test), dtype=float)
+
+
+def _logistic(
+    X: np.ndarray, y: np.ndarray, X_test: np.ndarray, rng: np.random.Generator
+) -> np.ndarray:
+    model = make_pipeline(
+        StandardScaler(),
+        LogisticRegressionCV(
+            Cs=CS,
+            cv=5,
+            l1_ratios=(0.0,),
+            scoring="neg_log_loss",
+            max_iter=2000,
+            use_legacy_attributes=False,
+        ),
+    ).fit(X, y)
+    return _mean_label(model, X_test)
 
 
 def _ridge_pairs(
@@ -186,7 +232,18 @@ def _gradient_boosting(
 
 # Feature sets of the readouts: the record, and observables of the final state.
 OBSERVABLE_SETS = ("X", "Y", "Z", "XX", "YY", "ZZ")
-FEATURE_SETS = ("M", *OBSERVABLE_SETS, "all", "M_all")
+# Feature maps of the final state beyond the observable sets, and their
+# combinations with the record.
+STATE_SETS = ("local2", "born", "reservoir", "shot")
+FEATURE_SETS = (
+    "M",
+    *OBSERVABLE_SETS,
+    "all",
+    "M_all",
+    *STATE_SETS,
+    "M_shot",
+    "M_x_all",
+)
 # Circuits of the system, by models.
 CIRCUITS: dict[str, type[BrickworkCircuit]] = {
     HaarBrickworkCircuit.name: HaarBrickworkCircuit,
@@ -217,6 +274,55 @@ def observables(N: int) -> dict[str, list[sp.csr_matrix]]:
     return ops
 
 
+def local2_operators(N: int) -> list[sp.csr_matrix]:
+    """Return every one- and two-site Pauli string of the system qubits.
+
+    ``P_k`` for each system qubit and ``P_i Q_j`` for each pair ``i < j``,
+    with ``P, Q`` in ``X, Y, Z``: ``3 N + 9 N (N - 1) / 2`` sparse operators
+    on ``R`` (qubit 0) and the system (``1 .. N``).
+    """
+    n_total = N + 1
+    single = {
+        name: [get_site_operator(op, k + 1, n_total, sparse=True) for k in range(N)]
+        for name, op in PAULIS.items()
+    }
+    ops = [single[name][k] for name in PAULIS for k in range(N)]
+    for i in range(N):
+        for j in range(i + 1, N):
+            for P in PAULIS:
+                for Q in PAULIS:
+                    ops.append(sp.csr_matrix(single[P][i] @ single[Q][j]))
+    return ops
+
+
+def born_probabilities(psi: np.ndarray, N: int) -> np.ndarray:
+    """Return the ``2**N`` Z-basis probabilities of the system qubits.
+
+    ``R`` (qubit 0, the leftmost factor) is traced out; index ``b`` holds the
+    bitstring of system qubits ``1 .. N``, qubit 1 as the most significant
+    bit.
+    """
+    return np.asarray(np.sum(np.abs(psi.reshape(2, 2**N)) ** 2, axis=0))
+
+
+def system_state(psi: np.ndarray, N: int) -> np.ndarray:
+    """Return the state of the system qubits once ``R`` is measured.
+
+    After that measurement ``psi = |r>_R |phi>``: ``phi`` is the row of
+    ``psi.reshape(2, 2**N)`` with weight 1.
+    """
+    rows = psi.reshape(2, 2**N)
+    return np.asarray(rows[int(np.argmax(np.sum(np.abs(rows) ** 2, axis=1)))])
+
+
+def shot(probs: np.ndarray, N: int, rng: np.random.Generator) -> np.ndarray:
+    """Draw one Z-basis bitstring from ``probs``: +1 for ``|0>``, -1 for
+    ``|1>``, qubit 1 first."""
+    b = int(rng.choice(probs.size, p=probs / probs.sum()))
+    bits = (b >> np.arange(N - 1, -1, -1)) & 1
+    return np.asarray(1.0 - 2.0 * bits, dtype=float)
+
+
 def expectation_values(psi: np.ndarray, ops: list[sp.csr_matrix]) -> np.ndarray:
     """Return ``<psi| O |psi>`` for every operator of ``ops``."""
     return np.array([float(np.real(np.vdot(psi, op @ psi))) for op in ops])
@@ -224,6 +330,7 @@ def expectation_values(psi: np.ndarray, ops: list[sp.csr_matrix]) -> np.ndarray:
 
 READOUTS: dict[str, Readout] = {
     "ridge": _ridge,
+    "logistic": _logistic,
     "ridge_pairs": _ridge_pairs,
     "knn": _knn,
     "mlp": _mlp,
@@ -302,12 +409,13 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     needed = [
         name
         for name in OBSERVABLE_SETS
-        if name in sets or "all" in sets or "M_all" in sets
+        if name in sets or {"all", "M_all", "M_x_all"} & set(sets)
     ]
     model = str(cfg.models)
     if model not in CIRCUITS:
         raise ValueError(f"models must be one of {tuple(CIRCUITS)}, got {model!r}.")
     ops = observables(N)
+    local2 = local2_operators(N) if "local2" in sets else []
 
     seed = int(cfg.seed)
     gate_rng = np.random.default_rng([seed, RNG_TAG, 0])
@@ -319,6 +427,14 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     circuit = CIRCUITS[model](params, gate_rng)
     fixed = bool(params.get("fixed_instance", False))
     psi0 = AncillaChargeSectorEncoding.from_config(cfg).state()
+    # Own generators, so that the sets above keep their trajectories.
+    reservoir = (
+        haar_unitary(2**N, np.random.default_rng([seed, RNG_TAG, 4]))
+        if "reservoir" in sets
+        else None
+    )
+    shot_rng = np.random.default_rng([seed, RNG_TAG, 5])
+    want_shot = "shot" in sets or "M_shot" in sets
 
     L = levels.size * per_p
     p = np.repeat(levels, per_p)
@@ -326,19 +442,42 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     S_R = np.zeros(L)
     Y = np.zeros(L)
     obs = {name: np.zeros((L, len(ops[name]))) for name in needed}
+    state: dict[str, np.ndarray] = {}
+    if local2:
+        state["local2"] = np.zeros((L, len(local2)))
+    if "born" in sets:
+        state["born"] = np.zeros((L, 2**N))
+    if reservoir is not None:
+        state["reservoir"] = np.zeros((L, 2**N))
+    if want_shot:
+        state["shot"] = np.zeros((L, N))
     for i in tqdm(range(L)):
         if not fixed and i > 0:
             circuit.redraw(gate_rng)
         M[i], S_R[i], Y[i], psi = trajectory(psi0, circuit, float(p[i]), rng)
         for name in needed:
             obs[name][i] = expectation_values(psi, ops[name])
+        if local2:
+            state["local2"][i] = expectation_values(psi, local2)
+        probs = born_probabilities(psi, N)
+        if "born" in state:
+            state["born"][i] = probs
+        if reservoir is not None:
+            state["reservoir"][i] = np.abs(reservoir @ system_state(psi, N)) ** 2
+        if want_shot:
+            state["shot"][i] = shot(probs, N, shot_rng)
 
     split_rng = np.random.default_rng([seed, RNG_TAG, 2])
     fit_rng = np.random.default_rng([seed, RNG_TAG, 3])
-    features = {"M": M.reshape(L, -1), **obs}
-    if "all" in sets or "M_all" in sets:
+    features = {"M": M.reshape(L, -1), **obs, **state}
+    if {"all", "M_all", "M_x_all"} & set(sets):
         features["all"] = np.hstack([obs[name] for name in OBSERVABLE_SETS])
         features["M_all"] = np.hstack([features["M"], features["all"]])
+    if "M_x_all" in sets:
+        products = np.einsum("lm,lo->lmo", features["M"], features["all"])
+        features["M_x_all"] = np.hstack([features["M_all"], products.reshape(L, -1)])
+    if "shot" in state:
+        features["M_shot"] = np.hstack([features["M"], state["shot"]])
     metrics: dict[str, float] = {"n_rounds": float(n_rounds)}
     for level in levels:
         idx = np.flatnonzero(p == level)
@@ -373,6 +512,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "S_R": S_R,
         "p": p,
         **{f"features_{name}": obs[name] for name in needed},
+        **{f"features_{name}": values for name, values in state.items()},
         "metrics": metrics,
     }
 
