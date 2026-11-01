@@ -367,6 +367,31 @@ uv run python experiments/QELM_Q/plot_bayes_ridge_fss.py outputs/fss233/tfim_rN 
   --sep outputs/fss233/sep_paper --out outputs/fss233/figures_rN
 ```
 
+#### Effect of the step `dt` on the collapse (issue #253)
+
+The collapse on `Phi(d' / 2)` assumes that the reservoir forgets the previous
+round before the next one. At a fixed number of rounds `R = 5`, the sweep below
+changes the step `dt = t / 5` through `T_VALUES`, from far below the scrambling
+time (`t_scr ~ 2.25 / J`, issue #243) to about it. `STEP=haar_u1`
+(`unitary_step=haar_u1`) replaces the TFIM step by a Haar U(1) unitary, an
+independent Haar block on each charge sector drawn anew at each step: the
+scrambled model realized exactly, the control. `plot_dt_collapse.py` draws the
+accuracy against `p` and against `d' / 2` for each `dt`, and the gap to the
+control.
+
+```bash
+OMP_NUM_THREADS=1 OUT_DIR=outputs/dt253/tfim N_VALUES="5 7 9 11" \
+  T_VALUES="0.5 1.5 5 10" SEEDS="42 43" P_VALUES="0.1 0.2 0.4 0.6 0.8" \
+  FINAL_VALUES=true BALANCED=true STATE=vector L=2000 MAX_JOBS=4 \
+  ./experiments/QELM_Q/exp_QELM_Q.sh
+OMP_NUM_THREADS=1 OUT_DIR=outputs/dt253/haar STEP=haar_u1 N_VALUES="5 7 9 11" \
+  T_VALUES=10 SEEDS="42 43" P_VALUES="0.1 0.2 0.4 0.6 0.8" \
+  FINAL_VALUES=true BALANCED=true STATE=vector L=2000 MAX_JOBS=4 \
+  ./experiments/QELM_Q/exp_QELM_Q.sh
+uv run python experiments/QELM_Q/plot_dt_collapse.py outputs/dt253/tfim \
+  --haar outputs/dt253/haar --out outputs/dt253/figures
+```
+
 ### Run many runs at once: `MAX_JOBS` (issue #199)
 
 By default the launcher runs one run after the other. `MAX_JOBS=n` puts the

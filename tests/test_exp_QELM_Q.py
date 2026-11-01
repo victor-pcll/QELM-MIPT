@@ -264,6 +264,78 @@ def test_rejects_an_unknown_state_representation() -> None:
         _run("state_representation=mps")
 
 
+def test_haar_u1_step_draws_a_haar_unitary_in_the_charge_sector() -> None:
+    """The Haar U(1) step keeps R, the norm and Q, and scrambles the sector (#253).
+
+    A Haar unitary maps any state of the sector to a Haar random one, so the
+    weight of each configuration averages to 1 / C(N, Q); a new unitary is
+    drawn at every call.
+    """
+    module = _load_script()
+    rng = np.random.default_rng(0)
+    N_sys, Q = 4, 2
+    psi = np.zeros(2 ** (N_sys + 1), dtype=complex)
+    # |1>_R |0011>_S: ancilla outcome r = -1, charge 2.
+    psi[2**N_sys + 0b0011] = 1.0
+    step = module.haar_u1_step(-1, 1, N_sys, rng)
+    popcount = np.array([bin(b).count("1") for b in range(2**N_sys)])
+    sector = np.flatnonzero(popcount == Q)
+    weights = []
+    for _ in range(2000):
+        out = step(psi)
+        assert np.linalg.norm(out) == pytest.approx(1.0)
+        np.testing.assert_array_equal(out[: 2**N_sys], 0.0)
+        system = out[2**N_sys :]
+        np.testing.assert_allclose(np.delete(system, sector), 0.0)
+        weights.append(np.abs(system[sector]) ** 2)
+    assert not np.allclose(step(psi), step(psi))
+    np.testing.assert_allclose(np.mean(weights, axis=0), 1 / 6, atol=0.02)
+    # A state spread over two charges is refused.
+    psi[2**N_sys + 0b0111] = 1.0
+    with pytest.raises(ValueError, match="charge sector"):
+        step(psi / np.linalg.norm(psi))
+
+
+def test_haar_u1_step_forgets_the_previous_round() -> None:
+    """At p = 1 a short TFIM step repeats the record; the Haar step does not.
+
+    With dt = 1e-3 / J the configuration barely moves between two rounds,
+    so every round reads the same outcomes. The Haar U(1) step draws a new
+    configuration of the sector each time: two rounds agree with
+    probability 1 / C(N, Q) = 1/6 at N = 4, Q = 2 or 1 / 4 at Q = 1.
+    """
+    common = (
+        "N=4",
+        "samples.L=200",
+        "samples.balanced=true",
+        "state_representation=vector",
+        "projective_measurement.p=1.0",
+        "projective_measurement.final_measurement=true",
+        "evolution.t=0.005",
+    )
+    tfim = _run(*common)
+    haar = _run(*common, "unitary_step=haar_u1")
+    for out in (tfim, haar):
+        # Every round reads the charge exactly: Q qubits in |1>, M = -1.
+        np.testing.assert_array_equal(
+            (out["M"] == -1).sum(axis=2), np.repeat(out["Y"][:, None], 5, axis=1)
+        )
+    same_tfim = np.all(tfim["M"][:, 1:] == tfim["M"][:, :-1], axis=2).mean()
+    same_haar = np.all(haar["M"][:, 1:] == haar["M"][:, :-1], axis=2).mean()
+    assert same_tfim > 0.99
+    assert 0.1 < same_haar < 0.3
+
+
+def test_haar_u1_needs_the_state_vector() -> None:
+    with pytest.raises(ValueError, match="state_representation=vector"):
+        _run("unitary_step=haar_u1")
+
+
+def test_rejects_an_unknown_unitary_step() -> None:
+    with pytest.raises(ValueError, match="unitary_step"):
+        _run("unitary_step=clifford", "state_representation=vector")
+
+
 def test_evolve_with_measurements_takes_a_step_function() -> None:
     """A callable step evolves a state vector like U rho U^dagger evolves rho."""
     module = _load_script()
@@ -374,6 +446,7 @@ def test_bash_sweep_in_parallel_with_the_state_vector(tmp_path: Path) -> None:
     for run in runs:
         config = json.loads((run.parent / "resolved_config.json").read_text())
         assert config["state_representation"] == "vector"
+        assert config["unitary_step"] == "tfim"
 
 
 def test_bash_sweep_with_delta_scales_l_with_n(tmp_path: Path) -> None:

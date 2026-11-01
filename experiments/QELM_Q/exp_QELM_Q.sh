@@ -29,6 +29,8 @@
 #                             (samples.balanced, issue #233)
 #     STATE=vector            simulate the state vector (state_representation,
 #                             issue #183), much faster from N = 7 on
+#     STEP=haar_u1            replace the TFIM step by a Haar U(1) unitary
+#                             (unitary_step, issue #253; needs STATE=vector)
 #     MAX_JOBS=4              runs at once (default 1), one core each; the
 #                             runs wait in a queue (xargs -P, issue #199).
 #                             At N = 11 (12 qubits with the ancilla), about
@@ -159,6 +161,7 @@ run_one() {
     "projective_measurement.p=$p" \
     "projective_measurement.final_measurement=$FINAL" \
     ${STATE:+"state_representation=$STATE"} \
+    ${STEP:+"unitary_step=$STEP"} \
     ${BALANCED:+"samples.balanced=$BALANCED"} \
     "hydra.run.dir=$RUN_DIR"
   status=$?
@@ -172,7 +175,7 @@ run_one() {
   fi
 }
 export -f run_one
-export OUT_DIR MODEL L FAILED_LOG DELTA ALPHA STATE BALANCED
+export OUT_DIR MODEL L FAILED_LOG DELTA ALPHA STATE STEP BALANCED
 
 # A bounded queue: xargs starts the runs in order and keeps at most MAX_JOBS
 # of them alive (issue #199). A failed run does not stop the others; xargs
