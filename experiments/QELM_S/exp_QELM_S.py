@@ -10,9 +10,14 @@ probability ``p`` of ``entropy_task.p_values`` and each of its
 1. Start from the Néel product state ``|0101...>`` on the ``N`` qubits (no
    ancilla, ``Nr = 0``) and draw new dynamics: a new TFIM disorder
    (``models=TFIM``, step ``U(dt)`` with ``dt = entropy_task.dt``) or new
-   gates of a brickwork circuit (``models=haar_circuit`` or
-   ``clifford_circuit``, ``layers_per_step`` layers per step).
-2. Run ``n_rounds`` rounds (``entropy_task.n_rounds``, default ``2 N``) of a
+   gates of a brickwork circuit (``models=haar_circuit``, ``clifford_circuit``
+   or ``U1_circuit``, ``layers_per_step`` layers per step), or the fixed
+   Floquet Ising chain of Skinner et al. (2019) (``models=floquet_circuit``,
+   issue #239, whose layer is a half-layer of bricks, the time step of the
+   paper).
+2. Run ``n_rounds`` rounds (``entropy_task.n_rounds``, default ``2 N``, and
+   about ``4 N`` half-layers, ``2 N`` periods, for ``floquet_circuit``,
+   :func:`floquet_rounds`) of a
    unitary step followed by a projective measurement in Z of each qubit with
    probability ``p``. Row ``j`` of the record ``M`` holds the outcomes of
    round ``j``, +-1, and 0 for an unmeasured qubit.
@@ -26,6 +31,17 @@ probability ``p`` of ``entropy_task.p_values`` and each of its
    measurement of every qubit in Z in the final state (``Zshot``, +-1, what an
    experiment would record; it does not change the state ``S`` is read
    from).
+5. With ``entropy_task.average_from`` set to a fraction ``f`` (issue #251),
+   the entanglement is also averaged over the late rounds, from round
+   ``floor(f * n_rounds)`` (one earlier if needed, so that an even number of
+   rounds is averaged and both parities of the last half-layer weigh the
+   same) to the last (:func:`average_start`): the Rényi entropies ``S_1``,
+   ``S_2`` and ``S_inf`` of the first ``N // 2`` qubits and, when 4 divides
+   ``N``, the tripartite mutual information ``I_3`` of the four quarters of
+   the chain (:func:`entanglement_diagnostics`). Each is read right after
+   the measurements of a round. These are the inputs of the finite-size
+   scaling of ``plot_entropy_fss.py``; the readout target stays the final
+   ``S``.
 
 Every trajectory of every ``p`` goes into one dataset, split with the same
 training share at each ``p`` (``samples.train_fraction``,
@@ -77,11 +93,15 @@ Everything is written to the Hydra run directory, by default
 
 - ``exp_QELM_S.npz``: ``M`` (record, ``(L, n_rounds, N)``), ``Z``,
   ``Zshot`` (``(L, N)``), ``S`` and ``p`` (``(L,)``), ``train`` and ``test``
-  (indices), ``y_test``, ``y_pred_<name>`` (and ``y_pred_knn_<name>``) on
-  the test set, ``X`` (the ``M_Z`` features, bias column included);
+  (indices), ``<q>_avg`` (``(L,)``, with ``average_from``), ``y_test``,
+  ``y_pred_<name>`` (and ``y_pred_knn_<name>``) on the test set, ``X``
+  (the ``M_Z`` features, bias column included);
 - ``metrics.json``: the scores above, ``S_mean``, ``S_max`` (``N // 2``, the
   largest possible ``S``), ``n_rounds`` and, per ``p``, ``S_mean_p<p>``,
-  ``S_std_p<p>`` and ``r2_within_<name>_p<p>`` for the main sets;
+  ``S_std_p<p>`` and ``r2_within_<name>_p<p>`` for the main sets; with
+  ``average_from``, also ``<q>_avg_mean_p<p>`` and ``<q>_avg_std_p<p>`` for
+  ``q`` in :data:`AVERAGED` (``I3`` only when 4 divides ``N``) and
+  ``average_start``, the first averaged round;
 - ``.hydra/config.yaml`` and ``resolved_config.json``: the config of the run.
 """
 
@@ -100,7 +120,11 @@ from sklearn.neighbors import KNeighborsRegressor
 from tqdm import tqdm
 
 from QELM import TransverseFieldIsingModel, check_qubit_counts, set_seed
-from QELM.evaluation.entropy import von_neumann_entropy
+from QELM.evaluation.entropy import (
+    entanglement_spectrum,
+    tripartite_mutual_information,
+    von_neumann_entropy,
+)
 from QELM.evaluation.entropy_regression import (
     even_features,
     one_hot,
@@ -111,7 +135,8 @@ from QELM.evaluation.entropy_regression import (
 from QELM.evaluation.metrics import NMSE, R2, NMSE_err, accuracy
 from QELM.models.circuits.base import BrickworkCircuit
 from QELM.models.circuits.clifford import CliffordBrickworkCircuit
-from QELM.models.circuits.haar import HaarBrickworkCircuit
+from QELM.models.circuits.floquet import FloquetBrickworkCircuit
+from QELM.models.circuits.haar import HaarBrickworkCircuit, U1BrickworkCircuit
 from QELM.training import RidgeReadout
 from QELM.training.measurements.projective import measure_projective_psi
 from QELM.utils import save_config, save_results
@@ -151,7 +176,12 @@ PER_P_KEY = re.compile(r"r2_within_.+_p[0-9.e+-]+")
 CIRCUITS: dict[str, type[BrickworkCircuit]] = {
     HaarBrickworkCircuit.name: HaarBrickworkCircuit,
     CliffordBrickworkCircuit.name: CliffordBrickworkCircuit,
+    U1BrickworkCircuit.name: U1BrickworkCircuit,
+    FloquetBrickworkCircuit.name: FloquetBrickworkCircuit,
 }
+# Late-time averages of entropy_task.average_from (issue #251): the Rényi
+# entropies of the half chain and the tripartite mutual information.
+AVERAGED = ("S1", "S2", "Sinf", "I3")
 # Seed tag of the generator of the measurements and the single shots.
 RNG_TAG = 230
 # One unitary step of a trajectory: the state and the round index j.
@@ -214,6 +244,70 @@ def _circuit_sampler(cfg: DictConfig, n_rounds: int) -> Callable[[], Step]:
         return step
 
     return draw
+
+
+def floquet_rounds(N: int) -> int:
+    """Return the default number of rounds of the Floquet chain on ``N`` qubits.
+
+    About ``2 N`` periods, ``4 N`` half-layers, by when the entropy at
+    ``p = 0`` has saturated, plus one when needed so that the last half-layer
+    holds the bond ``(N // 2 - 1, N // 2)`` across the cut of ``S``. The
+    half-layers alternate, and the entropy read right after the measurements
+    depends on whether the cut bond got its gate in the last half-layer or
+    one half-layer earlier (with one more round of measurements in between):
+    without this choice the curves of ``N / 2`` even and odd split into two
+    families (issue #239).
+    """
+    # Half-layer t holds the bond (i, i + 1) when i and t have the same parity.
+    return 4 * N + (N // 2) % 2
+
+
+def average_start(n_rounds: int, average_from: float) -> int:
+    """Return the first round of the late-time averages (issue #251).
+
+    ``floor(average_from * n_rounds)``, one earlier when needed (one later
+    from round 0) so that the number of averaged rounds, up to
+    ``n_rounds - 1``, is even: a brickwork
+    alternates even and odd half-layers, and the entropy right after the
+    measurements depends on which one held the bond across the cut, so the
+    average takes as many rounds of each.
+
+    Raises:
+        ValueError: If ``average_from`` is not in ``[0, 1)`` or fewer than
+            two rounds would be averaged.
+    """
+    if not 0 <= average_from < 1:
+        raise ValueError(
+            f"entropy_task.average_from must be in [0, 1), got {average_from}."
+        )
+    start = int(np.floor(average_from * n_rounds))
+    if (n_rounds - start) % 2:
+        start = start - 1 if start > 0 else 1
+    if n_rounds - start < 2:
+        raise ValueError(
+            f"entropy_task.average_from={average_from} leaves fewer than two "
+            f"of the {n_rounds} rounds to average."
+        )
+    return start
+
+
+def entanglement_diagnostics(psi: np.ndarray, N: int) -> np.ndarray:
+    """Return ``[S_1, S_2, S_inf, I_3]`` of a state, in bits (issue #251).
+
+    The Rényi entropies of the first ``N // 2`` qubits, from one Schmidt
+    decomposition, and the tripartite mutual information of the four
+    quarters of the chain, ``nan`` when 4 does not divide ``N``.
+    """
+    values = entanglement_spectrum(psi, list(range(N // 2)))
+    i3 = tripartite_mutual_information(psi) if N % 4 == 0 else np.nan
+    return np.array(
+        [
+            float(-np.sum(values * np.log2(values))),
+            float(-np.log2(np.sum(values**2))),
+            float(-np.log2(values[0])),
+            i3,
+        ]
+    )
 
 
 def measure_round(
@@ -319,11 +413,18 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     per_p = int(task.samples_per_p)
     if per_p < 2:
         raise ValueError(f"entropy_task.samples_per_p must be >= 2, got {per_p}.")
-    n_rounds = 2 * N if task.n_rounds is None else int(task.n_rounds)
+    model_name = str(cfg.models)
+    if task.n_rounds is not None:
+        n_rounds = int(task.n_rounds)
+    elif model_name == FloquetBrickworkCircuit.name:
+        n_rounds = floquet_rounds(N)
+    else:
+        n_rounds = 2 * N
     if n_rounds < 1:
         raise ValueError(f"entropy_task.n_rounds must be >= 1, got {n_rounds}.")
+    average_from = task.get("average_from")
+    start = None if average_from is None else average_start(n_rounds, average_from)
 
-    model_name = str(cfg.models)
     if model_name == TransverseFieldIsingModel.name:
         draw_evolution = _tfim_sampler(cfg, N, float(task.dt))
     elif model_name in CIRCUITS:
@@ -346,12 +447,15 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Z = np.zeros((L, N))
     Zshot = np.zeros((L, N))
     S = np.zeros(L)
+    late = np.zeros((L, len(AVERAGED)))
     for i in tqdm(range(L)):
         evolve = draw_evolution()
         psi = psi0
         for j in range(n_rounds):
             psi = evolve(psi, j)
             psi, M[i, j] = measure_round(psi, float(p[i]), rng)
+            if start is not None and j >= start:
+                late[i] += entanglement_diagnostics(psi, N)
         S[i] = von_neumann_entropy(psi, half)
         Z[i] = z_expectations(psi)
         Zshot[i] = single_shot(psi, rng)
@@ -400,6 +504,18 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         values = S[p == level]
         per_p_stats[f"S_mean_p{level:g}"] = float(values.mean())
         per_p_stats[f"S_std_p{level:g}"] = float(values.std())
+    averages: dict[str, Any] = {}
+    if start is not None:
+        late /= n_rounds - start
+        averages["average_start"] = float(start)
+        for k, name in enumerate(AVERAGED):
+            if name == "I3" and N % 4:
+                continue
+            averages[f"{name}_avg"] = late[:, k]
+            for level in levels:
+                values = late[p == level, k]
+                averages[f"{name}_avg_mean_p{level:g}"] = float(values.mean())
+                averages[f"{name}_avg_std_p{level:g}"] = float(values.std())
     return {
         "M": M,
         "Z": Z,
@@ -418,6 +534,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "S_max": float(N // 2),
         "n_rounds": float(n_rounds),
         **per_p_stats,
+        **averages,
         **results,
     }
 
