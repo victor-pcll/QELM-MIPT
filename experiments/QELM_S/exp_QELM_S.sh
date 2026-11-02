@@ -25,6 +25,7 @@
 #     P_C_FLOQUET=0.21            p_c for floquet_circuit (S_1 of the Floquet
 #                                 model, Table I of Skinner et al. 2019)
 #     P_C_U1=                     p_c for U1_circuit (empty: no classification)
+#     P_C_CONTINUOUS=             p_c for continuous_tfim_1d (empty: none)
 #     N_ROUNDS=                   entropy_task.n_rounds (empty: 2 N)
 #     AVERAGE_FROM=0.5            entropy_task.average_from: late-time averages
 #                                 of S_1, S_2, S_inf and I_3 for
@@ -52,6 +53,7 @@ P_C_HAAR="${P_C_HAAR:-0.17}"
 P_C_TFIM="${P_C_TFIM:-}"
 P_C_FLOQUET="${P_C_FLOQUET:-0.21}"
 P_C_U1="${P_C_U1:-}"
+P_C_CONTINUOUS="${P_C_CONTINUOUS:-}"
 N_ROUNDS="${N_ROUNDS:-}"
 AVERAGE_FROM="${AVERAGE_FROM:-}"
 MAX_JOBS="${MAX_JOBS:-1}"
@@ -104,6 +106,7 @@ run_one() {
     TFIM) P_C="$P_C_TFIM" ;;
     floquet_circuit) P_C="$P_C_FLOQUET" ;;
     U1_circuit) P_C="$P_C_U1" ;;
+    continuous_tfim_1d) P_C="$P_C_CONTINUOUS" ;;
     *) P_C="$P_C_HAAR" ;;
   esac
   echo "--- models=$MODEL N=$N seed=$SEED samples_per_p=$PER_P p_c=${P_C:-none}"
@@ -126,7 +129,7 @@ run_one() {
   fi
 }
 export -f run_one
-export OUT_DIR PER_P P_LIST P_C_HAAR P_C_TFIM P_C_FLOQUET P_C_U1 N_ROUNDS \
+export OUT_DIR PER_P P_LIST P_C_HAAR P_C_TFIM P_C_FLOQUET P_C_U1 P_C_CONTINUOUS N_ROUNDS \
   AVERAGE_FROM FAILED_LOG ALPHA
 
 QUEUE_STATUS=0

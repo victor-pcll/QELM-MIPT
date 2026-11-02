@@ -1,0 +1,31 @@
+# @package _global_
+
+# Nearest-neighbour Ising chain in a tilted field, in continuous time
+# (QELM.models.continuous_tfim_1d.ContinuousTFIMChain, issue #241):
+#   H = - sum_i J_i Z_i Z_i+1 - h_x sum_i X_i - h_z sum_i Z_i, open chain,
+# J_i uniform in [J - W/2, J + W/2] = [0.5, 1.5]. With J_i = 1, (h_x, h_z) =
+# (1.05, 0.5) are the chaotic parameters of Kim and Huse, PRL 111, 127205
+# (2013). In experiments/QELM_S the qubits are measured in Z as a Poisson
+# process of rate gamma = -ln(1 - p) / tau: a qubit is measured at least once
+# in a window of length tau with probability p, as after a layer of the
+# Floquet chain (models=floquet_circuit). Selected with models=continuous_tfim_1d.
+models: continuous_tfim_1d
+
+# Total number of qubits (no ancilla in experiments/QELM_S).
+# Override it with N=6, not continuous_tfim_1d.N=6.
+N: 10
+
+continuous_tfim_1d:
+  N: ${N} # number of qubits, always the top-level N
+  J: 1.0 # mean coupling, the energy unit
+  W: 1.0 # width of the uniform distribution of J_i: [J - W/2, J + W/2]
+  h_x: 1.05 # transverse field
+  h_z: 0.5 # longitudinal field, breaks the integrability
+  # Window of the record, in units of 1 / J: the time that plays the role of
+  # one layer of the Floquet chain. 0.3 matches their entanglement growth at
+  # p = 0 from the Neel state (about 0.15 bit per layer, 0.5 bit per 1 / J).
+  tau: 0.3
+  n_sub: 3 # micro-steps dt = tau / n_sub per window
+  # Chains (draws of J_i) per run; trajectory i evolves under chain
+  # i % n_disorder, so every chain gets every p.
+  n_disorder: 12
