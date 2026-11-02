@@ -17,13 +17,16 @@ each of its ``readouts_task.samples_per_p`` trajectories:
    ``(|0>_R |Q1>_S + |1>_R |Q2>_S) / sqrt(2)`` with ``Q1 = N // 2`` and
    ``Q2 = N // 2 - 1``: the reference qubit ``R`` (qubit 0, ``Nr = 1``)
    entangled with the charge of the ``N`` system qubits.
-2. Run ``readouts_task.n_rounds`` rounds, each one brickwork layer of
+2. Run ``T`` rounds, each one brickwork layer of
    random two-qubit gates (:class:`HaarBrickworkCircuit` by default,
    :class:`CliffordBrickworkCircuit` with ``models=clifford_circuit``, a full
    period: even bonds, then odd bonds) on the system qubits, followed by a
    Z measurement of each system qubit with probability ``p``. Row ``j`` of
    ``M`` holds the outcomes of round ``j``, +-1, and 0 for an unmeasured
-   qubit. With ``<model>.fixed_instance: false`` (the default) every
+   qubit. ``T`` is ``readouts_task.n_rounds``, or the depth rule
+   ``readouts_task.depth_rule`` when it is set (:func:`depth_from_rule`:
+   ``10``, ``N``, ``2N``; issue #268, swept by ``depth_scaling.sh``).
+   With ``<model>.fixed_instance: false`` (the default) every
    trajectory draws new gates; ``true`` keeps one draw for the whole run.
 3. At the end, the entropy ``S_R`` of ``R`` (von Neumann, bits: 1 while the
    system hides the charge, 0 once the record fixes it, the purification
@@ -103,20 +106,29 @@ Run from the repository root:
 Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
 
-- ``haar_readouts.npz``: ``M`` (``(L, n_rounds, N)``), ``Y``, ``S_R`` and
+- ``haar_readouts.npz`` (unless ``readouts_task.save_arrays: false``): ``M`` (``(L, n_rounds, N)``), ``Y``, ``S_R`` and
   ``p`` (the measurement probability of each trajectory), of shape
   ``(L,)``;
 - ``metrics.json``: per ``p``, ``S_R_mean_p<p>``, ``S_R_std_p<p>``,
   ``accuracy_baseline_p<p>`` (the majority label of the training set) and
   ``accuracy_<name>_p<p>`` and ``r2_<name>_p<p>`` for each readout and
   feature set, with ``<name>`` the readout for ``M`` and
-  ``<readout>_<set>`` for the other sets (``ridge_ZZ``); ``n_rounds``;
+  ``<readout>_<set>`` for the other sets (``ridge_ZZ``);
+  ``log10_cond_<set>_p<p>``, the condition number of the Gram matrix of the
+  training features (:func:`log10_condition`, sets of at most
+  :data:`COND_MAX_FEATURES` features); ``var_Z_<k>_p<p>``, the variance over
+  the trajectories of ``<Z_k>`` on system qubit ``k`` (0-based), when the
+  ``Z`` set is computed; ``n_rounds``; and the timings of the run,
+  ``time_simulation_s``, ``time_per_trajectory_s`` and ``time_fit_s``
+  (only in the file: :func:`run` keeps them in ``timing``, out of the
+  reproducible metrics);
 - ``.hydra/config.yaml`` and ``resolved_config.json``: the config of the run.
 """
 
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -152,6 +164,12 @@ RNG_TAG = 260
 ALPHAS = np.logspace(-2, 4, 13)
 # Inverse regularizations tried by the logistic readout.
 CS = np.logspace(-3, 2, 6)
+# Largest feature set whose condition number is computed (an SVD of the
+# training features at each p).
+COND_MAX_FEATURES = 1024
+# Ceiling of the condition number, for a training Gram matrix that is
+# singular to machine precision (log10 of it: 16).
+COND_CEILING = 1e16
 
 # A readout: (training features, training labels, test features, rng) ->
 # output on the test set, an estimate of Y in [-1, 1] for the classifiers.
@@ -328,6 +346,27 @@ def expectation_values(psi: np.ndarray, ops: list[sp.csr_matrix]) -> np.ndarray:
     return np.array([float(np.real(np.vdot(psi, op @ psi))) for op in ops])
 
 
+def log10_condition(X: np.ndarray) -> float:
+    """Return ``log10`` of the condition number of ``Xc^T Xc``, ``Xc`` the
+    centered columns of ``X``.
+
+    That Gram matrix is the one a ridge readout inverts (before its
+    regularization): its condition number is ``(s_max / s_min)**2`` with
+    ``s`` the singular values of ``Xc``. A singular one (``s_min = 0``,
+    constant or collinear features, or fewer samples than features) gives
+    ``log10(COND_CEILING) = 16``; constant features everywhere give 0.
+    """
+    Xc = X - X.mean(axis=0)
+    s = np.linalg.svd(Xc, compute_uv=False)
+    if s.size < X.shape[1]:
+        # Fewer samples than features: the missing singular values are 0.
+        s = np.concatenate([s, np.zeros(X.shape[1] - s.size)])
+    if s[0] <= 1e-12:
+        return 0.0
+    cond = (s[0] / s[-1]) ** 2 if s[-1] > 0.0 else np.inf
+    return float(np.log10(min(cond, COND_CEILING)))
+
+
 READOUTS: dict[str, Readout] = {
     "ridge": _ridge,
     "logistic": _logistic,
@@ -336,6 +375,31 @@ READOUTS: dict[str, Readout] = {
     "mlp": _mlp,
     "gradient_boosting": _gradient_boosting,
 }
+
+
+def depth_from_rule(rule: str | int, N: int) -> int:
+    """Return the number of rounds ``T`` of a depth rule for ``N`` qubits.
+
+    ``rule`` is a whole number (``10``: the same ``T`` for every ``N``, as
+    Dehghani et al. 2023) or a multiple of ``N`` (``N``, ``2N``: a depth
+    that grows with the chain, as in the stationary regime of the MIPT).
+
+    Raises:
+        ValueError: If the rule is neither, or gives ``T < 1``.
+    """
+    text = str(rule).strip().replace(" ", "")
+    if text.endswith("N"):
+        factor = text[:-1] or "1"
+        if not factor.isdigit():
+            raise ValueError(f"Depth rule must be <k>N or a number, got {rule!r}.")
+        depth = int(factor) * N
+    elif text.isdigit():
+        depth = int(text)
+    else:
+        raise ValueError(f"Depth rule must be <k>N or a number, got {rule!r}.")
+    if depth < 1:
+        raise ValueError(f"Depth rule {rule!r} gives {depth} rounds for N={N}.")
+    return depth
 
 
 def trajectory(
@@ -393,7 +457,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     per_p = int(task.samples_per_p)
     if per_p < 10:
         raise ValueError(f"readouts_task.samples_per_p must be >= 10, got {per_p}.")
-    n_rounds = int(task.n_rounds)
+    rule = task.get("depth_rule")
+    n_rounds = int(task.n_rounds) if rule is None else depth_from_rule(rule, N)
     if n_rounds < 1:
         raise ValueError(f"readouts_task.n_rounds must be >= 1, got {n_rounds}.")
     names = [str(name) for name in task.readouts]
@@ -451,6 +516,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         state["reservoir"] = np.zeros((L, 2**N))
     if want_shot:
         state["shot"] = np.zeros((L, N))
+    start = time.perf_counter()
     for i in tqdm(range(L)):
         if not fixed and i > 0:
             circuit.redraw(gate_rng)
@@ -466,6 +532,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             state["reservoir"][i] = np.abs(reservoir @ system_state(psi, N)) ** 2
         if want_shot:
             state["shot"][i] = shot(probs, N, shot_rng)
+
+    time_simulation = time.perf_counter() - start
+    start = time.perf_counter()
 
     split_rng = np.random.default_rng([seed, RNG_TAG, 2])
     fit_rng = np.random.default_rng([seed, RNG_TAG, 3])
@@ -490,8 +559,16 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         metrics[f"S_R_std_{key}"] = float(S_R[idx].std())
         majority = 1.0 if np.mean(Y[tr]) >= 0.0 else -1.0
         metrics[f"accuracy_baseline_{key}"] = float(np.mean(Y[te] == majority))
+        if "Z" in obs:
+            # Spread of <Z_k> over the trajectories, site by site: a site
+            # the circuit never connects to the rest keeps the same
+            # distribution whatever the record.
+            for k in range(N):
+                metrics[f"var_Z_{k}_{key}"] = float(obs["Z"][idx, k].var())
         for feature in sets:
             X = features[feature]
+            if X.shape[1] <= COND_MAX_FEATURES:
+                metrics[f"log10_cond_{feature}_{key}"] = log10_condition(X[tr])
             for readout in names:
                 name = readout if feature == "M" else f"{readout}_{feature}"
                 if np.unique(Y[tr]).size < 2 or np.ptp(X[tr], axis=0).max() < 1e-12:
@@ -506,6 +583,11 @@ def run(cfg: DictConfig) -> dict[str, Any]:
                     np.mean(_sign(score) == Y[te])
                 )
                 metrics[f"r2_{name}_{key}"] = float(r2_score(Y[te], score))
+    timing = {
+        "time_simulation_s": time_simulation,
+        "time_per_trajectory_s": time_simulation / L,
+        "time_fit_s": time.perf_counter() - start,
+    }
     return {
         "M": M,
         "Y": Y,
@@ -514,6 +596,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         **{f"features_{name}": obs[name] for name in needed},
         **{f"features_{name}": values for name, values in state.items()},
         "metrics": metrics,
+        "timing": timing,
     }
 
 
@@ -528,11 +611,14 @@ def main(cfg: DictConfig) -> None:
     results = run(cfg)
     out_dir = Path(HydraConfig.get().runtime.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    np.savez(
-        out_dir / f"{Path(__file__).stem}.npz",
-        **{k: v for k, v in results.items() if isinstance(v, np.ndarray)},
-    )
-    metrics = results["metrics"]
+    if cfg.readouts_task.get("save_arrays", True):
+        np.savez(
+            out_dir / f"{Path(__file__).stem}.npz",
+            **{k: v for k, v in results.items() if isinstance(v, np.ndarray)},
+        )
+    # The timings are not reproducible, so they stay out of run()'s metrics
+    # and join them only in the file.
+    metrics = {**results["metrics"], **results["timing"]}
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2))
     save_config(cfg, out_dir)
     names = [
