@@ -61,3 +61,18 @@ def test_crossing_errors_grow_with_the_noise() -> None:
     assert set(small) == {(16, 32), (16, 64), (32, 64)}
     for pair in small:
         assert 0 < small[pair] < large[pair]
+
+
+def test_subtracted_collapse_of_a_log_growing_order_parameter() -> None:
+    """S = log2(N) + G(x): only the subtracted collapse recovers (p_c, nu)."""
+    p = np.linspace(0.10, 0.22, 13)
+    curves = {}
+    for N in (16, 32, 64):
+        x = (p - 0.16) * N ** (1 / 1.3)
+        y = np.log2(N) - 2 * np.tanh(x)
+        curves[N] = (p, y, np.full_like(p, 0.01))
+    assert collapse_quality(curves, 0.16, 1.3, subtract=True) < 0.5
+    assert collapse_quality(curves, 0.16, 1.3) > 10
+    fit = fit_collapse(curves, 0.15, 1.0, n_boot=0, subtract=True)
+    assert fit.p_c == pytest.approx(0.16, abs=2e-3)
+    assert fit.nu == pytest.approx(1.3, abs=0.1)

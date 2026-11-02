@@ -18,6 +18,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 FOLDER = REPO_ROOT / "experiments" / "purification"
 SCRIPT = FOLDER / "purification.py"
 PLOT = FOLDER / "plot_purification.py"
+STEADY = FOLDER / "steady_state.py"
+ESTIMATORS = FOLDER / "plot_estimators.py"
 BASH_SCRIPT = FOLDER / "purification.sh"
 FOREIGN_VENV = REPO_ROOT.parent / "other-project" / ".venv"
 
@@ -106,7 +108,7 @@ def test_bash_script_and_plot(tmp_path: Path) -> None:
         text=True,
         check=True,
     )
-    assert "Done: 2 x 3 x 2 runs" in result.stdout
+    assert "Done: 2 x 3 x 2 x 1 runs" in result.stdout
     sweep = next((tmp_path / "purification_gullans_huse").iterdir())
     runs = sorted(p.name for p in sweep.iterdir() if p.is_dir())
     assert len(runs) == 12 and "N8_p0.2_seed1" in runs
@@ -128,3 +130,61 @@ def test_bash_script_and_plot(tmp_path: Path) -> None:
     np.testing.assert_allclose(p, [0.0, 0.2, 1.0])
     assert y[0] == 1.0 and y[-1] == 0.0
     assert traces[8][0] == 0.2 and traces[8][1][-1] == 4.0
+
+
+def test_steady_state_run() -> None:
+    run = _load(STEADY).run
+    out = run(_cfg("probe.p=0.2", "N=8"))
+    assert out["S_half"].shape == (30,) and out["steps"] == 32
+    assert out["I3_mean"] <= 1.0 and out["S_half_mean"] >= 0
+    assert run(_cfg("probe.p=1.0", "N=8"))["S_half_mean"] == 0.0
+    a = run(_cfg("probe.p=0.2", "N=8", "seed=2"))
+    np.testing.assert_array_equal(
+        a["S_half"], run(_cfg("probe.p=0.2", "N=8", "seed=2"))["S_half"]
+    )
+    with pytest.raises(ValueError, match="divisible by 4"):
+        run(_cfg("N=6"))
+
+
+def test_haar_dynamics() -> None:
+    """The same probes with Haar gates on the state vector, Renyi-2 included."""
+    ref = _load(SCRIPT).run(_cfg("probe.dynamics=haar", "probe.p=0.0", "N=4"))
+    assert ref["S_Q_mean"] == pytest.approx(1.0) and ref["S_Q2_mean"] == pytest.approx(
+        1.0
+    )
+    steady = _load(STEADY).run(_cfg("probe.dynamics=haar", "probe.p=0.1", "N=8"))
+    for key in ("S_half", "I3", "S_half2", "I3_2"):
+        assert f"{key}_mean" in steady
+    assert steady["S_half2_mean"] <= steady["S_half_mean"]
+
+
+def test_both_probes_and_the_estimators_plot(tmp_path: Path) -> None:
+    """MODES="reference steady" in one sweep, then pc_estimators.png."""
+    result = subprocess.run(
+        [str(BASH_SCRIPT)],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "OUT_DIR": str(tmp_path / "sweep"),
+            "L": "40",
+            "N_VALUES": "8 16",
+            "P_VALUES": "0.05 0.2 0.5",
+            "MODES": "reference steady",
+            "MAX_JOBS": "2",
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "Done: 2 x 3 x 1 x 2 runs" in result.stdout
+    sweep = tmp_path / "sweep"
+    assert (sweep / "N8_p0.2_steady_seed0" / "metrics.json").is_file()
+    assert (sweep / "purification_gullans_huse.png").is_file()
+    assert (sweep / "pc_estimators.png").is_file()
+    est = json.loads((sweep / "estimators.json").read_text())
+    assert set(est) == {"literature", "S_Q", "I3", "S_half"}
+    assert list(est["I3"]["crossings"]) == ["N8-N16"]
+    assert est["S_half"]["collapse"]["sizes"] == [8, 16]
+    # The plot of the reference probe skips the steady-state runs.
+    curves, _ = _load(PLOT).pooled_curves(sweep)
+    assert sorted(curves) == [8, 16]

@@ -15,7 +15,7 @@ written before issue #235").
 
 Next to `metrics.json`, every Python experiment script (`projective/`,
 `QELM_Z/`, `QELM_M/`, `QELM_Q/`, `QELM_S/`, `QELM_R/`, `charge_sharpening/`,
-`purification/`, `learnability/`, `double_descent/`) writes
+`purification/`, `learnability/`, `double_descent/`, `haar_readouts/`) writes
 `resolved_config.json`, the config of the run with every interpolation
 evaluated (`QELM.utils.save_config`, issue #85). `.hydra/config.yaml` keeps the
 formulas as written in `conf/`, such as `depth: ${int:${div:${N},2}}`;
@@ -367,6 +367,31 @@ uv run python experiments/QELM_Q/plot_bayes_ridge_fss.py outputs/fss233/tfim_rN 
   --sep outputs/fss233/sep_paper --out outputs/fss233/figures_rN
 ```
 
+#### Effect of the step `dt` on the collapse (issue #253)
+
+The collapse on `Phi(d' / 2)` assumes that the reservoir forgets the previous
+round before the next one. At a fixed number of rounds `R = 5`, the sweep below
+changes the step `dt = t / 5` through `T_VALUES`, from far below the scrambling
+time (`t_scr ~ 2.25 / J`, issue #243) to about it. `STEP=haar_u1`
+(`unitary_step=haar_u1`) replaces the TFIM step by a Haar U(1) unitary, an
+independent Haar block on each charge sector drawn anew at each step: the
+scrambled model realized exactly, the control. `plot_dt_collapse.py` draws the
+accuracy against `p` and against `d' / 2` for each `dt`, and the gap to the
+control.
+
+```bash
+OMP_NUM_THREADS=1 OUT_DIR=outputs/dt253/tfim N_VALUES="5 7 9 11" \
+  T_VALUES="0.5 1.5 5 10" SEEDS="42 43" P_VALUES="0.1 0.2 0.4 0.6 0.8" \
+  FINAL_VALUES=true BALANCED=true STATE=vector L=2000 MAX_JOBS=4 \
+  ./experiments/QELM_Q/exp_QELM_Q.sh
+OMP_NUM_THREADS=1 OUT_DIR=outputs/dt253/haar STEP=haar_u1 N_VALUES="5 7 9 11" \
+  T_VALUES=10 SEEDS="42 43" P_VALUES="0.1 0.2 0.4 0.6 0.8" \
+  FINAL_VALUES=true BALANCED=true STATE=vector L=2000 MAX_JOBS=4 \
+  ./experiments/QELM_Q/exp_QELM_Q.sh
+uv run python experiments/QELM_Q/plot_dt_collapse.py outputs/dt253/tfim \
+  --haar outputs/dt253/haar --out outputs/dt253/figures
+```
+
 ### Run many runs at once: `MAX_JOBS` (issue #199)
 
 By default the launcher runs one run after the other. `MAX_JOBS=n` puts the
@@ -630,6 +655,91 @@ the transition), `r2_summary` (pooled and fixed-`p` `R2` of every set),
 `r2_within_vs_p` and `predicted_vs_exact` (test trajectories colored by
 `p`), each with its JSON. The TFIM at `N = 10` builds a dense `exp(-i H dt)`
 per trajectory and is the slow part of the sweep.
+
+### The local Floquet chain of Skinner et al. (2019) (issue #239)
+
+`models=floquet_circuit` runs the nearest-neighbour model of the numerics of
+Skinner, Ruhman and Nahum, PRX 9, 031009 (2019), their Eq. (1)
+(`QELM.models.circuits.floquet`): every brick of a running-bond circuit is
+the same two-qubit unitary
+
+    U = exp{-i [phi_xx X X + theta_x (X 1 + 1 X)]} exp{-i [phi_zz Z Z + theta_z (Z 1 + 1 Z)]}
+
+with the paper's `phi_xx = 0.3`, `phi_zz = 0.6`, `theta_x = 0.2`,
+`theta_z = 0.4`: Ising couplings in a transverse and a longitudinal field,
+chaotic, with no conserved charge (neither `sum_i Z_i` nor its parity, so the
+charge task of `exp_QELM_Q` is not defined for it). One round is one layer of
+bricks, on the even bonds or on the odd ones in turn, followed by the
+measurement of each qubit with probability `p`: the protocol of the paper.
+By default a run lasts `4 N` rounds, `2 N` periods, by when the entropy at
+`p = 0` has saturated, plus one round when `N / 2` is odd, so that the last
+layer always holds the bond across the cut of `S`. The entropy read right
+after the measurements depends on whether the cut bond got its gate in the
+last layer or one layer earlier: at `p = 0.2`, `S_A / (N/2)` is 0.175 (ending
+on the cut) against 0.123 (not) at `N = 6`. Without this choice the curves of
+`N / 2` even and odd form two families that do not cross where they should. `models=U1_circuit` (`conf/models/U1_circuit.yaml`)
+adds the random U(1) brickwork of Agrawal et al. and Barratt et al. (2022)
+as the charge-conserving reference.
+
+```bash
+MODELS="floquet_circuit haar_circuit U1_circuit" N_VALUES="6 8 10 12" SEEDS="42 43 44" \
+  P_VALUES="0 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.6" MAX_JOBS=4 \
+  ./experiments/QELM_S/exp_QELM_S.sh
+uv run python experiments/QELM_S/plot_entropy_fss.py outputs/exp_QELM_S/<date_time>
+```
+
+`P_C_FLOQUET` (default `0.21`, `S_1` of the Floquet model in Table I of the
+paper) and `P_C_U1` (default none) set the phase label, `N_ROUNDS` the number
+of rounds. `plot_entropy_fss.py` writes `entropy_fss.png` and its JSON: per
+model, `S_A / (N/2)` and `S_A` against `p` with the crossings of consecutive
+sizes, and the collapse `S(p, N) - S(p_c, N)` against `(p - p_c) N^(1/nu)` at
+the `(p_c, nu)` that minimizes the mismatch of the rescaled curves
+(`QELM.evaluation.finite_size`, the method of Sec. IV of the paper), fitted
+on the seed average and on each seed (the spread gives the error bars).
+A fourth column draws the cost of the collapse in the `(p_c, nu)` plane.
+
+#### Closer to the paper: late-time averages and the `I_3` crossing (issue #251)
+
+At `N <= 12`, with the final entropy alone and steps of 0.05 in `p`, the
+collapse gives `p_c = 0.25`, `nu = 2.2`, against `0.21 +- 0.16` and
+`1.74 +- 0.45` in the paper. The cost of the collapse has a long diagonal
+valley in the `(p_c, nu)` plane, so the window, the sizes and the noise move
+the minimum along it. `AVERAGE_FROM=0.5` averages, over the second half of
+each run, the Rényi entropies `S_1`, `S_2`, `S_inf` of the half chain and,
+when 4 divides `N`, the tripartite mutual information `I_3` of the four
+quarters (`entropy_task.average_from`). `plot_entropy_fss.py` then collapses
+one of them (`--entropy S1_avg`, `S2_avg` or `Sinf_avg`, the rows of Table I)
+on the sizes `N >= --min-N` and the points `p >= --p-min`. It also writes
+`i3_crossings.png`: `I_3` against `p` and the crossings of every pair of
+sizes, an estimate of `p_c` without a fit (Zabalo et al., PRB 101, 060301
+(2020)).
+
+```bash
+MODELS=floquet_circuit N_VALUES="16 14 12 10 8 6" SEEDS="42 43 44 45" PER_P=150 \
+  P_VALUES="0 0.025 0.05 0.075 0.1 0.125 0.15 0.175 0.2 0.225 0.25 0.275 0.3 0.35 0.4" \
+  AVERAGE_FROM=0.5 MAX_JOBS=4 ./experiments/QELM_S/exp_QELM_S.sh
+uv run python experiments/QELM_S/plot_entropy_fss.py outputs/exp_QELM_S/<date_time> \
+  --entropy S1_avg --min-N 8 --p-min 0.05
+```
+
+The title and the JSON give two errors for the collapse. The statistical
+one (`p_c_stat`, `nu_stat`) comes from a bootstrap: each point of `S(p, N)` is
+redrawn with its standard error, from the spread of the trajectories, and
+the collapse is fitted again. The systematic one (`p_c_sys`, `nu_sys`) is
+half the range of the fits over the choices of the data
+(`collapse_choices`): the smallest size kept (`--min-N` or one of the next
+two sizes), `p_min` or `p_min + 0.05`, and all `p` or only `p <= 0.3`.
+`p_c_total` and `nu_total` add the two in quadrature. The spread of the
+seeds alone (`p_c_err`, `nu_err`, the error bars of PR #240) misses the
+systematic part, which dominates at these sizes.
+
+A scratch run of this protocol (N = 6 to 16, 400 to 600 trajectories per
+`p`, `--min-N 8 --p-min 0.05`) gave, for `S_1`, `p_c = 0.209 +- 0.008 (stat)
++- 0.024 (sys)` and `nu = 2.03 +- 0.12 (stat) +- 0.26 (sys)`, in line with
+Table I (`0.21 +- 0.16`, `1.74 +- 0.45`). `S_2` and `S_inf` give the same
+`p_c`. The systematic part is a drift: with `N >= 10` the minimum moves
+along the valley to `p_c = 0.17`, `nu = 1.6`. The `I_3` curves of `N = 8, 12, 16` cross at
+`p = 0.11` to `0.13`.
 
 ## Run the purification decoding (issue #247)
 
@@ -918,6 +1028,30 @@ crossings and the collapses, next to the paper's `p_c = 0.1598(5)`,
 `notebooks/benchmarks/04_reference_qubit_purification.ipynb` runs this sweep
 from Jupyter, in `outputs/purification_gullans_huse/<date_time>/`.
 
+### Do all the estimators of `p_c` agree? (issue #257)
+
+```bash
+MODES="reference steady" MAX_JOBS=4 ./experiments/purification/purification.sh
+DYNAMICS=haar MODES="reference steady" N_VALUES="8 12 16" L=600 \
+  P_VALUES="0.05 0.11 0.15 0.17 0.19 0.24 0.33" MAX_JOBS=4 \
+  ./experiments/purification/purification.sh
+```
+
+`MODES=steady` adds `steady_state.py` next to the reference-qubit runs: the
+same circuit, step and boundaries, without reference qubit, monitored from
+`|0...0>` for `4N` steps, with the half-chain entropy `S_half` and the
+tripartite mutual information `I3` of three quarters of the chain at the end
+(`QELM.models.circuits.stabilizer.steady_state_entropies`, GF(2) rank of the
+stabilizer tableau). `DYNAMICS=haar` replaces the Clifford gates by Haar
+`U(4)` gates on the state vector (`QELM.models.circuits.monitored`, `N <= 16`)
+and writes the Renyi-2 values too (`S_Q2`, `S_half2`, `I3_2`).
+
+`plot_estimators.py` then compares the estimators in `pc_estimators.png` and
+`estimators.json`: crossings of `S_Q` and `I3` for consecutive sizes, with
+bootstrap errors, and collapses of `S_Q`, `I3` and
+`S_half(p, N) - S_half(p_c, N)` (`QELM.evaluation.finite_size_scaling`,
+`subtract=True` for `S_half`).
+
 ## Charge conservation check (issue #134)
 
 Both U(1) benchmarks (charge sharpening and learnability) check along every
@@ -1012,6 +1146,94 @@ several sizes `N` cross at `p_success ~ 0.2` in the paper. The figure is
 `notebooks/benchmarks/02_learnability_entropy.ipynb` runs the sweep, in
 `outputs/learnability_fig2c/<date_time>/` with `FIGURES=2c`, and plots
 Fig. 2c.
+
+## Run the charge of a random Haar or Clifford circuit with several readouts
+
+`experiments/haar_readouts/haar_readouts.py` (config `conf/haar_readouts.yaml`)
+asks the question of `QELM_M` (can a readout of the measurement record `M`
+tell the initial charge sector of the system, `N // 2` or `N // 2 - 1`?) for
+gates that conserve nothing: a brickwork of Haar-random U(4) gates, or of
+random two-qubit Clifford gates with `models=clifford_circuit`. With the
+TFIM of `QELM_M` (`h = 10 J`) or U(1) gates, the charge is (almost)
+conserved and a sum of outcomes, so a linear readout reads it; here it is
+not. The reference qubit `R` holds the charge sector
+(`AncillaChargeSectorEncoding`), the `N` system qubits run
+`readouts_task.n_rounds` rounds (default 5) of one brickwork layer followed
+by a Z measurement of each system qubit with probability `p`, and the
+label is the Z outcome of `R`. The state stays pure and is simulated as a
+state vector.
+
+At each `p` of `readouts_task.p_values`, `readouts_task.samples_per_p`
+trajectories (default 2000) are split into training and test sets, and each
+readout of `readouts_task.readouts` is fitted on the flattened record and
+scored on the test set by its accuracy (`accuracy_<readout>_p<p>`) and
+the `R2` of its output against the label (`r2_<readout>_p<p>`; a
+classifier outputs `2 P(Y = +1) - 1`):
+
+- `ridge`: the linear readout, `RidgeCV` with leave-one-out alpha;
+- `logistic`: a logistic regression on the standardized features, `C` by
+  5-fold cross-validation;
+- `ridge_pairs`: the same ridge on the features and the products of every
+  pair of them;
+- `knn`: `sqrt(n_train)` nearest neighbors, weighted by distance;
+- `mlp`: a neural network with two hidden layers of 64 units;
+- `gradient_boosting`: gradient-boosted trees.
+
+`readouts_task.features` sets what the readouts read, each set on its own:
+`M`, the record (default); `X`, `Y`, `Z`, the `<P_k>` of the system qubits in
+the final state after `R` is measured; `XX`, `YY`, `ZZ`, the `<P_i P_j>` on
+every pair; `all`, the six observable sets side by side (the QELM);
+`M_all`, the record and the six sets (the QELM-M). The scores of a set
+other than `M` are named `<readout>_<set>` (`accuracy_ridge_ZZ_p<p>`).
+`S_R_mean_p<p>` is the mean entropy of `R` (bits), the purification curve.
+`haar_circuit.fixed_instance=false` (the default) draws new gates for every
+trajectory; `true` keeps one circuit for the run.
+
+```bash
+uv run python experiments/haar_readouts/haar_readouts.py N=6 readouts_task.samples_per_p=500
+MAX_JOBS=4 ./experiments/haar_readouts/haar_readouts.sh
+uv run python experiments/haar_readouts/plot_haar_readouts.py outputs/haar_readouts/<date_time>
+```
+
+The launcher sweeps `MODELS` (`haar_circuit`, add `clifford_circuit`),
+`GATES` (`random fixed`), `N_VALUES` (`8`) and `SEEDS`
+(`PER_P`, `P_VALUES`, `READOUTS`, `FEATURES`, `MAX_JOBS` change the defaults), one folder per run,
+`<circuit>_<gates>_N<N>_seed<seed>/`. The plot script writes one figure per readout,
+`<readout>.png` with its JSON: the purification curve `S_R(p)` on the left,
+the accuracy of the readout in the middle, with the chance level 1/2, and
+its `R2` on the right (`<circuit>_<readout>.png` when the sweep holds both
+circuits). With `READOUTS=ridge FEATURES="M all M_all"`,
+`compare_<circuit>.png` draws the ridge on `M`, on the QELM features and on
+the QELM-M features on the same panels, one per circuit.
+
+### Benchmark of QELM readouts
+
+More feature maps of the final state benchmark what a readout of the QELM
+can read: `local2` (every one- and two-site Pauli string, cross terms
+included), `born` (the `2**N` Z-basis probabilities of the system),
+`reservoir` (the same after one fixed Haar unitary on the system, drawn once
+per run), `shot` (one Z-basis bitstring, what one run of the experiment
+gives), `M_shot` (the record and that bitstring) and `M_x_all` (the record,
+the six observable sets and their products: weights of the observables that
+depend on the record). They draw from their own generators, so the
+trajectories stay those of a run without them. The ridge quadratic in the
+observables is `READOUTS=ridge_pairs FEATURES=all`; run it as a second
+sweep and give both folders to the plot script, which merges the runs that
+share circuit, gate draw, `N` and seed:
+
+```bash
+OUT_DIR=outputs/haar_readouts/linear READOUTS="ridge logistic" \
+  FEATURES="all local2 born reservoir shot M_shot M_all M_x_all" \
+  MAX_JOBS=4 ./experiments/haar_readouts/haar_readouts.sh
+OUT_DIR=outputs/haar_readouts/pairs READOUTS=ridge_pairs FEATURES=all \
+  MAX_JOBS=4 ./experiments/haar_readouts/haar_readouts.sh
+uv run python experiments/haar_readouts/plot_haar_readouts.py \
+  outputs/haar_readouts/linear outputs/haar_readouts/pairs
+```
+
+`benchmark_<circuit>_<gates>_<readout>.png` then draws, for one gate draw and
+the `ridge` (with the quadratic ridge) or the `logistic` readout, every
+benchmark set on the same panels, with the purification curve.
 
 ## Check the chaos and the locality of the reservoirs (issue #243)
 

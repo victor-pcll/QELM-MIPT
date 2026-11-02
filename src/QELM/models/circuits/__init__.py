@@ -51,7 +51,11 @@ The package is split by the nature of the gates (issue #189):
   :class:`CliffordBrickworkCircuit`;
 - :mod:`QELM.models.circuits.stabilizer`: the same Clifford gates on the
   periodic brickwork, simulated with stabilizer tableaux, for the
-  reference-qubit probe of Gullans & Huse (2020) (issue #185).
+  reference-qubit probe of Gullans & Huse (2020) (issue #185);
+- :mod:`QELM.models.circuits.floquet`: the deterministic Floquet Ising brick
+  of Skinner, Ruhman and Nahum, PRX 9, 031009 (2019), Eq. (1), and
+  :class:`FloquetBrickworkCircuit`, whose layers are half-layers, the time
+  step of the paper (issue #239).
 
 Everything is re-exported here, so ``from QELM.models.circuits import ...``
 keeps working.
@@ -71,6 +75,11 @@ from QELM.models.circuits.clifford import (
     clifford_group_2q,
     random_clifford_gate,
 )
+from QELM.models.circuits.floquet import (
+    SKINNER_2019,
+    FloquetBrickworkCircuit,
+    floquet_ising_gate,
+)
 from QELM.models.circuits.haar import (
     HaarBrickworkCircuit,
     U1BrickworkCircuit,
@@ -87,8 +96,10 @@ from QELM.models.circuits.stabilizer import (
 )
 
 __all__ = [
+    "SKINNER_2019",
     "BrickworkCircuit",
     "CliffordBrickworkCircuit",
+    "FloquetBrickworkCircuit",
     "Gate",
     "HaarBrickworkCircuit",
     "Layer",
@@ -99,6 +110,7 @@ __all__ = [
     "clifford_gate_programs",
     "clifford_group_2q",
     "draw_probe_history",
+    "floquet_ising_gate",
     "haar_gate",
     "haar_unitary",
     "periodic_bonds",

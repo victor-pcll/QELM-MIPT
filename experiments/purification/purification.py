@@ -27,6 +27,11 @@ the trajectories at the final time ``t = 4N``. For a stabilizer state it is
 still mixed. The paper finds that the curves of different ``N`` cross at
 ``p_c = 0.1598(5)``, with ``nu = 1.30(5)``.
 
+With ``probe.dynamics=haar`` (issue #257) the gates are Haar ``U(4)`` on the
+same brickwork and the state is a state vector
+(:func:`QELM.models.circuits.monitored.haar_reference_entropy`, ``N <= 16``):
+only the final ``S_Q`` is kept, with its Renyi-2 value ``S_Q2``.
+
 Run from the repository root:
 
     uv run python experiments/purification/purification.py N=16 probe.p=0.16
@@ -59,6 +64,7 @@ from tqdm import tqdm
 from QELM import check_qubit_counts
 from QELM.encoding import AncillaBellPairEncoding
 from QELM.models.circuits import draw_probe_history, reference_entropy_history
+from QELM.models.circuits.monitored import haar_reference_entropy
 from QELM.utils import save_config
 
 
@@ -82,6 +88,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     L = int(cfg.samples.L)
     # One stream per (seed, N, p): runs of a sweep are independent.
     rng = np.random.default_rng([int(cfg.seed), N, round(p * 1e9)])
+    if str(cfg.probe.get("dynamics", "clifford")) == "haar":
+        return _run_haar(N, p, scramble_steps, steps, L, rng)
     T = scramble_steps + steps
     S_Q = np.zeros((L, T), dtype=np.uint8)
     n_measured = np.zeros(L, dtype=int)
@@ -104,6 +112,37 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "scramble_steps": scramble_steps,
         "steps": steps,
     }
+
+
+def _run_haar(
+    N: int, p: float, scramble_steps: int, steps: int, L: int, rng: np.random.Generator
+) -> dict[str, Any]:
+    """The same probe with Haar gates, on the state vector (issue #257).
+
+    ``S_Q`` is only kept at the final step, with its Renyi-2 value
+    ``S_Q2``; ``n_measured`` is not recorded (0).
+    """
+    values = {"S_Q": np.zeros(L), "S_Q2": np.zeros(L)}
+    for i in tqdm(range(L)):
+        out = haar_reference_entropy(N, p, scramble_steps, steps, rng)
+        for key in values:
+            values[key][i] = out[key]
+    results: dict[str, Any] = {
+        "S_Q": values["S_Q"][:, None],
+        "n_measured": np.zeros(L, dtype=int),
+        "N": N,
+        "p": p,
+        "S_Q_t": [],
+        "n_samples": L,
+        "scramble_steps": scramble_steps,
+        "steps": steps,
+    }
+    for key, data in values.items():
+        results[f"{key}_mean"] = float(data.mean())
+        results[f"{key}_err"] = (
+            float(data.std(ddof=1) / np.sqrt(L)) if L > 1 else float("nan")
+        )
+    return results
 
 
 def save(results: dict[str, Any], out_dir: Path) -> Path:

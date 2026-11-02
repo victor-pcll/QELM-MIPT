@@ -19,6 +19,7 @@ from QELM.evaluation import (
     mean_single_qubit_entropy,
     metrics,
     renyi_entropy,
+    tripartite_mutual_information,
     von_neumann_entropy,
 )
 from QELM.physics import partial_trace
@@ -370,3 +371,36 @@ def test_mean_single_qubit_entropy_misses_the_correlations() -> None:
 def test_mean_single_qubit_entropy_bad_sites(sites: list[int]) -> None:
     with pytest.raises(ValueError, match="sites"):
         mean_single_qubit_entropy(_ghz(3), sites)
+
+
+def test_tripartite_mutual_information_known_states() -> None:
+    """Issue #251: I_3 of the four quarters on known 4-qubit states."""
+    product = np.zeros(16, dtype=complex)
+    product[0b0101] = 1
+    assert tripartite_mutual_information(product) == pytest.approx(0, abs=1e-12)
+    # GHZ: every subsystem has one bit, I_3 = 3 - 3 + 1 = 1.
+    ghz = np.zeros(16, dtype=complex)
+    ghz[[0, 15]] = 1 / np.sqrt(2)
+    assert tripartite_mutual_information(ghz) == pytest.approx(1)
+    # Bell pairs (A, B) and (C, D): I_3 = 3 - (0 + 2 + 2) + 1 = 0.
+    bell = np.array([1, 0, 0, 1], dtype=complex) / np.sqrt(2)
+    assert tripartite_mutual_information(np.kron(bell, bell)) == pytest.approx(0)
+    # Bell pairs (A, C) and (B, D): S_AC = 0, I_3 = 3 - (2 + 0 + 2) + 1 = 0.
+    psi = np.kron(bell, bell).reshape(2, 2, 2, 2).transpose(0, 2, 1, 3).reshape(16)
+    assert tripartite_mutual_information(psi) == pytest.approx(0)
+
+
+def test_tripartite_mutual_information_of_a_random_state_is_negative() -> None:
+    """A Haar-random state is scrambled: I_3 < 0 (volume law)."""
+    rng = np.random.default_rng(0)
+    psi = rng.normal(size=256) + 1j * rng.normal(size=256)
+    psi /= np.linalg.norm(psi)
+    assert tripartite_mutual_information(psi) < -0.5
+
+
+@pytest.mark.parametrize("N", [2, 6])
+def test_tripartite_mutual_information_needs_quarters(N: int) -> None:
+    psi = np.zeros(2**N, dtype=complex)
+    psi[0] = 1
+    with pytest.raises(ValueError, match="multiple of 4"):
+        tripartite_mutual_information(psi)

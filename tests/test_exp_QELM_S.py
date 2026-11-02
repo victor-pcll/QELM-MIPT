@@ -21,6 +21,7 @@ FOLDER = REPO_ROOT / "experiments" / "QELM_S"
 SCRIPT = FOLDER / "exp_QELM_S.py"
 BASH_SCRIPT = FOLDER / "exp_QELM_S.sh"
 PLOT_SCRIPT = FOLDER / "plot_QELM_S.py"
+FSS_SCRIPT = FOLDER / "plot_entropy_fss.py"
 N = 4
 P_VALUES = "[0.0,0.3,1.0]"
 PER_P = 12
@@ -95,10 +96,15 @@ def test_measure_round_at_p_zero_and_one() -> None:
     assert np.count_nonzero(np.abs(collapsed) > 1e-12) == 1
 
 
-@pytest.mark.parametrize("model", ["haar_circuit", "clifford_circuit", "TFIM"])
+@pytest.mark.parametrize(
+    "model",
+    ["haar_circuit", "clifford_circuit", "U1_circuit", "floquet_circuit", "TFIM"],
+)
 def test_shapes_and_range_of_the_outputs(model: str) -> None:
     out = _run(f"models={model}")
-    L, n_rounds = 3 * PER_P, 2 * N
+    # The Floquet chain runs half-layers: 2 N periods are 4 N rounds, here
+    # with N // 2 = 2 even, the last one already on the cut bond.
+    L, n_rounds = 3 * PER_P, (4 if model == "floquet_circuit" else 2) * N
     assert out["M"].shape == (L, n_rounds, N)
     assert out["Z"].shape == out["Zshot"].shape == (L, N)
     assert out["S"].shape == out["p"].shape == (L,)
@@ -256,3 +262,194 @@ def test_bash_sweep_refuses_a_bad_max_jobs(tmp_path: Path) -> None:
         ["bash", str(BASH_SCRIPT)], env=env, cwd=tmp_path, capture_output=True
     )
     assert result.returncode == 2
+
+
+def test_floquet_sweep_and_finite_size_figure(tmp_path: Path) -> None:
+    """Issue #239: the sweep runs the Floquet chain and the U(1) circuit, with
+    the p_c of Table I of Skinner et al. (2019) for the Floquet chain, and
+    plot_entropy_fss.py draws the crossings and the collapse."""
+    env = {
+        **os.environ,
+        "OUT_DIR": str(tmp_path),
+        "MODELS": "floquet_circuit U1_circuit",
+        "N_VALUES": "4 6",
+        "SEEDS": "1 2",
+        "PER_P": "4",
+        "P_VALUES": "0 0.2 0.4 0.6",
+        "MAX_JOBS": "2",
+        "TQDM_DISABLE": "1",
+    }
+    subprocess.run(
+        ["bash", str(BASH_SCRIPT)],
+        check=True,
+        env=env,
+        cwd=tmp_path,
+        capture_output=True,
+    )
+    cfg = (tmp_path / "floquet_circuit_N4_seed1" / ".hydra" / "config.yaml").read_text()
+    assert "p_c: 0.21" in cfg
+    cfg = (tmp_path / "U1_circuit_N4_seed1" / ".hydra" / "config.yaml").read_text()
+    assert "p_c: null" in cfg
+    _load(FSS_SCRIPT).main([str(tmp_path)])
+    data = json.loads((tmp_path / "entropy_fss.json").read_text())["extra"]
+    assert (tmp_path / "entropy_fss.png").is_file()
+    assert set(data) >= {"floquet_circuit", "U1_circuit"}
+    floquet = data["floquet_circuit"]
+    assert floquet["sizes"] == [4, 6]
+    assert set(floquet["collapse"]) >= {"p_c", "nu", "cost", "p_c_err", "nu_err"}
+    assert 0.05 <= floquet["collapse"]["p_c"] <= 0.45
+    assert floquet["reference"]["p_c"] == 0.21
+    # At p = 0 the entropy grows with N (volume law).
+    S0 = [floquet["curves"][n]["S"][0] for n in ("4", "6")]
+    assert S0[1] > S0[0]
+
+
+def test_floquet_rounds_end_on_the_cut_bond() -> None:
+    """The default number of rounds of the Floquet chain ends on the
+    half-layer that holds the bond (N/2 - 1, N/2) across the cut."""
+    from QELM.models.circuits import FloquetBrickworkCircuit
+
+    exp = _load(SCRIPT)
+    for N in (4, 6, 8, 10, 12):
+        R = exp.floquet_rounds(N)
+        assert R in (4 * N, 4 * N + 1)
+        circuit = FloquetBrickworkCircuit({"N": N, "Nr": 0, "depth": R})
+        last = [(i, j) for i, j, _ in circuit.layers[-1]]
+        assert (N // 2 - 1, N // 2) in last
+
+
+def test_average_start_takes_an_even_number_of_rounds() -> None:
+    """Issue #251: the late-time average starts at floor(f * n_rounds), one
+    later when needed so that both parities of the last half-layer weigh the
+    same."""
+    exp = _load(SCRIPT)
+    assert exp.average_start(32, 0.5) == 16
+    assert exp.average_start(33, 0.5) == 15
+    assert exp.average_start(10, 0.0) == 0
+    assert exp.average_start(11, 0.0) == 1
+    for R in range(3, 40):
+        for f in (0.0, 0.3, 0.5, 0.75):
+            start = exp.average_start(R, f)
+            assert (R - start) % 2 == 0 and R - start >= 2
+            assert abs(start - int(f * R)) <= 1
+    with pytest.raises(ValueError, match="average_from"):
+        exp.average_start(10, 1.0)
+    with pytest.raises(ValueError, match="fewer than two"):
+        exp.average_start(1, 0.0)
+
+
+def test_entanglement_diagnostics_match_the_entropy_functions() -> None:
+    from QELM.evaluation import renyi_entropy, tripartite_mutual_information
+
+    exp = _load(SCRIPT)
+    rng = np.random.default_rng(3)
+    for N in (6, 8):
+        psi = rng.normal(size=2**N) + 1j * rng.normal(size=2**N)
+        psi /= np.linalg.norm(psi)
+        half = list(range(N // 2))
+        values = exp.entanglement_diagnostics(psi, N)
+        expected = [renyi_entropy(psi, n, half) for n in (1, 2, float("inf"))]
+        np.testing.assert_allclose(values[:3], expected, atol=1e-10)
+        if N % 4 == 0:
+            assert values[3] == pytest.approx(tripartite_mutual_information(psi))
+        else:
+            assert np.isnan(values[3])
+
+
+def test_late_time_averages() -> None:
+    """With average_from, run returns the late-time averages of S_1, S_2,
+    S_inf and I_3 (N a multiple of 4) per trajectory and per p."""
+    out = _run("models=floquet_circuit", "entropy_task.average_from=0.5")
+    R = int(out["n_rounds"])
+    assert out["average_start"] == _load(SCRIPT).average_start(R, 0.5)
+    assert (R - out["average_start"]) % 2 == 0
+    for name in ("S1", "S2", "Sinf", "I3"):
+        assert out[f"{name}_avg"].shape == (3 * PER_P,)
+        assert f"{name}_avg_mean_p0.3" in out
+    # S_1 >= S_2 >= S_inf, all within [0, N/2].
+    assert np.all(out["S1_avg"] >= out["S2_avg"] - 1e-12)
+    assert np.all(out["S2_avg"] >= out["Sinf_avg"] - 1e-12)
+    assert np.all((out["S1_avg"] >= -1e-12) & (out["S1_avg"] <= N // 2 + 1e-12))
+    # At p = 1 every qubit is measured each round: a product state.
+    p1 = out["p"] == 1.0
+    np.testing.assert_allclose(out["S1_avg"][p1], 0, atol=1e-10)
+    np.testing.assert_allclose(out["I3_avg"][p1], 0, atol=1e-10)
+    # Without the option nothing is added, and the final S is unchanged.
+    plain = _run("models=floquet_circuit")
+    assert "S1_avg" not in plain
+    np.testing.assert_array_equal(plain["S"], out["S"])
+
+
+def test_late_time_averages_skip_I3_when_4_does_not_divide_N() -> None:
+    out = _run("models=floquet_circuit", "N=6", "entropy_task.average_from=0.5")
+    assert "S1_avg" in out and "I3_avg" not in out
+
+
+def test_fss_of_the_late_time_averages(tmp_path: Path) -> None:
+    """Issue #251: with AVERAGE_FROM, plot_entropy_fss.py collapses a
+    late-time Rényi entropy on the sizes N >= min_N, draws the cost
+    landscape and the crossings of I_3."""
+    env = {
+        **os.environ,
+        "OUT_DIR": str(tmp_path),
+        "MODELS": "floquet_circuit",
+        "N_VALUES": "4 6 8",
+        "SEEDS": "1 2",
+        "PER_P": "4",
+        "P_VALUES": "0 0.1 0.2 0.3 0.4",
+        "AVERAGE_FROM": "0.5",
+        "MAX_JOBS": "3",
+        "TQDM_DISABLE": "1",
+    }
+    subprocess.run(
+        ["bash", str(BASH_SCRIPT)],
+        check=True,
+        env=env,
+        cwd=tmp_path,
+        capture_output=True,
+    )
+    cfg = (tmp_path / "floquet_circuit_N8_seed1" / ".hydra" / "config.yaml").read_text()
+    assert "average_from: 0.5" in cfg
+    fss = _load(FSS_SCRIPT)
+    fss.main([str(tmp_path), "--entropy", "S2_avg", "--min-N", "6", "--p-min", "0.1"])
+    data = json.loads((tmp_path / "entropy_fss.json").read_text())["extra"]
+    floquet = data["floquet_circuit"]
+    assert floquet["entropy"] == "S2_avg"
+    assert floquet["reference"]["p_c"] == 0.22
+    assert floquet["sizes"] == [4, 6, 8]
+    assert floquet["fit"] == {"min_N": 6, "p_min": 0.1}
+    land = floquet["landscape"]
+    cost = np.asarray(land["cost"])
+    assert cost.shape == (len(land["nu"]), len(land["p_c"]))
+    # The fitted minimum is at most the lowest cost of the grid.
+    assert floquet["collapse"]["cost"] <= cost.min() + 1e-12
+    # Statistical (bootstrap) and systematic (choices of the fit) errors.
+    collapse = floquet["collapse"]
+    for key in ("p_c", "nu"):
+        assert collapse[f"{key}_stat"] >= 0 and collapse[f"{key}_sys"] >= 0
+        assert collapse[f"{key}_total"] == pytest.approx(
+            np.hypot(collapse[f"{key}_stat"], collapse[f"{key}_sys"])
+        )
+    choices = floquet["collapse_choices"]
+    # Sizes 6 and 8 are kept: one smallest size, two p_min, p_max 0.4 only.
+    assert [(c["min_N"], c["p_min"]) for c in choices] == [(6, 0.1), (6, 0.15)]
+    assert collapse["p_c_sys"] == pytest.approx(
+        (max(c["p_c"] for c in choices) - min(c["p_c"] for c in choices)) / 2
+    )
+    i3 = json.loads((tmp_path / "i3_crossings.json").read_text())["extra"]
+    # I_3 needs 4 | N: only N = 4 and 8.
+    assert set(i3["floquet_circuit"]["curves"]) == {"4", "8"}
+    assert "N4-N8" in i3["floquet_circuit"]["crossings"]
+    assert (tmp_path / "i3_crossings.png").is_file()
+    # A sweep without AVERAGE_FROM has no late-time average to collapse.
+    plain = tmp_path / "plain"
+    env |= {"OUT_DIR": str(plain), "N_VALUES": "4", "SEEDS": "1", "AVERAGE_FROM": ""}
+    subprocess.run(
+        ["bash", str(BASH_SCRIPT)],
+        check=True,
+        env=env,
+        cwd=tmp_path,
+        capture_output=True,
+    )
+    with pytest.raises(ValueError, match="AVERAGE_FROM"):
+        fss.main([str(plain), "--entropy", "S1_avg"])

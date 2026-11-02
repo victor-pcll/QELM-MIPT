@@ -26,7 +26,10 @@ ancilla_bell_pair:
 # scramble_steps: steps without measurement after the encoding, the paper's
 #   t0 = 2L = 2N.
 # steps: measured steps after the scrambling, the paper's t - t0 = 2L = 2N.
+# dynamics (issue #257): clifford (stabilizer tableaux, large N) or haar
+#   (Haar U(4) gates on the same brickwork, state vector, N <= 16).
 probe:
+  dynamics: clifford
   p: 0.16
   scramble_steps: ${int:${mul:2,${N}}}
   steps: ${int:${mul:2,${N}}}

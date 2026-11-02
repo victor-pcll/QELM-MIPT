@@ -17,6 +17,9 @@
 #     N_VALUES="8 16 32 64"       system qubits, the paper's L, even
 #     P_VALUES="0.10 ... 0.22"    measurement probabilities
 #     SEEDS="0"                   several seeds split the trajectories of a point
+#     MODES="reference"           probes: reference (purification.py, S_Q) and/or
+#                                 steady (steady_state.py, S_half and I3, #257)
+#     DYNAMICS=clifford           clifford (stabilizer) or haar (state vector, N <= 16)
 #     MAX_JOBS=1                  runs at once, one core each (JOBS, the
 #                                 former name, works when MAX_JOBS is unset)
 
@@ -41,6 +44,8 @@ EXPERIMENT="purification_gullans_huse"
 read -r -a N_VALUES <<< "${N_VALUES:-8 16 32 64}"
 read -r -a P_VALUES <<< "${P_VALUES:-0.10 0.12 0.14 0.15 0.16 0.17 0.18 0.20 0.22}"
 read -r -a SEEDS <<< "${SEEDS:-0}"
+read -r -a MODES <<< "${MODES:-reference}"
+DYNAMICS="${DYNAMICS:-clifford}"
 L="${L:-2000}"
 MAX_JOBS="${MAX_JOBS:-${JOBS:-1}}"
 if ! [[ "$MAX_JOBS" =~ ^[1-9][0-9]*$ ]]; then
@@ -56,15 +61,21 @@ mkdir -p "$OUT_DIR"
 echo "Writing outputs to $OUT_DIR"
 
 run_one() {
-  local N="$1" P="$2" SEED="$3"
-  uv run python experiments/purification/purification.py \
+  local N="$1" P="$2" SEED="$3" MODE="$4" SCRIPT RUN_NAME
+  case "$MODE" in
+    reference) SCRIPT=purification.py; RUN_NAME="N${N}_p${P}_seed${SEED}" ;;
+    steady) SCRIPT=steady_state.py; RUN_NAME="N${N}_p${P}_steady_seed${SEED}" ;;
+    *) echo "Unknown mode $MODE (reference or steady)." >&2; return 1 ;;
+  esac
+  uv run python "experiments/purification/$SCRIPT" \
     "N=$N" \
     "probe.p=$P" \
+    "probe.dynamics=$DYNAMICS" \
     "seed=$SEED" \
     "samples.L=$L" \
-    "hydra.run.dir=$OUT_DIR/N${N}_p${P}_seed${SEED}" > /dev/null 2>&1 \
-    || { echo "FAILED: N=$N p=$P seed=$SEED" >&2; return 1; }
-  echo "--- done N=$N p=$P seed=$SEED"
+    "hydra.run.dir=$OUT_DIR/$RUN_NAME" > /dev/null 2>&1 \
+    || { echo "FAILED: N=$N p=$P seed=$SEED mode=$MODE" >&2; return 1; }
+  echo "--- done N=$N p=$P seed=$SEED mode=$MODE"
 }
 
 # Largest sizes first, so that the parallel runs end together.
@@ -73,11 +84,13 @@ PIDS=()
 for N in "${SORTED_N[@]}"; do
   for P in "${P_VALUES[@]}"; do
     for SEED in "${SEEDS[@]}"; do
-      while (( $(jobs -rp | wc -l) >= MAX_JOBS )); do
-        sleep 0.2
+      for MODE in "${MODES[@]}"; do
+        while (( $(jobs -rp | wc -l) >= MAX_JOBS )); do
+          sleep 0.2
+        done
+        run_one "$N" "$P" "$SEED" "$MODE" &
+        PIDS+=("$!")
       done
-      run_one "$N" "$P" "$SEED" &
-      PIDS+=("$!")
     done
   done
 done
@@ -90,6 +103,9 @@ if (( STATUS )); then
   exit 1
 fi
 
-uv run python experiments/purification/plot_purification.py "$OUT_DIR"
+if [[ " ${MODES[*]} " == *" reference "* && "$DYNAMICS" == clifford ]]; then
+  uv run python experiments/purification/plot_purification.py "$OUT_DIR"
+fi
+uv run python experiments/purification/plot_estimators.py "$OUT_DIR"
 
-echo "Done: ${#N_VALUES[@]} x ${#P_VALUES[@]} x ${#SEEDS[@]} runs in $OUT_DIR"
+echo "Done: ${#N_VALUES[@]} x ${#P_VALUES[@]} x ${#SEEDS[@]} x ${#MODES[@]} runs in $OUT_DIR"
