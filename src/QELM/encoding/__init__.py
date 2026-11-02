@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from QELM.encoding.angle import AngleEncoding
 from QELM.encoding.base import Encoding, OutOfBoundsError, ProductEncoding
+from QELM.encoding.bell_pair import AncillaBellPairEncoding
 from QELM.encoding.charge_sector import (
     AncillaChargeSectorEncoding,
     charge_sector_indices,
@@ -21,6 +22,7 @@ from QELM.encoding.rotation import RotationEncoding
 from QELM.encoding.uniform_bloch import UniformBlochEncoding
 
 _ENCODINGS: dict[str, type[Encoding]] = {
+    AncillaBellPairEncoding.name: AncillaBellPairEncoding,
     AncillaChargeSectorEncoding.name: AncillaChargeSectorEncoding,
     RotationEncoding.name: RotationEncoding,
     AngleEncoding.name: AngleEncoding,
@@ -50,6 +52,7 @@ def get_encoding(name: str) -> type[Encoding]:
 
 
 __all__ = [
+    "AncillaBellPairEncoding",
     "AncillaChargeSectorEncoding",
     "AngleEncoding",
     "DenseAngleEncoding",

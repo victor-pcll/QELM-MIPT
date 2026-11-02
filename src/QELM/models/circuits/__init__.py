@@ -49,6 +49,9 @@ The package is split by the nature of the gates (issue #189):
   :class:`U1BrickworkCircuit`, :class:`HaarBrickworkCircuit`;
 - :mod:`QELM.models.circuits.clifford`: the two-qubit Clifford group and
   :class:`CliffordBrickworkCircuit`;
+- :mod:`QELM.models.circuits.stabilizer`: the same Clifford gates on the
+  periodic brickwork, simulated with stabilizer tableaux, for the
+  reference-qubit probe of Gullans & Huse (2020) (issue #185);
 - :mod:`QELM.models.circuits.floquet`: the deterministic Floquet Ising brick
   of Skinner, Ruhman and Nahum, PRX 9, 031009 (2019), Eq. (1), and
   :class:`FloquetBrickworkCircuit`, whose layers are half-layers, the time
@@ -84,6 +87,13 @@ from QELM.models.circuits.haar import (
     haar_unitary,
     random_u1_gate,
 )
+from QELM.models.circuits.stabilizer import (
+    ProbeHistory,
+    clifford_gate_programs,
+    draw_probe_history,
+    periodic_bonds,
+    reference_entropy_history,
+)
 
 __all__ = [
     "SKINNER_2019",
@@ -93,13 +103,18 @@ __all__ = [
     "Gate",
     "HaarBrickworkCircuit",
     "Layer",
+    "ProbeHistory",
     "U1BrickworkCircuit",
     "apply_layer",
     "apply_two_qubit_gate",
+    "clifford_gate_programs",
     "clifford_group_2q",
+    "draw_probe_history",
     "floquet_ising_gate",
     "haar_gate",
     "haar_unitary",
+    "periodic_bonds",
     "random_clifford_gate",
     "random_u1_gate",
+    "reference_entropy_history",
 ]
