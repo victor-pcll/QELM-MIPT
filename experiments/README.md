@@ -30,6 +30,28 @@ cfg = json.loads(Path("outputs/.../resolved_config.json").read_text())
 cfg["N"], cfg["N_total"], cfg["samples"]["train_size"]
 ```
 
+## One README per experiment folder (issue #250)
+
+Every experiment folder has its own `README.md`, a short scientific report
+written from [`README_TEMPLATE.md`](README_TEMPLATE.md): the physical model
+and the ML task, the protocol, the results with their numbers, and the
+figures (in the folder's `figures/`) with captions. This file keeps the run
+commands and every option of the launchers.
+
+| Folder | Experiment | Role in the project |
+| --- | --- | --- |
+| [`QELM_Z/`](QELM_Z/README.md) | unitary QELM, ancilla from `<O_k>` | baseline, `p = 0` |
+| [`projective/`](projective/README.md) | ancilla from a projective record | prototype of `QELM_M` |
+| [`QELM_M/`](QELM_M/README.md) | charge sector from the record `M`, TFIM / Haar / Clifford | charge learning, double descent in the ratio |
+| [`QELM_Q/`](QELM_Q/README.md) | charge `Q` from `<Z_k>` and `M` over `(p, h)`, Bayes ceilings, Bayes-Ridge FSS | charge learning (task 1A) |
+| [`learnability/`](learnability/README.md) | Barratt et al. (2022), Fig. 2 | benchmark of charge learning |
+| [`charge_sharpening/`](charge_sharpening/README.md) | Agrawal et al. (2024), Fig. 7 | benchmark of purification |
+| [`haar_readouts/`](haar_readouts/README.md) | sector of a purifying reference qubit, many decoders | purification decoding (task 1B) |
+| [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
+| [`diagnostics/`](diagnostics/README.md) | chaos and locality of every reservoir | why a reservoir shows the MIPT or not |
+| [`double_descent/`](double_descent/README.md) | MNIST with a QELM readout | statistics of the readout |
+| [`example/`](example/README.md) | test sweep and template script | smoke test |
+
 ## Run the test experiment
 
 From the repository root, after `uv sync`:
