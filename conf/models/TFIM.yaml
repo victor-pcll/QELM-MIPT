@@ -9,13 +9,13 @@
 # still be overridden directly (TFIM.h=5).
 models: TFIM
 
-# Total number of qubits, ancilla included (N = Ns + Nr, see conf/config.yaml).
-# Override it with N=6, not TFIM.N=6.
+# Number of system qubits, ancilla excluded (N_total = N + Nr, see
+# conf/config.yaml). Override it with N=6, not TFIM.N=6.
 N: 10
 
 # Hamiltonian
 TFIM:
-  N: ${N} # number of qubits, always the top-level N
+  N: ${N} # number of system qubits, always the top-level N
   J: 1.0 # coupling scale Js, the energy unit
   h: ${mul:10.0,${TFIM.J}} # transverse field, h = 10 Js
   basis: X # X: quantum information convention, Z: condensed matter (TFIM.basis=Z)
@@ -24,5 +24,5 @@ TFIM:
 # Unitary evolution step and step count, recorded by the pipeline (evolution_request).
 evolution:
   t: ${div:10.0,${TFIM.J}} # total evolution time, t = 10 / Js
-  n_steps: ${mul:4,${N}} # d, number of time cuts, d = 4 N
+  n_steps: ${mul:4,${N}} # d, number of time cuts, d = 4 N (system qubits)
   dt: ${div:${evolution.t},${evolution.n_steps}} # step, dt = t / d

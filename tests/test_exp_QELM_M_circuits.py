@@ -26,7 +26,7 @@ from QELM.models.circuits.clifford import _phase_key, clifford_group_2q
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "experiments" / "QELM_M" / "exp_QELM_M.py"
 RATIO_LAUNCHER = SCRIPT.with_name("exp_QELM_M_ratio.sh")
-L, N = 40, 4
+L, N = 40, 3  # N system qubits (issue #235)
 CIRCUITS = ["haar_circuit", "clifford_circuit"]
 
 
@@ -70,8 +70,8 @@ def test_same_features_and_scores_as_the_tfim_run(model: str) -> None:
     """p = 1: the record has the TFIM shape, outcomes +-1 and a bias column,
     the label is +-1 and every score is finite."""
     out = _load_script().run(load_config(_overrides(model)))
-    assert out["M"].shape == (L, 5, N - 1)
-    assert out["X"].shape == (L, 5 * (N - 1) + 1)
+    assert out["M"].shape == (L, 5, N)
+    assert out["X"].shape == (L, 5 * N + 1)
     np.testing.assert_array_equal(out["X"][:, -1], 1.0)
     assert set(np.unique(out["X"][:, :-1])) <= {-1.0, 1.0}
     assert set(np.unique(out["Y"])) <= {-1.0, 1.0}
@@ -161,7 +161,7 @@ def test_ratio_launcher_runs_a_circuit(tmp_path: Path) -> None:
         **os.environ,
         "MODEL": "clifford_circuit",
         "EXTRA_OVERRIDES": "clifford_circuit.fixed_instance=true",
-        "N_VALUES": "3",
+        "N_VALUES": "2",
         "P_VALUES": "1.0",
         "ALPHA_RATIOS": "2.0",
         "N_TEST": "10",
@@ -173,7 +173,7 @@ def test_ratio_launcher_runs_a_circuit(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert "models=clifford_circuit" in result.stdout
-    run = tmp_path / "N3_seed42_p1.0_a2.0"
+    run = tmp_path / "N2_seed42_p1.0_a2.0"
     used = OmegaConf.load(run / "config_used.yaml")
     assert used.models == "clifford_circuit"
     assert used.clifford_circuit.fixed_instance is True

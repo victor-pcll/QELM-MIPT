@@ -2,14 +2,14 @@
 
 # Projective measurement in the Z basis (QELM.training.measurements).
 # qubits: list of measured sites in order, or null for every system qubit
-#   (Nr .. N-1).
+#   (sites Nr .. N_total - 1).
 # Nr: ancilla qubits at the start of the chain, never measured by default.
 #   It follows the top-level Nr; 1 matches AncillaChargeSectorEncoding.
 # p: probability of measuring each target qubit; measure(rho, p=...) overrides it.
 # nbr_time_evolution: number of time-evolution steps of length
 #   evolution.t / nbr_time_evolution, each followed by a measurement of the
 #   system, read by experiments/QELM_M/exp_QELM_M.py (issues #123, #132).
-#   Independent of N, Ns and Nr. Override with
+#   Independent of N, Nr and N_total. Override with
 #   projective_measurement.nbr_time_evolution=10.
 qubits: null
 Nr: ${Nr}

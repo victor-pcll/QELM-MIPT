@@ -68,7 +68,7 @@ def floquet_ising_gate(
 class FloquetBrickworkCircuit(BrickworkCircuit):
     """Running-bond circuit of the Floquet Ising brick of Skinner et al. (2019).
 
-    The geometry of :class:`BrickworkCircuit` (system qubits ``Nr .. N-1``,
+    The geometry of :class:`BrickworkCircuit` (system qubits ``Nr .. N_total-1``,
     open or periodic boundaries), with two differences:
 
     - every gate is the same deterministic brick :func:`floquet_ising_gate`,

@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
+
+from QELM.config import upgrade_legacy_counts
 
 # Config keys copied into every row, as (row name, dotted config key).
 DEFAULT_KEYS: tuple[tuple[str, str], ...] = (
@@ -31,6 +33,9 @@ def load_sweep(
     ``experiments/QELM_M/exp_QELM_M.sh`` under
     ``outputs/exp_QELM_M/<date_time>/``. The parameters are read from the
     config, not from the folder name, so renaming a folder changes nothing.
+    A run written before issue #235, where ``N`` counted the ancilla too,
+    is read in the new convention (:func:`QELM.config.upgrade_legacy_counts`):
+    its row ``N`` is its number of system qubits.
 
     Args:
         sweep_dir: Folder of one sweep.
@@ -48,7 +53,10 @@ def load_sweep(
     rows = []
     for metrics_path in sorted(sweep_dir.glob("*/metrics.json")):
         run_dir = metrics_path.parent
-        cfg = OmegaConf.load(run_dir / ".hydra" / "config.yaml")
+        loaded = OmegaConf.load(run_dir / ".hydra" / "config.yaml")
+        if not isinstance(loaded, DictConfig):
+            raise TypeError(f"{run_dir}: the Hydra config is not a mapping.")
+        cfg = upgrade_legacy_counts(loaded)
         row: dict[str, Any] = {"run": run_dir.name}
         for name, key in keys:
             row[name] = OmegaConf.select(cfg, key)

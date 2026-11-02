@@ -6,7 +6,7 @@
 #   K_0 = |0><0| + cos(gamma pi / 2) |1><1|         (no click)
 # gamma: measurement strength in [0, 1]; 0 learns nothing, 1 is projective.
 # qubits: list of measured sites in order, or null for every system qubit
-#   (Nr .. N-1).
+#   (sites Nr .. N_total - 1).
 # Nr: ancilla qubits at the start of the chain, never measured by default.
 gamma: 0.5
 qubits: null

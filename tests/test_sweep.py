@@ -41,6 +41,26 @@ def test_rows_come_from_the_config_not_the_folder_name(tmp_path: Path) -> None:
     }
 
 
+def test_a_run_written_before_issue_235_is_read_with_its_system_size(
+    tmp_path: Path,
+) -> None:
+    """Old runs held N = Ns + Nr and a top-level Ns; the row N is Ns now."""
+    for name, cfg in (
+        ("old", {"N": 7, "Nr": 1, "Ns": "${int:${sub:${N},${Nr}}}"}),
+        ("new", {"N": 6, "Nr": 1, "N_total": "${int:${add:${N},${Nr}}}"}),
+    ):
+        run = tmp_path / name
+        (run / ".hydra").mkdir(parents=True)
+        cfg = {**cfg, "seed": 0, "projective_measurement": {"p": 0.5}}
+        OmegaConf.save(OmegaConf.create(cfg), run / ".hydra" / "config.yaml")
+        (run / "metrics.json").write_text(json.dumps({"r2": 0.5}))
+    rows = load_sweep(tmp_path, keys=(("N", "N"), ("N_total", "N_total")))
+    assert [(r["run"], r["N"], r["N_total"]) for r in rows] == [
+        ("new", 6, 7),
+        ("old", 6, 7),
+    ]
+
+
 def test_folders_without_metrics_are_skipped(tmp_path: Path) -> None:
     _write_run(tmp_path, "a", N=4, seed=1, p=0.5, r2=0.3)
     (tmp_path / "unfinished").mkdir()

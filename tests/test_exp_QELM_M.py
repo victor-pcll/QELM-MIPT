@@ -20,7 +20,8 @@ from QELM.evaluation.metrics import accuracy, balanced_accuracy, majority_accura
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "experiments" / "QELM_M" / "exp_QELM_M.py"
 BASH_SCRIPT = SCRIPT.with_suffix(".sh")
-L, N = 50, 4
+# N system qubits (issue #235): the circuit holds N + 1 qubits.
+L, N = 50, 3
 OVERRIDES = ["models=TFIM", f"N={N}", f"samples.L={L}"]
 
 
@@ -37,8 +38,8 @@ def test_all_qubits_measured_at_p_1() -> None:
     """p = 1: every feature is an outcome +-1, plus the bias column."""
     out = _load_script().run(load_config(OVERRIDES))
     features = out["X"][:, :-1]
-    # 5 time-evolution steps (the default) x (N - 1) system qubits.
-    assert out["X"].shape == (L, 5 * (N - 1) + 1)
+    # 5 time-evolution steps (the default) x N system qubits.
+    assert out["X"].shape == (L, 5 * N + 1)
     np.testing.assert_array_equal(out["X"][:, -1], 1.0)
     assert set(np.unique(features)) <= {-1.0, 1.0}
     assert np.isfinite(out["nmse"]) and np.isfinite(out["r2"])
@@ -99,26 +100,26 @@ def test_every_sample_starts_from_the_encoded_state(monkeypatch) -> None:
 
 def test_the_tfim_acts_on_the_system_only(monkeypatch) -> None:
     """Issue #104: R is a reference qubit. Each sample draws a TFIM on the
-    Ns = N - 1 system qubits, so the propagator has dimension 2**Ns and R
+    N system qubits, so the propagator has dimension 2**N and R
     only sees the identity."""
     _, propagators, _ = _spy_run(monkeypatch, load_config(OVERRIDES))
     assert len(propagators) == L
     for _, U_S in propagators:
-        assert U_S.shape == (2 ** (N - 1), 2 ** (N - 1))
-        np.testing.assert_allclose(U_S @ U_S.conj().T, np.eye(2 ** (N - 1)), atol=1e-10)
+        assert U_S.shape == (2**N, 2**N)
+        np.testing.assert_allclose(U_S @ U_S.conj().T, np.eye(2**N), atol=1e-10)
 
 
 def test_record_has_one_row_per_measurement_step(monkeypatch) -> None:
     """M[i] holds nbr_time_evolution separate measurements, each after a step
-    of t / nbr_time_evolution, not one measurement copied N - 1 times
+    of t / nbr_time_evolution, not one measurement copied N times
     (issue #102)."""
     steps = 2
     cfg = load_config(
         [*OVERRIDES, f"projective_measurement.nbr_time_evolution={steps}"]
     )
     out, propagators, measured = _spy_run(monkeypatch, cfg)
-    assert out["M"].shape == (L, steps, N - 1)
-    assert out["X"].shape == (L, steps * (N - 1) + 1)
+    assert out["M"].shape == (L, steps, N)
+    assert out["X"].shape == (L, steps * N + 1)
     np.testing.assert_array_equal(out["X"][:, :-1], out["M"].reshape(L, -1))
     # One U(t / nbr_time_evolution) per sample, applied before each of the
     # nbr_time_evolution measurements.
@@ -133,9 +134,11 @@ def test_cached_propagator_matches_evolve() -> None:
     """U rho U^dagger with U = propagator(dt) is what model.evolve(rho, dt)
     computes, so caching U per sample changes no result."""
     cfg = load_config(OVERRIDES)
-    model = TransverseFieldIsingModel.from_config(cfg)
+    # A TFIM on all N_total qubits, the size of the encoded rho.
+    whole = OmegaConf.merge(cfg, {"TFIM": {"N": cfg.N_total}})
+    model = TransverseFieldIsingModel.from_config(whole)
     rho = AncillaChargeSectorEncoding.from_config(cfg).rho()
-    dt = float(cfg.evolution.t) / (N - 1)
+    dt = float(cfg.evolution.t) / N
     U = model.propagator(dt=dt)
     np.testing.assert_allclose(
         U @ rho @ U.conj().T, model.evolve(rho, dt=dt), atol=1e-10
@@ -185,14 +188,13 @@ def test_no_measurement_leaves_the_reference_maximally_mixed() -> None:
 
 def test_full_measurement_reveals_the_label_through_the_parity() -> None:
     """p = 1: the system TFIM conserves the parity of the system charge,
-    Ns // 2 for Y = +1 and Ns // 2 - 1 for Y = -1, and the last round
-    measures it: Y = (-1)**(Ns // 2) times the product of the last outcomes.
+    N // 2 for Y = +1 and N // 2 - 1 for Y = -1, and the last round
+    measures it: Y = (-1)**(N // 2) times the product of the last outcomes.
     Unlike the old target (issue #104), this is learnability, not an
     artefact: the label is fixed before the measurements, and this is the
     record revealing it."""
     out = _load_script().run(load_config(OVERRIDES))
-    Ns = N - 1
-    parity = (-1) ** (Ns // 2) * np.prod(out["M"][:, -1, :], axis=1)
+    parity = (-1) ** (N // 2) * np.prod(out["M"][:, -1, :], axis=1)
     np.testing.assert_array_equal(out["Y"], parity)
 
 
@@ -221,7 +223,7 @@ def test_reproducible_with_the_seed() -> None:
 
 
 def test_bash_launcher_dry_run(tmp_path: Path) -> None:
-    """Issue #94: the launcher runs end to end with L=10, N=3 and three
+    """Issue #94: the launcher runs end to end with L=10, N=2 and three
     probabilities, with another project's virtualenv active, and writes one
     run folder per p."""
     assert os.access(BASH_SCRIPT, os.X_OK)
@@ -233,7 +235,7 @@ def test_bash_launcher_dry_run(tmp_path: Path) -> None:
             **os.environ,
             "OUT_ROOT": str(tmp_path),
             "L": "10",
-            "N_VALUES": "3",
+            "N_VALUES": "2",
             "P_VALUES": "0.2 0.5 1.0",
             "VIRTUAL_ENV": str(tmp_path / "other-project" / ".venv"),
         },
@@ -245,9 +247,9 @@ def test_bash_launcher_dry_run(tmp_path: Path) -> None:
     assert "does not match the project environment" not in result.stderr
     runs = sorted(tmp_path.glob("exp_QELM_M/*/*"))
     assert [run.name for run in runs] == [
-        "N3_seed42_p0.2",
-        "N3_seed42_p0.5",
-        "N3_seed42_p1.0",
+        "N2_seed42_p0.2",
+        "N2_seed42_p0.5",
+        "N2_seed42_p1.0",
     ]
     for run in runs:
         assert (run / "metrics.json").is_file()
@@ -275,7 +277,7 @@ def test_bash_launcher_sweeps_the_field(tmp_path: Path) -> None:
             **os.environ,
             "OUT_ROOT": str(tmp_path),
             "L": "10",
-            "N_VALUES": "3",
+            "N_VALUES": "2",
             "H_VALUES": "1 10",
             "P_VALUES": "0.5",
         },
@@ -286,8 +288,8 @@ def test_bash_launcher_sweeps_the_field(tmp_path: Path) -> None:
     assert "Done: 1 x 2 x 1 x 1 runs" in result.stdout
     runs = sorted(tmp_path.glob("exp_QELM_M/*/*"))
     assert [run.name for run in runs] == [
-        "N3_h10_seed42_p0.5",
-        "N3_h1_seed42_p0.5",
+        "N2_h10_seed42_p0.5",
+        "N2_h1_seed42_p0.5",
     ]
     for run, h in zip(runs, (10.0, 1.0), strict=True):
         hydra_cfg = OmegaConf.load(run / ".hydra" / "config.yaml")
@@ -321,14 +323,14 @@ def test_nbr_time_evolution_must_be_positive() -> None:
         )
 
 
-@pytest.mark.parametrize("n_qubits", [3, 4, 5])
-def test_nbr_time_evolution_defaults_to_5_whatever_n(n_qubits: int) -> None:
+@pytest.mark.parametrize("n", [2, 3, 4])
+def test_nbr_time_evolution_defaults_to_5_whatever_n(n: int) -> None:
     """The number of time-evolution steps is 5 by default, for every N: it
-    no longer follows Ns = N - Nr (issue #123)."""
-    cfg = load_config(["models=TFIM", f"N={n_qubits}", "samples.L=4"])
+    no longer follows the number N of system qubits (issue #123)."""
+    cfg = load_config(["models=TFIM", f"N={n}", "samples.L=4"])
     assert cfg.projective_measurement.nbr_time_evolution == 5
     out = _load_script().run(cfg)
-    assert out["M"].shape == (4, 5, n_qubits - 1)
+    assert out["M"].shape == (4, 5, n)
 
 
 def test_nbr_time_evolution_lives_in_the_measurement_block() -> None:
@@ -406,11 +408,11 @@ def test_measuring_every_qubit_leaves_every_system_qubit_pure() -> None:
 
 
 def test_half_system_entropy_is_that_of_the_first_half() -> None:
-    """Issue #174: S_half is the von Neumann entropy of the first Ns // 2
-    system qubits. With N = 6 (Ns = 5, two qubits in the half) it can pass
+    """Issue #174: S_half is the von Neumann entropy of the first N // 2
+    system qubits. With N = 5 (two qubits in the half) it can pass
     1 bit, stays below 2, and the measurements lower it: at p = 1 every
     system qubit is pure, so S_half = 0; at p = 0.1 it stays well above."""
-    overrides = ["models=TFIM", "N=6", "samples.L=20"]
+    overrides = ["models=TFIM", "N=5", "samples.L=20"]
     module = _load_script()
     out = module.run(load_config([*overrides, "projective_measurement.p=1.0"]))
     np.testing.assert_allclose(out["S_half"], 0.0, atol=1e-9)
@@ -422,9 +424,9 @@ def test_half_system_entropy_is_that_of_the_first_half() -> None:
 
 
 def test_half_system_entropy_with_one_qubit_in_the_half() -> None:
-    """N = 4 (Ns = 3): the half is the single system qubit 1, so S_half is
+    """N = 3: the half is the single system qubit 1, so S_half is
     the entropy of that qubit, between 0 and the mean single-qubit entropy
-    times Ns (each single-qubit entropy is >= 0)."""
+    times N (each single-qubit entropy is >= 0)."""
     out = _load_script().run(load_config([*OVERRIDES, "projective_measurement.p=0.3"]))
     assert np.all(out["S_half"] <= 1 + 1e-12)
     assert np.all(out["S_half"] <= 3 * out["S_vN_1q"] + 1e-9)

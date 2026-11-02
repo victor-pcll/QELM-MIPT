@@ -77,13 +77,13 @@ def save_config(cfg: DictConfig, out_dir: Path) -> Path:
     """Write the config with every interpolation evaluated to ``resolved_config.json``.
 
     Hydra saves ``.hydra/config.yaml`` with the interpolations as written in
-    ``conf/``, for example ``depth: ${int:${div:${Ns},2}}``. This file holds
+    ``conf/``, for example ``depth: ${int:${div:${N},2}}``. This file holds
     the values they evaluate to, plain numbers, so that the parameters of a
     run read back with ``json.load`` (issue #85). The scripts call it after
     ``run``, so a value that ``run`` sets in ``cfg`` is the value written.
 
     Args:
-        cfg: Config of the run. The ``mul``, ``sub``, ``div`` and ``int``
+        cfg: Config of the run. The ``mul``, ``add``, ``sub``, ``div`` and ``int``
             resolvers are registered by ``import QELM``.
         out_dir: Destination folder, created if needed.
 

@@ -182,7 +182,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     """
     seed = set_seed(cfg)
     rng = np.random.default_rng(seed)
-    N, _, Nr = check_qubit_counts(cfg)
+    N, Nr, _ = check_qubit_counts(cfg)
     if Nr != 0:
         raise ValueError(f"The image task has no ancilla: set Nr=0, got Nr={Nr}.")
     dd = cfg.double_descent

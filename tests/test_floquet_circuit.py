@@ -89,7 +89,7 @@ def test_no_charge_is_conserved() -> None:
 def test_layers_are_alternating_nearest_neighbour_half_layers() -> None:
     """Layer t holds the even bonds for even t, the odd ones for odd t, every
     bond (i, i + 1) of the system qubits once per period, the ancilla never."""
-    circuit = FloquetBrickworkCircuit({"N": 7, "Nr": 1, "depth": 4})
+    circuit = FloquetBrickworkCircuit({"N": 6, "Nr": 1, "depth": 4})
     bonds = [[(i, j) for i, j, _ in layer] for layer in circuit.layers]
     assert bonds[0] == bonds[2] == [(1, 2), (3, 4), (5, 6)]
     assert bonds[1] == bonds[3] == [(2, 3), (4, 5)]
@@ -149,7 +149,7 @@ def test_deterministic_and_reads_its_config() -> None:
     block = {k: cfg.floquet_circuit[k] for k in SKINNER_2019}
     assert block == SKINNER_2019
     circuit = FloquetBrickworkCircuit.from_config(cfg)
-    assert circuit.Ns == 6 and len(circuit.layers) == 3
+    assert circuit.N == 6 and circuit.N_total == 6 and len(circuit.layers) == 3
     before = [g.copy() for layer in circuit.layers for _, _, g in layer]
     circuit.redraw(np.random.default_rng(1))
     after = [g for layer in circuit.layers for _, _, g in layer]

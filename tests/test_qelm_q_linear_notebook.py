@@ -35,7 +35,7 @@ def test_notebook_runs_and_plots(
     shows: list[tuple] = []
     monkeypatch.setattr(plt, "show", lambda *args, **kwargs: shows.append(args))
     for key, value in {
-        "N": "5",
+        "N": "4",
         "H_VALUES": "10 1",
         "N_SAMPLES": "10 20",
         "BINS": "5",
@@ -61,7 +61,7 @@ def test_notebook_runs_and_plots(
     for r in runs:
         assert set(r["obs"]) == {"Z", "Y", "X"}
         assert r["obs"]["Z"].shape == (r["n_samples"], 4)
-        assert set(np.unique(r["Y"])) <= {2, 1}  # Q1 = Ns // 2, Q2 = Q1 - 1
+        assert set(np.unique(r["Y"])) <= {2, 1}  # Q1 = N // 2, Q2 = Q1 - 1
         # Parity: no linear X or Y feature.
         np.testing.assert_allclose(r["obs"]["X"], 0.0, atol=1e-10)
         np.testing.assert_allclose(r["obs"]["Y"], 0.0, atol=1e-10)

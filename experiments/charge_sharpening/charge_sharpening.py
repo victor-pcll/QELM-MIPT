@@ -10,15 +10,15 @@ experiments; only the circuit and the measurement are new.
 
 1. Prepare Eq. (B1), ``(|0>_R |Q0>_S + |1>_R |Q1>_S) / sqrt(2)``, with
    :class:`AncillaChargeSectorEncoding` (``initial: product``): the ancilla
-   ``R`` (qubit 0) entangled with the charge ``Q0 = Ns // 2`` or
-   ``Q1 = Ns // 2 - 1`` of the ``Ns`` system qubits.
+   ``R`` (qubit 0) entangled with the charge ``Q0 = N // 2`` or
+   ``Q1 = N // 2 - 1`` of the ``N`` system qubits.
 2. Draw a :class:`U1BrickworkCircuit` and scramble the state with its
    all-to-all layers (``U1_circuit.scrambling_layers``). With
    ``U1_circuit.fixed_instance: true`` (the paper's choice) this circuit is
    drawn once and shared by every trajectory, and the seed selects it;
    with ``false`` every trajectory draws its own.
 3. For each of the ``samples.L`` trajectories, apply ``U1_circuit.depth``
-   brickwork layers (``t = Ns / 2`` by default, each a full period of the
+   brickwork layers (``t = N / 2`` by default, each a full period of the
    brickwork) and weakly measure every system qubit with strength
    ``weak_measurement.gamma`` (:class:`WeakMeasurement`) between two
    layers: ``t - 1`` measurement rounds. A last round after the final layer
@@ -44,10 +44,10 @@ stays at its scrambled value; as ``gamma`` grows the measurements learn the
 charge and ``S_R`` drops to 0: the charge sharpens.
 
 The state stays pure (unitary gates and Kraus operators on a pure state),
-so trajectories are simulated with state vectors of size ``2**N``.
+so trajectories are simulated with state vectors of size ``2**N_total``.
 
 Charge conservation is checked along every trajectory (issue #134). The
-total charge of the ``N`` qubits, ancilla included, is ``Ns // 2`` in both
+total charge of the ``N_total`` qubits, ancilla included, is ``N // 2`` in both
 branches of Eq. (B1), and every gate and Kraus operator conserves it, so
 the state never leaves that sector. After the scrambling, every layer and
 every measurement round, :func:`QELM.physics.charge_leakage` gives the
@@ -67,7 +67,7 @@ Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
 
 - ``charge_sharpening.npz``: ``S_R`` (one entropy per trajectory, shape
-  ``(L,)``), ``M`` (measurement record, shape ``(L, rounds, Ns)``, 1 for
+  ``(L,)``), ``M`` (measurement record, shape ``(L, rounds, N)``, 1 for
   a click), ``charge_leakage`` (shape ``(L,)``) and ``kept`` (shape
   ``(L,)``, the trajectories used by the statistics), for every
   trajectory, kept or not;
@@ -135,7 +135,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             ``charge_conservation``.
 
     Returns:
-        ``S_R`` (shape ``(L,)``), ``M`` (shape ``(L, rounds, Ns)``, with
+        ``S_R`` (shape ``(L,)``), ``M`` (shape ``(L, rounds, N)``, with
         ``rounds = depth - 1``, or ``depth`` when measuring after the last
         layer), ``charge_leakage`` and ``kept`` (shape ``(L,)``), for every
         trajectory, and the scalars of :data:`METRICS` and :data:`COUNTS`,
@@ -146,7 +146,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             filter drops every trajectory.
     """
     set_seed(cfg)
-    N, Ns, Nr = check_qubit_counts(cfg)
+    N, Nr, N_total = check_qubit_counts(cfg)
     base = float(cfg.charge_sharpening.entropy_base)
 
     sector = AncillaChargeSectorEncoding.from_config(cfg)
@@ -156,7 +156,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     # of a sweep sees the same circuit for a given seed.
     circuit = U1BrickworkCircuit.from_config(cfg)
     psi0 = sector.state()
-    # Total charge of R + S, Ns // 2 in both branches of Eq. (B1).
+    # Total charge of R + S, N // 2 in both branches of Eq. (B1).
     Q = sharp_charge(psi0)
     psi_scrambled = circuit.scramble(psi0)
     leak_scrambled = charge_leakage(psi_scrambled, Q)
@@ -167,7 +167,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     # Layers followed by a measurement round.
     measured = [t for t in range(depth) if t < depth - 1 or measure_last]
     S_R = np.zeros(L)
-    M = np.zeros((L, len(measured), Ns))
+    M = np.zeros((L, len(measured), N))
     leakage = np.zeros(L)
     for i in tqdm(range(L)):
         if circuit.fixed_instance:

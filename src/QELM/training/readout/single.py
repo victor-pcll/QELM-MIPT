@@ -12,11 +12,11 @@ from QELM.training.readout.base import Observables, _labels
 
 
 class SingleObservable(Observables):
-    """One-site expectation values ``<O_i>`` for each ``O`` and ``i = 0 .. N-1``.
+    """One-site expectation values ``<O_i>`` for each ``O`` and ``i = 0 .. n-1``.
 
     YAML: ``single_observable: {observables: [Z, X]}``. The legacy form
     ``{observable: Z}`` is still read. Features come observable by
-    observable: ``<O_0>, ..., <O_{N-1}>`` for the first, then the next.
+    observable: ``<O_0>, ..., <O_{n-1}>`` for the first, then the next.
 
     Attributes:
         observables: Pauli labels, possibly empty.
@@ -36,18 +36,19 @@ class SingleObservable(Observables):
             params.get("observable"), "observable"
         ) + _labels(params.get("observables"), "observables")
 
-    def operators(self, N: int | None = None) -> list[np.ndarray]:
-        """Return ``O_i`` for each observable, then each site: ``len * N`` features.
+    def operators(self, n_qubits: int | None = None) -> list[np.ndarray]:
+        """Return ``O_i`` for each observable, then each site: ``len * n`` features.
 
         Args:
-            N: Number of qubits. ``None`` uses ``self.N`` from the config.
+            n_qubits: Number of qubits of the state, ancillas included.
+                ``None`` uses ``self.n_qubits`` from the config.
 
         Raises:
-            ValueError: If ``N`` is ``None`` and the config has no ``N``.
+            ValueError: If ``n_qubits`` is ``None`` and the config has none.
         """
-        N = self._resolve_N(N)
+        n = self._resolve_n_qubits(n_qubits)
         return [
-            get_site_operator(pauli(label), i, N)
+            get_site_operator(pauli(label), i, n)
             for label in self.observables
-            for i in range(N)
+            for i in range(n)
         ]

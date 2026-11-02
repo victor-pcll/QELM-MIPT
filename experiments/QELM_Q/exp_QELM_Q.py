@@ -6,10 +6,10 @@ the Z basis, applied during the evolution with probability ``p``, disturb the
 entanglement of the reservoir, and the readout has to recover the charge from
 the final state alone. For each sample ``i`` (``samples.L`` in total):
 
-1. Draw a new TFIM (new disorder ``J_ij``) on the ``Ns = N - 1`` system
-   qubits and start from the state of :class:`AncillaChargeSectorEncoding`,
-   ``(|0>_R |Q1>_S + |1>_R |Q2>_S) / sqrt(2)`` with ``Q1 = Ns // 2`` and
-   ``Q2 = Ns // 2 - 1``. The ancilla ``R`` is measured in Z first, with the
+1. Draw a new TFIM (new disorder ``J_ij``) on the ``N`` system qubits and
+   start from the state of :class:`AncillaChargeSectorEncoding`,
+   ``(|0>_R |Q1>_S + |1>_R |Q2>_S) / sqrt(2)`` with ``Q1 = N // 2`` and
+   ``Q2 = N // 2 - 1``. The ancilla ``R`` is measured in Z first, with the
    Born rule: the outcome fixes the charge sector of the system, the label
    ``Y[i] = Q`` (``Q1`` for ``+1``, ``Q2`` for ``-1``, probability 1/2
    each). ``R`` never evolves (``U = 1_R (x) U_S``, issue #104), so measuring
@@ -31,7 +31,7 @@ the final state alone. For each sample ``i`` (``samples.L`` in total):
    otherwise rebuilds. A measured qubit then has ``<Z_k> = +-1``, its
    outcome.
 3. The features ``X[i]`` are the final expectation values
-   ``<Z_k> = Tr(Z_k rho)`` of the system qubits ``k = 1 .. Ns``, plus a bias
+   ``<Z_k> = Tr(Z_k rho)`` of the system qubits ``k = 1 .. N``, plus a bias
    column. The outcomes of the intermediate measurements are **not**
    features: they only disturb the state.
 
@@ -64,7 +64,7 @@ and ``r2_<name>``; ``accuracy`` and the other unsuffixed scores are those of
 
 Three more readouts take the outcomes of the intermediate measurements as
 features too (issue #179): the record ``M`` of shape
-``(n_rounds, Ns)``, +-1 for a measured qubit and 0 for an unmeasured one, as
+``(n_rounds, N)``, +-1 for a measured qubit and 0 for an unmeasured one, as
 in ``experiments/QELM_M/exp_QELM_M.py``, with ``n_rounds`` the number of
 measurement rounds. The sets of :data:`RECORD_SETS` are ``M`` alone, and
 ``phi = [M, X]`` with ``X`` the ``<Z_k>`` (``M_Z``) or the ``<X_i X_j>``
@@ -114,18 +114,27 @@ The state is simulated as a density matrix by default
 (``state_representation=density``). It stays pure all along: ``R`` is
 measured first, the evolution is unitary and a projective measurement maps
 a pure state to a pure state. ``state_representation=vector`` follows the
-state vector instead (issue #183): ``O(2**N)`` memory instead of
-``O(4**N)``, the evolution through ``exp(-i H dt) psi`` from the sparse
+state vector instead (issue #183): ``O(2**N_total)`` memory instead of
+``O(4**N_total)``, the evolution through ``exp(-i H dt) psi`` from the sparse
 ``H`` (``expm_multiply``) without forming the dense propagator, within the
 parity sector of the charge (:func:`parity_step`), and the measurements through
 :func:`QELM.training.measurements.projective.measure_projective_psi`. Both
 draw the same disorder, the same labels and the same measurement choices
 and outcomes from the same generators, so for a given seed they give the
 same features up to rounding (``tests/test_exp_QELM_Q.py``). The vector
-path is what makes ``N = 12`` affordable.
+path is what makes ``N_total = 12`` qubits affordable.
+
+``unitary_step=haar_u1`` (issue #253) replaces the TFIM step by a global
+Haar U(1) unitary of the system, ``1_R (x) U_S`` with ``U_S`` block-diagonal
+in the charge: an independent Haar unitary on each charge sector, drawn anew
+at every step of every sample (:func:`haar_u1_step`). It scrambles the
+charge sector completely at each step, so it realizes the scrambled model of
+the Bayes-Ridge readout exactly: the control of the ``dt`` sweep of issue
+#253, where the TFIM step of duration ``dt`` scrambles only partly when
+``dt`` is below the scrambling time. It needs ``state_representation=vector``.
 
 The half-system entanglement entropy of the final state, ``S_half[i]``
-(von Neumann, in bits, of the first ``Ns // 2`` system qubits; the state of
+(von Neumann, in bits, of the first ``N // 2`` system qubits; the state of
 ``S`` is pure once ``R`` is measured), tracks how much the measurements
 disentangle the reservoir.
 
@@ -161,7 +170,7 @@ Everything is written to the Hydra run directory, by default
 
 - ``exp_QELM_Q.npz``: ``X`` (the ``<Z_k>`` features, bias column included),
   ``features_<name>`` for each set of :data:`FEATURE_SETS` and
-  :data:`RECORD_SETS`, ``M`` (the record, ``(L, n_rounds, Ns)``), ``Y`` (the
+  :data:`RECORD_SETS`, ``M`` (the record, ``(L, n_rounds, N)``), ``Y`` (the
   charge), ``y_test``, ``y_pred``, the weights ``W``, ``S_half`` and
   ``n_measured`` (number of collapses per sample), of shape ``(L,)``;
 - ``metrics.json``: ``nmse``, ``nmse_err``, ``r2``, ``accuracy``,
@@ -204,6 +213,7 @@ from QELM.evaluation.metrics import (
     balanced_accuracy,
     majority_accuracy,
 )
+from QELM.models.circuits.haar import haar_unitary
 from QELM.physics import X as PAULI_X
 from QELM.physics import Y as PAULI_Y
 from QELM.physics import Z, local_expectation, partial_trace
@@ -251,16 +261,19 @@ NBR_TIME_EVOLUTION = "projective_measurement.nbr_time_evolution"
 FINAL_MEASUREMENT = "projective_measurement.final_measurement"
 # Second word of the seed of the measurement generator: the issue number.
 MEASUREMENT_STREAM = 163
-# Ratio of samples to qubits: L = int(delta * N) when set (issue #201).
+# Ratio of samples to system qubits: L = int(delta * N) when set (issue #201).
 SAMPLE_RATIO = "samples.delta"
 # Simulated object: "density" (rho) or "vector" (psi), issue #183.
 STATE_REPRESENTATION = "state_representation"
 STATE_REPRESENTATIONS = ("density", "vector")
 # Labels alternate Q1, Q2 instead of the Born draw of R (issue #233).
 BALANCED = "samples.balanced"
+# One step of the evolution: the TFIM for dt, or a Haar U(1) unitary (#253).
+UNITARY_STEP = "unitary_step"
+UNITARY_STEPS = ("tfim", "haar_u1")
 
 
-def project_ancilla(state: np.ndarray, r: int, N: int) -> np.ndarray:
+def project_ancilla(state: np.ndarray, r: int, N_total: int) -> np.ndarray:
     """Project the ancilla ``R`` (qubit 0) on ``|0>`` (``r = +1``) or ``|1>``.
 
     The outcome is imposed instead of drawn, for balanced labels (issue
@@ -269,9 +282,10 @@ def project_ancilla(state: np.ndarray, r: int, N: int) -> np.ndarray:
     or :func:`measure_projective_rho` returns for that outcome.
 
     Args:
-        state: State vector ``(2**N,)`` or density matrix ``(2**N, 2**N)``.
+        state: State vector ``(2**N_total,)`` or density matrix
+            ``(2**N_total, 2**N_total)``.
         r: ``+1`` or ``-1``.
-        N: Number of qubits.
+        N_total: Number of qubits of the state, ancilla included.
 
     Returns:
         The normalized projected state, of the shape of ``state``.
@@ -281,7 +295,7 @@ def project_ancilla(state: np.ndarray, r: int, N: int) -> np.ndarray:
     """
     if r not in (1, -1):
         raise ValueError(f"r must be +1 or -1, got {r}.")
-    keep = ((np.arange(2**N) >> (N - 1)) & 1) == (0 if r == 1 else 1)
+    keep = ((np.arange(2**N_total) >> (N_total - 1)) & 1) == (0 if r == 1 else 1)
     if state.ndim == 1:
         out = np.where(keep, state, 0.0)
         norm = float(np.linalg.norm(out)) ** 2
@@ -305,11 +319,11 @@ def evolve_with_measurements(
     """Apply ``n_steps`` steps ``U``, with a measurement round between two.
 
     Args:
-        rho: Initial density matrix of shape ``(2**N, 2**N)``, or state
-            vector of shape ``(2**N,)``.
+        rho: Initial density matrix of shape ``(2**N_total, 2**N_total)``,
+            or state vector of shape ``(2**N_total,)``.
         U: One step of the evolution: a unitary matrix of shape
-            ``(2**N, 2**N)``, applied as ``U rho U^dagger``, or a function
-            that returns the evolved state, e.g. ``psi -> U psi`` for a
+            ``(2**N_total, 2**N_total)``, applied as ``U rho U^dagger``, or a
+            function that returns the evolved state, e.g. ``psi -> U psi`` for a
             state vector (issue #183).
         n_steps: Number of steps, ``>= 1``.
         P: Measurement of the system qubits, each with its probability ``p``.
@@ -346,15 +360,16 @@ def evolve_with_measurements(
 def sample_ratio(cfg: DictConfig, N: int) -> float | None:
     """Apply ``samples.delta``: set ``samples.L = int(delta * N)`` in ``cfg``.
 
-    The readout has a number of features that grows with ``N``; a fixed
-    ``L`` starves it at large ``N``. A fixed ratio ``delta = L / N`` keeps
-    the amount of data per qubit the same at every size (issue #201).
+    The readout has a number of features that grows with the number ``N``
+    of system qubits; a fixed ``L`` starves it at large ``N``. A fixed ratio
+    ``delta = L / N`` keeps the amount of data per system qubit the same at
+    every size (issue #201; ``N`` counts the ancilla no more, issue #235).
     ``samples.train_size`` interpolates ``samples.L``, so it follows.
 
     Args:
         cfg: Composed config, changed in place when ``samples.delta`` is
             set.
-        N: Total number of qubits.
+        N: Number of system qubits.
 
     Returns:
         ``delta`` as a float, or ``None`` when it is not set (``L`` is then
@@ -382,7 +397,7 @@ def parity_step(
     psi: np.ndarray,
     r: int,
     Nr: int,
-    Ns: int,
+    N: int,
     dt: float,
 ) -> Callable[[np.ndarray], np.ndarray]:
     """Return ``psi -> (1_R (x) exp(-i H_S dt)) psi`` within one parity sector.
@@ -391,37 +406,38 @@ def parity_step(
     ``Q``, so its state lies in the sector of parity ``Q mod 2``. The TFIM
     keeps that parity (``Z_i`` is diagonal, ``X_i X_j`` flips two bits) and
     so do the Z measurements, so the system never leaves the sector. The
-    step evolves only the ``2**(Ns - 1)`` amplitudes of the sector, with
+    step evolves only the ``2**(N - 1)`` amplitudes of the sector, with
     ``expm_multiply`` on the sector block of the sparse ``H_S``: half the
     dimension of the full system (issue #201). With ``TFIM.basis=Z`` the
     Hamiltonian conserves the X parity instead, so the whole space of the
     system is evolved.
 
     Args:
-        model: The TFIM of the system, on ``Ns`` qubits.
-        psi: State of ``R + S`` right after ``R`` is measured, ``(2**N,)``.
+        model: The TFIM of the system, on ``N`` qubits.
+        psi: State of ``R + S`` right after ``R`` is measured,
+            ``(2**N_total,)``.
         r: Outcome of ``R``, ``+1`` (``|0>_R``) or ``-1`` (``|1>_R``).
         Nr: Number of ancilla qubits, the first sites.
-        Ns: Number of system qubits.
+        N: Number of system qubits.
         dt: Duration of one step.
 
     Returns:
-        The step, a function of a state vector of shape ``(2**N,)``.
+        The step, a function of a state vector of shape ``(2**N_total,)``.
 
     Raises:
         ValueError: If the system state of ``psi`` is not in one parity
             sector.
     """
     row = 0 if r == 1 else 2**Nr - 1
-    system = psi.reshape(2**Nr, 2**Ns)[row]
+    system = psi.reshape(2**Nr, 2**N)[row]
     if model.basis == "X":
-        popcount = np.array([bin(b).count("1") for b in range(2**Ns)])
+        popcount = np.array([bin(b).count("1") for b in range(2**N)])
         parity = popcount[int(np.argmax(np.abs(system)))] % 2
         sector = np.flatnonzero(popcount % 2 == parity)
     else:
         # TFIM.basis=Z conserves the X parity, not the Z one: the whole
         # space of the system is evolved.
-        sector = np.arange(2**Ns)
+        sector = np.arange(2**N)
     outside = np.delete(system, sector)
     if not np.allclose(outside, 0.0, atol=1e-12):
         raise ValueError("The system state is not in one parity sector.")
@@ -430,8 +446,52 @@ def parity_step(
 
     def step(state: np.ndarray) -> np.ndarray:
         out = np.zeros_like(state)
-        amplitudes = state.reshape(2**Nr, 2**Ns)[row, sector]
-        out.reshape(2**Nr, 2**Ns)[row, sector] = expm_multiply(A, amplitudes)
+        amplitudes = state.reshape(2**Nr, 2**N)[row, sector]
+        out.reshape(2**Nr, 2**N)[row, sector] = expm_multiply(A, amplitudes)
+        return out
+
+    return step
+
+
+def haar_u1_step(
+    r: int, Nr: int, N: int, rng: np.random.Generator | None = None
+) -> Callable[[np.ndarray], np.ndarray]:
+    """Return ``psi -> (1_R (x) U_S) psi`` with ``U_S`` a Haar U(1) unitary.
+
+    ``U_S`` conserves the charge ``Q`` of the system, the number of qubits in
+    ``|1>``: it is block-diagonal, with an independent Haar unitary on each
+    charge sector, and a new ``U_S`` is drawn at every call (issue #253).
+    After ``R`` is measured the system holds one charge, which the Z
+    measurements keep, so only the block of that sector acts on the state:
+    the step draws that block alone, a Haar unitary of size ``C(N, Q)``,
+    and leaves the other amplitudes, all zero, as they are.
+
+    Args:
+        r: Outcome of ``R``, ``+1`` (``|0>_R``) or ``-1`` (``|1>_R``).
+        Nr: Number of ancilla qubits, the first sites.
+        N: Number of system qubits.
+        rng: Generator of the unitaries; ``None`` draws them from the
+            global NumPy state, as the disorder of the TFIM.
+
+    Returns:
+        The step, a function of a state vector of shape ``(2**(N + Nr),)``.
+
+    Raises:
+        ValueError: When called on a state whose system part is not in one
+            charge sector.
+    """
+    row = 0 if r == 1 else 2**Nr - 1
+    popcount = np.array([bin(b).count("1") for b in range(2**N)])
+
+    def step(state: np.ndarray) -> np.ndarray:
+        system = state.reshape(2**Nr, 2**N)[row]
+        Q = popcount[int(np.argmax(np.abs(system)))]
+        sector = np.flatnonzero(popcount == Q)
+        if not np.allclose(np.delete(system, sector), 0.0, atol=1e-12):
+            raise ValueError("The system state is not in one charge sector.")
+        out = np.zeros_like(state)
+        U = haar_unitary(sector.size, rng)
+        out.reshape(2**Nr, 2**N)[row, sector] = U @ system[sector]
         return out
 
     return step
@@ -441,8 +501,8 @@ def observable_features(rho: np.ndarray, system: list[int], name: str) -> np.nda
     """Return the features of one set of :data:`FEATURE_SETS` for ``rho``.
 
     Args:
-        rho: Density matrix of shape ``(2**N, 2**N)`` or state vector of
-            shape ``(2**N,)``.
+        rho: Density matrix of shape ``(2**N_total, 2**N_total)`` or state
+            vector of shape ``(2**N_total,)``.
         system: The system qubits.
         name: ``"X"``, ``"Y"`` or ``"Z"`` for ``<P_k>`` on each qubit of
             ``system``; ``"XX"``, ``"YY"`` or ``"ZZ"`` for ``<P_i P_j>`` on
@@ -486,12 +546,13 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             ``samples.delta`` (default ``None``): when set, ``samples.L`` is
             replaced in ``cfg`` by ``int(delta * N)``, and
             ``samples.train_size`` follows (issue #201), and
-            ``samples.balanced`` (default ``False``, issue #233).
+            ``samples.balanced`` (default ``False``, issue #233) and
+            ``unitary_step`` (default ``"tfim"``, issue #253).
 
     Returns:
         The arrays and metrics of the run: ``X`` (with the bias column),
         ``Y`` (the charge ``Q``), ``M`` (the record of the intermediate
-        measurements, ``(L, n_rounds, Ns)``, 0 for an unmeasured qubit),
+        measurements, ``(L, n_rounds, N)``, 0 for an unmeasured qubit),
         ``y_test``, ``y_pred``, ``W``, ``S_half``,
         ``n_measured``, ``nmse``, ``nmse_err``, ``r2``, ``accuracy``,
         ``accuracy_baseline``, ``balanced_accuracy``, ``S_half_mean``,
@@ -508,7 +569,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     sector = AncillaChargeSectorEncoding.from_config(cfg)
     solver = RidgeReadout.from_config(cfg)
-    N, Ns, Nr = check_qubit_counts(cfg)
+    N, Nr, N_total = check_qubit_counts(cfg)
     nbr_time_evolution = int(OmegaConf.select(cfg, NBR_TIME_EVOLUTION, default=5))
     if nbr_time_evolution < 1:
         raise ValueError(
@@ -523,6 +584,13 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             f"got {representation!r}."
         )
     vector = representation == "vector"
+    unitary_step = str(OmegaConf.select(cfg, UNITARY_STEP, default="tfim"))
+    if unitary_step not in UNITARY_STEPS:
+        raise ValueError(
+            f"{UNITARY_STEP} must be one of {UNITARY_STEPS}, got {unitary_step!r}."
+        )
+    if unitary_step == "haar_u1" and not vector:
+        raise ValueError(f"{UNITARY_STEP}=haar_u1 needs {STATE_REPRESENTATION}=vector.")
     n_rounds = nbr_time_evolution if final else nbr_time_evolution - 1
     state0 = sector.state() if vector else sector.rho()
     delta = sample_ratio(cfg, N)
@@ -535,14 +603,14 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     Y = np.zeros(L)
     S_half = np.zeros(L)
     n_measured = np.zeros(L)
-    M = np.zeros((L, n_rounds, Ns))
-    system = list(range(Nr, N))
-    half = system[: Ns // 2]
+    M = np.zeros((L, n_rounds, N))
+    system = list(range(Nr, N_total))
+    half = system[: N // 2]
 
     # The TFIM block with the system size: R does not evolve (issue #104).
     tfim = OmegaConf.to_container(cfg[TransverseFieldIsingModel.name], resolve=True)
     assert isinstance(tfim, dict)
-    tfim_params = {**{str(k): v for k, v in tfim.items()}, "N": Ns}
+    tfim_params = {**{str(k): v for k, v in tfim.items()}, "N": N}
     identity_R = np.eye(2**Nr)
 
     for i in tqdm(range(L)):
@@ -551,16 +619,19 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         if balanced:
             # Imposed instead of drawn: Q1, Q2, Q1, ... (issue #233).
             r = 1 if i % 2 == 0 else -1
-            rho = project_ancilla(state0, r, N)
+            rho = project_ancilla(state0, r, N_total)
         if vector:
             # The label first: R measured in Z fixes the charge sector of S.
             if not balanced:
-                rho, r = measure_projective_psi(state0, 0, N)
-            U = parity_step(model, rho, r, Nr, Ns, dt)
+                rho, r = measure_projective_psi(state0, 0, N_total)
+            if unitary_step == "haar_u1":
+                U = haar_u1_step(r, Nr, N)
+            else:
+                U = parity_step(model, rho, r, Nr, N, dt)
         else:
             U = np.kron(identity_R, model.propagator(dt=dt))
             if not balanced:
-                rho, r = measure_projective_rho(state0, 0, N)
+                rho, r = measure_projective_rho(state0, 0, N_total)
         Y[i] = Q1 if r == 1 else Q2
         rounds: list[np.ndarray] = []
         rho, n_measured[i] = evolve_with_measurements(

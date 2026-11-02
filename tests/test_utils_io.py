@@ -108,13 +108,13 @@ def test_config_interpolations_are_written_as_numbers(tmp_path: Path) -> None:
 
 
 def test_composed_config_is_resolved(tmp_path: Path) -> None:
-    """On conf/charge_sharpening.yaml, Ns = N - Nr and depth = Ns // 2, which
-    .hydra/config.yaml keeps as ${...}, are written as integers."""
-    cfg = load_config(["N=7"], config_name="charge_sharpening")
+    """On conf/charge_sharpening.yaml, N_total = N + Nr and depth = N // 2,
+    which .hydra/config.yaml keeps as ${...}, are written as integers."""
+    cfg = load_config(["N=6"], config_name="charge_sharpening")
     resolved = json.loads(save_config(cfg, tmp_path).read_text())
-    assert resolved["N"] == 7 and resolved["Nr"] == 1 and resolved["Ns"] == 6
+    assert resolved["N"] == 6 and resolved["Nr"] == 1 and resolved["N_total"] == 7
     assert resolved["U1_circuit"]["depth"] == 3
-    assert resolved["U1_circuit"]["N"] == 7
+    assert resolved["U1_circuit"]["N"] == 6
     assert resolved == OmegaConf.to_container(cfg, resolve=True)
 
 

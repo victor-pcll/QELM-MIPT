@@ -4,14 +4,15 @@
 No measurement during the evolution. For each sample ``i`` (``samples.L`` in
 total):
 
-1. Draw a new TFIM (new disorder ``J_ij``) and prepare the initial state
+1. Draw a new TFIM (new disorder ``J_ij``) on every qubit, ancilla
+   included, and prepare the initial state
    with :class:`AncillaChargeSectorEncoding`: the ancilla ``R`` (qubit 0)
-   entangled with the charge of the ``N - 1`` system qubits.
+   entangled with the charge of the ``N`` system qubits.
 2. Evolve it for the total time ``evolution.t`` in one step,
    ``U(t) = exp(-i H t)``. Without measurements the state stays pure, so the
    state vector is evolved rather than ``rho`` (same result, much cheaper).
 3. Store the one-site expectation values ``<O_k>`` on the system qubits
-   ``k = 1 .. N-1`` as the features ``X[i]``, for each Pauli ``O`` in
+   ``k = 1 .. N`` as the features ``X[i]``, for each Pauli ``O`` in
    ``experiment.observables`` (default ``[Z, Y, X]``), and ``<Z_0>`` on the
    ancilla as the target ``Y[i]``.
 
@@ -78,20 +79,24 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     sector = AncillaChargeSectorEncoding.from_config(cfg)
     solver = RidgeReadout.from_config(cfg)
     # Qubit counts from the config, not from the model or the encoding
-    # (issue #88): N in total, Ns system qubits, Nr ancillas.
-    N, Ns, Nr = check_qubit_counts(cfg)
+    # (issues #88 and #235): N system qubits, Nr ancillas, N_total in all.
+    N, Nr, N_total = check_qubit_counts(cfg)
     t = float(cfg.evolution.t)
-    ops = np.array(SingleObservable({"N": N, "observables": labels}).operators())
-    ops = ops.reshape(len(labels), N, sector.dim, sector.dim)
-    Z0 = SingleObservable({"N": N, "observables": ["Z"]}).operators()[0]
+    readout = SingleObservable({"n_qubits": N_total, "observables": labels})
+    ops = np.array(readout.operators())
+    ops = ops.reshape(len(labels), N_total, sector.dim, sector.dim)
+    Z0 = SingleObservable({"n_qubits": N_total, "observables": ["Z"]}).operators()[0]
     psi0 = sector.state()
+    # This TFIM acts on every qubit, the ancilla included, as before issue
+    # #235: its block gets the N_total qubits of the state.
+    tfim_cfg = OmegaConf.merge(cfg, {TransverseFieldIsingModel.name: {"N": N_total}})
 
     L = int(cfg.samples.L)
-    X = np.zeros((L, len(labels), Ns))
+    X = np.zeros((L, len(labels), N))
     Y = np.zeros(L)
 
     for i in tqdm(range(L)):
-        model = TransverseFieldIsingModel.from_config(cfg)
+        model = TransverseFieldIsingModel.from_config(tfim_cfg)
         psi = model.evolve(psi0, dt=t)
         X[i] = np.real(np.einsum("a,okab,b->ok", psi.conj(), ops[:, Nr:], psi))
         Y[i] = np.real(psi.conj() @ Z0 @ psi)

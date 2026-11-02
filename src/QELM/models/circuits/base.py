@@ -112,9 +112,9 @@ class BrickworkCircuit:
 
     Attributes:
         name: Config key of the subclass, read by :meth:`from_config`.
-        N: Total number of qubits, ancillas included.
+        N: Number of system qubits, the ones the gates act on.
         Nr: Number of ancilla qubits at the start of the chain, untouched.
-        Ns: Number of system qubits, ``N - Nr``.
+        N_total: Number of qubits of the state, ``N + Nr``.
         depth: Number of brickwork layers, each a full period (even then
             odd half-layer).
         scrambling_layers: Number of all-to-all scrambling layers.
@@ -137,7 +137,8 @@ class BrickworkCircuit:
         """Store the parameters and draw the gates.
 
         Args:
-            params: ``N`` and ``depth`` are required; ``Nr`` (default 1),
+            params: ``N`` (number of system qubits) and ``depth`` are
+                required; ``Nr`` (default 1),
                 ``scrambling_layers`` (default 0), ``boundary`` (default
                 ``"open"``) and ``fixed_instance`` (default ``True``) are
                 optional.
@@ -145,13 +146,13 @@ class BrickworkCircuit:
                 global NumPy state.
 
         Raises:
-            ValueError: If a count is negative, ``Ns < 2`` or ``boundary`` is
+            ValueError: If a count is negative, ``N < 2`` or ``boundary`` is
                 unknown.
         """
         self.params: dict[str, Any] = dict(params)
         self.N: int = int(params["N"])
         self.Nr: int = int(params.get("Nr", 1))
-        self.Ns: int = self.N - self.Nr
+        self.N_total: int = self.N + self.Nr
         self.depth: int = int(params["depth"])
         self.scrambling_layers: int = int(params.get("scrambling_layers", 0))
         self.boundary: str = str(params.get("boundary", "open"))
@@ -161,8 +162,8 @@ class BrickworkCircuit:
                 "Nr, depth and scrambling_layers must be >= 0, got "
                 f"{self.Nr}, {self.depth}, {self.scrambling_layers}."
             )
-        if self.Ns < 2:
-            raise ValueError(f"Need at least 2 system qubits, got Ns={self.Ns}.")
+        if self.N < 2:
+            raise ValueError(f"Need at least 2 system qubits, got N={self.N}.")
         if self.boundary not in ("open", "periodic"):
             raise ValueError(
                 f"boundary must be 'open' or 'periodic', got {self.boundary!r}."
@@ -209,12 +210,12 @@ class BrickworkCircuit:
         Returns:
             Disjoint pairs ``(i, i + 1)`` of system qubits, plus the
             wrap-around pair for the odd half-layer with periodic boundaries
-            and an even ``Ns``.
+            and an even ``N``.
         """
-        sites = list(range(self.Nr, self.N))
+        sites = list(range(self.Nr, self.N_total))
         start = half % 2
-        pairs = [(sites[k], sites[k + 1]) for k in range(start, self.Ns - 1, 2)]
-        if self.boundary == "periodic" and start == 1 and self.Ns % 2 == 0:
+        pairs = [(sites[k], sites[k + 1]) for k in range(start, self.N - 1, 2)]
+        if self.boundary == "periodic" and start == 1 and self.N % 2 == 0:
             pairs.append((sites[-1], sites[0]))
         return pairs
 
@@ -225,11 +226,11 @@ class BrickworkCircuit:
             rng: Random generator for the shuffle.
 
         Returns:
-            ``Ns // 2`` disjoint pairs; one qubit is left out when ``Ns`` is
+            ``N // 2`` disjoint pairs; one qubit is left out when ``N`` is
             odd.
         """
-        order = rng.permutation(np.arange(self.Nr, self.N))
-        return [(int(order[k]), int(order[k + 1])) for k in range(0, self.Ns - 1, 2)]
+        order = rng.permutation(np.arange(self.Nr, self.N_total))
+        return [(int(order[k]), int(order[k + 1])) for k in range(0, self.N - 1, 2)]
 
     def redraw(self, rng: np.random.Generator | None = None) -> None:
         """Draw new gates for every layer, scrambling layers first.

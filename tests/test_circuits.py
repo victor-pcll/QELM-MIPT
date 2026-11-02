@@ -120,8 +120,8 @@ def test_apply_gate_rejects_bad_input() -> None:
 
 
 def test_brickwork_bonds_open_and_periodic() -> None:
-    """Ns = 6 après une ancilla : couches paires et impaires, bords ouverts ou non."""
-    params = {"N": 7, "Nr": 1, "depth": 2}
+    """N = 6 après une ancilla : couches paires et impaires, bords ouverts ou non."""
+    params = {"N": 6, "Nr": 1, "depth": 2}
     circuit = U1BrickworkCircuit(params, np.random.default_rng(0))
     assert circuit.bonds(0) == [(1, 2), (3, 4), (5, 6)]
     assert circuit.bonds(1) == [(2, 3), (4, 5)]
@@ -140,7 +140,7 @@ def test_brickwork_bonds_open_and_periodic() -> None:
 
 
 def test_scrambling_pairs_are_disjoint_system_qubits() -> None:
-    circuit = U1BrickworkCircuit({"N": 7, "depth": 1, "scrambling_layers": 5})
+    circuit = U1BrickworkCircuit({"N": 6, "depth": 1, "scrambling_layers": 5})
     assert len(circuit.scrambling) == 5
     for layer in circuit.scrambling:
         sites = [q for i, j, _ in layer for q in (i, j)]
@@ -151,31 +151,32 @@ def test_scrambling_pairs_are_disjoint_system_qubits() -> None:
 def test_circuit_conserves_system_charge_and_ancilla_entropy() -> None:
     """Les portes U(1) sur S gardent la charge de S et l'entropie de R."""
     rng = np.random.default_rng(5)
-    N = 5
+    N = 4
     circuit = U1BrickworkCircuit(
         {"N": N, "depth": 4, "scrambling_layers": 3}, np.random.default_rng(6)
     )
-    psi = _random_state(N, rng)
-    Q = _charge(N, list(range(1, N)))
+    # The state has the ancilla and the N system qubits (issue #235).
+    psi = _random_state(N + 1, rng)
+    Q = _charge(N + 1, list(range(1, N + 1)))
     out = circuit.scramble(psi)
     for t in range(circuit.depth):
         out = circuit.apply_layer(out, t)
     np.testing.assert_allclose(np.linalg.norm(out), 1.0, atol=1e-12)
     # Full charge distribution, not only its mean: Q commutes with every gate.
-    for q in range(N):
+    for q in range(N + 1):
         P = np.diag((np.diag(Q) == q).astype(float))
         assert abs(np.vdot(out, P @ out) - np.vdot(psi, P @ psi)) < 1e-12
     assert abs(von_neumann_entropy(out, [0]) - von_neumann_entropy(psi, [0])) < 1e-10
 
 
 def test_same_seed_same_gates_and_redraw_changes_them() -> None:
-    a = U1BrickworkCircuit({"N": 5, "depth": 2}, np.random.default_rng(7))
-    b = U1BrickworkCircuit({"N": 5, "depth": 2}, np.random.default_rng(7))
+    a = U1BrickworkCircuit({"N": 4, "depth": 2}, np.random.default_rng(7))
+    b = U1BrickworkCircuit({"N": 4, "depth": 2}, np.random.default_rng(7))
     np.testing.assert_array_equal(a.layers[0][0][2], b.layers[0][0][2])
     np.random.seed(0)
-    c = U1BrickworkCircuit({"N": 5, "depth": 2})
+    c = U1BrickworkCircuit({"N": 4, "depth": 2})
     np.random.seed(0)
-    d = U1BrickworkCircuit({"N": 5, "depth": 2})
+    d = U1BrickworkCircuit({"N": 4, "depth": 2})
     np.testing.assert_array_equal(c.layers[1][0][2], d.layers[1][0][2])
     before = c.layers[0][0][2].copy()
     c.redraw()
@@ -185,9 +186,9 @@ def test_same_seed_same_gates_and_redraw_changes_them() -> None:
 @pytest.mark.parametrize(
     "params",
     [
-        {"N": 2, "depth": 1},
-        {"N": 5, "depth": -1},
-        {"N": 5, "depth": 1, "boundary": "twisted"},
+        {"N": 1, "depth": 1},
+        {"N": 4, "depth": -1},
+        {"N": 4, "depth": 1, "boundary": "twisted"},
     ],
 )
 def test_circuit_rejects_bad_params(params: dict[str, object]) -> None:
@@ -200,7 +201,8 @@ def test_from_config_reads_the_block() -> None:
 
     cfg = load_config(config_name="charge_sharpening")
     circuit = U1BrickworkCircuit.from_config(cfg)
-    assert (circuit.N, circuit.Nr, circuit.Ns) == (7, 1, 6)
+    assert (circuit.N, circuit.Nr, circuit.N_total) == (6, 1, 7)
+    assert not hasattr(circuit, "Ns")
     assert circuit.depth == 3  # t = L / 2 for L = 6
     assert circuit.scrambling_layers == 5
     assert circuit.boundary == "open"
@@ -293,7 +295,7 @@ def test_haar_and_clifford_circuits_keep_the_brickwork(
 ) -> None:
     """Same bonds as the U(1) circuit, gates of their own kind, the ancilla
     untouched, and the same seed gives the same gates."""
-    params = {"N": 5, "Nr": 1, "depth": 3}
+    params = {"N": 4, "Nr": 1, "depth": 3}
     circuit = cls(params, np.random.default_rng(7))
     u1 = U1BrickworkCircuit(params, np.random.default_rng(7))
     assert cls.name == name
@@ -328,9 +330,9 @@ def test_haar_and_clifford_from_config() -> None:
     """from_config reads the haar_circuit and clifford_circuit blocks; the
     QELM experiment adds the depth from the number of steps."""
     for cls in (HaarBrickworkCircuit, CliffordBrickworkCircuit):
-        cfg = OmegaConf.create({cls.name: {"N": 4, "Nr": 1, "depth": 2}})
+        cfg = OmegaConf.create({cls.name: {"N": 3, "Nr": 1, "depth": 2}})
         circuit = cls.from_config(cfg)
-        assert circuit.Ns == 3 and len(circuit.layers) == 2
+        assert (circuit.N, circuit.N_total) == (3, 4) and len(circuit.layers) == 2
 
 
 def test_circuits_package_layout() -> None:
@@ -358,7 +360,7 @@ def test_circuits_package_layout() -> None:
 def test_base_brickwork_has_no_gate_of_its_own() -> None:
     """The base class only knows the geometry: drawing a gate is left to the
     subclasses, and a circuit without layers needs none."""
-    geometry = BrickworkCircuit({"N": 5, "Nr": 1, "depth": 0})
+    geometry = BrickworkCircuit({"N": 4, "Nr": 1, "depth": 0})
     assert geometry.bonds(0) == [(1, 2), (3, 4)]
     with pytest.raises(NotImplementedError, match="draw_gate"):
-        BrickworkCircuit({"N": 5, "Nr": 1, "depth": 1})
+        BrickworkCircuit({"N": 4, "Nr": 1, "depth": 1})

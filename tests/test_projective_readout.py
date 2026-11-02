@@ -20,7 +20,7 @@ BASH_SCRIPT = REPO_ROOT / "experiments" / "projective" / "projective_readout.sh"
 # Virtualenv of another project, active in the shell that launches the script
 # (issue #79): uv must neither use it nor warn about it.
 FOREIGN_VENV = REPO_ROOT.parent / "other-project" / ".venv"
-OVERRIDES = ["models=TFIM", "N=4", "samples.L=10"]
+OVERRIDES = ["models=TFIM", "N=3", "samples.L=10"]
 
 
 def _load_script() -> ModuleType:
@@ -36,10 +36,10 @@ def test_run_shapes_and_features() -> None:
     """Formes de Phi, Y, M, X ; mesures en +-1 ; dernière ligne de Phi = X."""
     cfg = load_config(OVERRIDES)
     out = _load_script().run(cfg)
-    L, n_steps, N = 10, int(cfg.evolution.n_steps), 4
-    assert out["Phi"].shape == (L, n_steps, N - 1)
-    assert out["M"].shape == (L, n_steps - 1, N - 1)
-    assert out["X"].shape == (L, N - 1)
+    L, n_steps, N = 10, int(cfg.evolution.n_steps), 3
+    assert out["Phi"].shape == (L, n_steps, N)
+    assert out["M"].shape == (L, n_steps - 1, N)
+    assert out["X"].shape == (L, N)
     assert out["Y"].shape == (L,)
     assert set(np.unique(out["M"])) <= {-1.0, 1.0}
     np.testing.assert_array_equal(out["Phi"][:, :-1], out["M"])
@@ -48,7 +48,7 @@ def test_run_shapes_and_features() -> None:
     assert np.all(np.abs(out["X"]) <= 1 + 1e-9)
     n_test = L - int(cfg.samples.train_size)
     assert out["y_pred"].shape == out["y_test"].shape == (n_test,)
-    assert out["W"].shape == (n_steps * (N - 1),)
+    assert out["W"].shape == (n_steps * N,)
     assert np.isfinite(out["nmse"]) and np.isfinite(out["r2"])
 
 

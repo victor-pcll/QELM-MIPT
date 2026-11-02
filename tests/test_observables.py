@@ -204,15 +204,15 @@ def test_bad_pair_or_label_is_rejected() -> None:
         SingleObservable({"observables": ["Z", "W"]})
 
 
-# --- N optionnel dans operators() (issue #46) ---
+# --- n_qubits optionnel dans operators() (issues #46 et #235) ---
 
 
 @pytest.mark.parametrize("cls", [SingleObservable, DoubleObservable])
-def test_operators_uses_config_N(cls: type) -> None:
-    """Sans argument, operators() prend N dans les paramètres."""
-    params = {"N": 3, "observables": ["Z"], "pairs": [["Z", "Z"]]}
+def test_operators_uses_config_n_qubits(cls: type) -> None:
+    """Sans argument, operators() prend n_qubits dans les paramètres."""
+    params = {"n_qubits": 3, "observables": ["Z"], "pairs": [["Z", "Z"]]}
     obs = cls(params)
-    assert obs.N == 3
+    assert obs.n_qubits == 3
     ops = obs.operators()
     assert all(op.shape == (8, 8) for op in ops)
     for got, want in zip(ops, obs.operators(3), strict=True):
@@ -220,28 +220,28 @@ def test_operators_uses_config_N(cls: type) -> None:
 
 
 @pytest.mark.parametrize("cls", [SingleObservable, DoubleObservable])
-def test_operators_explicit_N_overrides_config(cls: type) -> None:
-    """operators(N=2) l'emporte sur N=4 de la config."""
-    obs = cls({"N": 4, "observables": ["Z"], "pairs": [["Z", "Z"]]})
-    ops = obs.operators(N=2)
+def test_operators_explicit_n_qubits_overrides_config(cls: type) -> None:
+    """operators(n_qubits=2) l'emporte sur n_qubits=4 de la config."""
+    obs = cls({"n_qubits": 4, "observables": ["Z"], "pairs": [["Z", "Z"]]})
+    ops = obs.operators(n_qubits=2)
     assert ops and all(op.shape == (4, 4) for op in ops)
 
 
 @pytest.mark.parametrize("cls", [SingleObservable, DoubleObservable])
-def test_operators_without_N_raises(cls: type) -> None:
-    """Ni argument ni N dans la config : ValueError explicite."""
+def test_operators_without_n_qubits_raises(cls: type) -> None:
+    """Ni argument ni n_qubits dans la config : ValueError explicite."""
     obs = cls({"observables": ["Z"], "pairs": [["Z", "Z"]]})
-    assert obs.N is None
-    with pytest.raises(ValueError, match="N was not passed"):
+    assert obs.n_qubits is None
+    with pytest.raises(ValueError, match="n_qubits was not passed"):
         obs.operators()
 
 
-def test_full_config_gives_N_to_observables() -> None:
-    """La config composée donne à chaque bloc le N du Hamiltonien."""
+def test_full_config_gives_N_total_to_observables() -> None:
+    """Les readouts lisent tout l'état : N_total = N + Nr qubits (issue #235)."""
     from QELM import load_config
 
-    cfg = load_config(["N=4"])
-    assert SingleObservable.from_config(cfg).N == 4
-    assert DoubleObservable.from_config(cfg).N == 4
+    cfg = load_config(["N=3"])
+    assert SingleObservable.from_config(cfg).n_qubits == 4
+    assert DoubleObservable.from_config(cfg).n_qubits == 4
     assert len(SingleObservable.from_config(cfg).operators()) == 4
     assert len(DoubleObservable.from_config(cfg).operators()) == 6

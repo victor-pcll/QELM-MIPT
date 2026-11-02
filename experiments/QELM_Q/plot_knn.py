@@ -179,15 +179,15 @@ def load_knn_sweep(
 
 def _grid(rows: Sequence[dict[str, Any]]) -> tuple[list[bool], list[int], Figure, Any]:
     finals = sorted({r["final"] for r in rows})
-    Ns = sizes(rows)
+    n_values = sizes(rows)
     fig, axes = subplots(
         len(finals),
-        len(Ns),
-        figsize=(5.5 * len(Ns), 4.2 * len(finals)),
+        len(n_values),
+        figsize=(5.5 * len(n_values), 4.2 * len(finals)),
         squeeze=False,
         sharey=True,
     )
-    return finals, Ns, fig, axes
+    return finals, n_values, fig, axes
 
 
 def _panel(ax: Any, N: int, h: Any, final: bool, n_finals: int) -> None:
@@ -204,10 +204,10 @@ def plot_parity(rows: Sequence[dict[str, Any]]) -> tuple[Figure, list[dict]]:
     Returns:
         The figure and, per panel, the agreement, tie fraction and gap.
     """
-    finals, Ns, fig, axes = _grid(rows)
+    finals, n_values, fig, axes = _grid(rows)
     stats = []
     for i, final in enumerate(finals):
-        for j, N in enumerate(Ns):
+        for j, N in enumerate(n_values):
             ax = axes[i, j]
             sub = [r for r in rows if r["final"] == final and int(r["N"]) == N]
             summary = summarize(
@@ -249,11 +249,11 @@ def plot_parity(rows: Sequence[dict[str, Any]]) -> tuple[Figure, list[dict]]:
 
 def plot_k(rows: Sequence[dict[str, Any]], k_tokens: Sequence[str]) -> Figure:
     """The CustomKNN accuracy against ``p`` for each ``K``, and the ridge."""
-    finals, Ns, fig, axes = _grid(rows)
+    finals, n_values, fig, axes = _grid(rows)
     colors = color_map(k_tokens)
     metrics = (*(f"accuracy_knn_{t}" for t in k_tokens), "accuracy")
     for i, final in enumerate(finals):
-        for j, N in enumerate(Ns):
+        for j, N in enumerate(n_values):
             ax = axes[i, j]
             sub = [r for r in rows if r["final"] == final and int(r["N"]) == N]
             summary = summarize(sub, by=("N", "p"), metrics=metrics)

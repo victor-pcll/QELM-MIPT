@@ -22,7 +22,7 @@ matplotlib.use("Agg")
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO_ROOT / "experiments" / "QELM_Q"
 L = 40
-N = 4
+N = 3  # system qubits (issue #235)
 
 
 def _load(name: str) -> ModuleType:
@@ -38,7 +38,7 @@ def _load(name: str) -> ModuleType:
 
 @pytest.fixture(scope="module")
 def sweep(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """A sweep of N = 4 at p = 0, 0.5, 1, written as exp_QELM_Q.sh does."""
+    """A sweep of N = 3 at p = 0, 0.5, 1, written as exp_QELM_Q.sh does."""
     exp = _load("exp_QELM_Q")
     root = tmp_path_factory.mktemp("sweep")
     for p in (0.0, 0.5, 1.0):
@@ -168,13 +168,13 @@ def metrics_record(run_dir: Path) -> int:
 
 
 def test_record_sum_at_p1_is_the_charge(sweep: Path) -> None:
-    """At p = 1 every round sums to Ns - 2 Q: one value of x @ u per sector."""
+    """At p = 1 every round sums to N - 2 Q: one value of x @ u per sector."""
     plot = _load("plot_pca")
     fit = plot.refit_ridge(sweep / f"N{N}_p1.0", "M")
     u = plot.sum_direction(fit["X_test"].shape[1], fit["n_record"])
-    n_rounds = fit["n_record"] // (N - 1)
+    n_rounds = fit["n_record"] // N
     total = fit["X_test"] @ u * np.sqrt(fit["n_record"])
-    np.testing.assert_allclose(total, n_rounds * ((N - 1) - 2 * fit["y_test"]))
+    np.testing.assert_allclose(total, n_rounds * (N - 2 * fit["y_test"]))
 
 
 def test_sum_and_ridge_figures(sweep: Path) -> None:

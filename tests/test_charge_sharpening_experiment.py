@@ -53,21 +53,22 @@ def test_product_charge_index() -> None:
 
 def test_product_encoding_is_eq_b1() -> None:
     """(|0>|010101> + |1>|010100>) / sqrt(2), avec R maximalement intriqué."""
-    emb = AncillaChargeSectorEncoding({"N": 7, "initial": "product"})
+    emb = AncillaChargeSectorEncoding({"N": 6, "initial": "product"})
     psi = emb.state()
     expected = np.zeros(2**7, dtype=complex)
     expected[0b0010101] = expected[0b1010100] = 1 / np.sqrt(2)
     np.testing.assert_allclose(psi, expected)
     assert von_neumann_entropy(psi, [0]) == pytest.approx(1.0)
     with pytest.raises(ValueError):
-        AncillaChargeSectorEncoding({"N": 7, "initial": "random"})
+        AncillaChargeSectorEncoding({"N": 6, "initial": "random"})
     # The default stays the uniform superposition.
-    assert AncillaChargeSectorEncoding({"N": 7}).initial == "uniform"
+    assert AncillaChargeSectorEncoding({"N": 6}).initial == "uniform"
 
 
 def test_config_composes_with_the_paper_parameters() -> None:
     cfg = load_config(config_name="charge_sharpening")
-    assert (cfg.N, cfg.Ns, cfg.Nr) == (7, 6, 1)
+    # The paper's L = 6 system qubits, plus the ancilla (issue #235).
+    assert (cfg.N, cfg.Nr, cfg.N_total) == (6, 1, 7)
     assert cfg.samples.L == 10000
     assert cfg.U1_circuit.depth == 3
     assert cfg.ancilla_charge_sector.initial == "product"
@@ -165,14 +166,14 @@ def test_bash_script_and_plot(tmp_path: Path) -> None:
     assert "Done: 1 x 1 x 2 runs" in result.stdout
     sweep = next((tmp_path / "charge_sharpening").iterdir())
     runs = sorted(p.name for p in sweep.iterdir() if p.is_dir())
-    assert runs == ["N7_seed0_g0.0", "N7_seed0_g1.0"]
-    metrics = json.loads((sweep / "N7_seed0_g1.0" / "metrics.json").read_text())
+    assert runs == ["N6_seed0_g0.0", "N6_seed0_g1.0"]
+    metrics = json.loads((sweep / "N6_seed0_g1.0" / "metrics.json").read_text())
     assert metrics["gamma"] == 1.0 and metrics["S_R_mean"] == pytest.approx(
         0.0, abs=1e-9
     )
-    # depth: ${int:${div:${Ns},2}} in the YAML, a number in the run (#85).
+    # depth: ${int:${div:${N},2}} in the YAML, a number in the run (#85).
     resolved = json.loads(
-        (sweep / "N7_seed0_g1.0" / "resolved_config.json").read_text()
+        (sweep / "N6_seed0_g1.0" / "resolved_config.json").read_text()
     )
     assert resolved["U1_circuit"]["depth"] == 3
     assert (sweep / "charge_sharpening.png").is_file()
@@ -186,7 +187,7 @@ def test_bash_script_and_plot(tmp_path: Path) -> None:
         f"L=6,\nX,Y\n{ln2},0.0\n{ln2 / 2},0.5\n0.0,1.0\n"
     )
     comparison = _load(PLOT).plot_sweep(sweep, ref)
-    # The paper's "L=6" (system sites) is renamed N = 7 (ancilla included).
-    stats = comparison["S_R_mean"]["N7"]["N = 7"]
+    # The paper's "L=6" (system sites) is our N = 6 (issue #235).
+    stats = comparison["S_R_mean"]["N6"]["N = 6"]
     assert stats["n_points"] == 3
     assert stats["max_abs_diff"] == pytest.approx(0.0, abs=1e-9)

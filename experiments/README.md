@@ -4,12 +4,21 @@ Bash scripts that launch QELM runs from the terminal. Each script fixes a set of
 parameters, calls the Hydra entry point once per combination, and writes every
 run to its own folder under `outputs/`, which git ignores (see `.gitignore`).
 
+**Qubit counts (issue #235).** `N` is the number of system qubits, the
+ancilla excluded: `N=6` with one ancilla simulates `N_total = 7` qubits, and
+`N_VALUES` of the launchers lists system sizes. Before issue #235, `N`
+counted the ancilla too; the sizes quoted below for results obtained then
+(figures, timings, the sweeps of past issues) are in that old convention,
+one more than the new `N` with one ancilla. The plot scripts read old run
+folders in the new convention (`documentation/configuration.md`, "Runs
+written before issue #235").
+
 Next to `metrics.json`, every Python experiment script (`projective/`,
 `QELM_Z/`, `QELM_M/`, `QELM_Q/`, `QELM_S/`, `charge_sharpening/`,
-`learnability/`, `double_descent/`) writes
+`learnability/`, `double_descent/`, `haar_readouts/`) writes
 `resolved_config.json`, the config of the run with every interpolation
 evaluated (`QELM.utils.save_config`, issue #85). `.hydra/config.yaml` keeps the
-formulas as written in `conf/`, such as `depth: ${int:${div:${Ns},2}}`;
+formulas as written in `conf/`, such as `depth: ${int:${div:${N},2}}`;
 `resolved_config.json` holds the values they gave, here `"depth": 3`, and is
 written after the run, so a value the script sets in the config is included:
 
@@ -18,7 +27,7 @@ import json
 from pathlib import Path
 
 cfg = json.loads(Path("outputs/.../resolved_config.json").read_text())
-cfg["Ns"], cfg["samples"]["train_size"]
+cfg["N"], cfg["N_total"], cfg["samples"]["train_size"]
 ```
 
 ## Run the test experiment
@@ -85,7 +94,7 @@ The evolution time is split into `projective_measurement.nbr_time_evolution`
 steps (default 5, set in `conf/training/measurements/projective.yaml`,
 independent of `N`), and the system
 qubits are measured after each step. The features are this measurement record
-`M`, of shape `(nbr_time_evolution, Ns)` per
+`M`, of shape `(nbr_time_evolution, N)` per
 sample, instead of the observables; an unmeasured qubit (`p < 1`) counts as 0.
 The target is the outcome ±1 of the ancilla `R` measured in Z at the end.
 `R` is a reference qubit that the TFIM does not act on, so this label is the
@@ -105,7 +114,7 @@ H_VALUES="1 10" N_VALUES="4 6" L=500 ./experiments/QELM_M/exp_QELM_M.sh
 ```
 
 Besides the ancilla and system entropies, every run records `S_half`, the von
-Neumann entropy of the first `Ns // 2` system qubits in the final state, and
+Neumann entropy of the first `N // 2` system qubits in the final state, and
 its mean `S_half_mean` in `metrics.json` (issue #174).
 
 `notebooks/results/02_QELM_M_analysis.ipynb` runs this sweep in its own
@@ -127,8 +136,8 @@ plots the accuracy, the R2 and `S_half` against `p` (`scaling_vs_p.png`).
 It runs `experiments/QELM_M/exp_QELM_M_ratio.py`, the same experiment with
 the number of training samples set by the ratio
 `alpha_ratio = n_train / n_params` (`experiment.alpha_ratio`, config
-`conf/QELM_M_ratio.yaml`), where `n_params = nbr_time_evolution * Ns + 1` is
-the number of weights of the ridge readout (16 at `N = 4`). The script sets
+`conf/QELM_M_ratio.yaml`), where `n_params = nbr_time_evolution * N + 1` is
+the number of weights of the ridge readout (21 at `N = 4`, 5 steps). The script sets
 `samples.train_size = round(alpha_ratio * n_params)` and
 `samples.L = train_size + n_test`, with a test set of fixed size
 `experiment.n_test` (default 200), checks that `X` has `n_params` columns,
@@ -205,7 +214,7 @@ i.e. `10 / J`), `SEEDS` (default `42`) and `P_VALUES`
 (`projective_measurement.final_measurement`, default `false`), with `L=200`
 samples per run by default. The ancilla `R` is measured in Z first, which
 fixes the charge sector of the system: the target is that charge,
-`Y = Q` (`Ns // 2` or `Ns // 2 - 1`). The system evolves in
+`Y = Q` (`N // 2` or `N // 2 - 1`). The system evolves in
 `projective_measurement.nbr_time_evolution` steps (default 5), and **between**
 two steps each system qubit is measured in Z with probability `p`; by
 default there is no measurement after the last step, and
@@ -313,47 +322,74 @@ samples. `BALANCED=true` (`samples.balanced=true`) imposes the outcome of the
 ancilla, `Q1, Q2, Q1, ...`, so that each sector gets exactly half of the
 samples. `experiments/QELM_Q/plot_bayes_ridge_fss.py` draws the accuracy
 against `p` for every `N`, next to the SEP Bayes accuracy of the random U(1)
-circuit of `experiments/learnability/` at the same `Ns = N - 1`, and tests an
+circuit of `experiments/learnability/` at the same `N` (no ancilla there), and tests an
 asymptotic behavior in `N` (fits `A_N = A_inf + c / N`, gaps between sizes,
 crossings of the curves, steepest slope against `N`). The figures of the PR
-come from:
+come from the commands below, written in the convention of issue #235 (`N`
+the number of system qubits; the PR ran `N_VALUES="12 10 8 6"` when `N`
+still counted the ancilla, the same systems):
 
 ```bash
-OMP_NUM_THREADS=1 OUT_DIR=outputs/fss233/tfim N_VALUES="12 10 8 6" \
+OMP_NUM_THREADS=1 OUT_DIR=outputs/fss233/tfim N_VALUES="11 9 7 5" \
   SEEDS="42 43" P_VALUES="0.0 0.05 0.1 0.2 0.3 0.4 0.6 0.8 1.0" \
   FINAL_VALUES=true BALANCED=true STATE=vector L=2000 MAX_JOBS=4 \
   ./experiments/QELM_Q/exp_QELM_Q.sh
-# The SEP reference at Ns = N - 1, with the 5 rounds of the TFIM run
-# (sep_matched) and with the t_f = Ns steps of the paper (sep_paper).
-for NS in 5 7 9 11; do for P in 0.0 0.05 0.1 0.2 0.3 0.4 0.6 0.8 1.0; do
-  uv run python experiments/learnability/learnability.py N=$NS samples.L=8000 learnability.n_boot=50 \
+# The SEP reference at the same N, with the 5 rounds of the TFIM run
+# (sep_matched) and with the t_f = N steps of the paper (sep_paper).
+for N in 5 7 9 11; do for P in 0.0 0.05 0.1 0.2 0.3 0.4 0.6 0.8 1.0; do
+  uv run python experiments/learnability/learnability.py N=$N samples.L=8000 learnability.n_boot=50 \
     learnability.p=$P learnability.depth=5 learnability.measure_every=period \
-    hydra.run.dir=outputs/fss233/sep_matched/N${NS}_p$P
-  uv run python experiments/learnability/learnability.py N=$NS samples.L=8000 learnability.n_boot=50 \
-    learnability.p=$P hydra.run.dir=outputs/fss233/sep_paper/N${NS}_p$P
+    hydra.run.dir=outputs/fss233/sep_matched/N${N}_p$P
+  uv run python experiments/learnability/learnability.py N=$N samples.L=8000 learnability.n_boot=50 \
+    learnability.p=$P hydra.run.dir=outputs/fss233/sep_paper/N${N}_p$P
 done; done
 uv run python experiments/QELM_Q/plot_bayes_ridge_fss.py outputs/fss233/tfim \
   --sep outputs/fss233/sep_matched outputs/fss233/sep_paper
 ```
 
 With 5 rounds at every `N` the accuracy falls toward 1/2 as `N` grows, as
-`N**-1/2`: the scrambled model predicts `d'^2 ~ 4 R p / ((1 - p) Ns)`. With
-`R = Ns` rounds at a fixed step `dt = 2 / J` (so `evolution.t = 2 Ns`),
+`N**-1/2`: the scrambled model predicts `d'^2 ~ 4 R p / ((1 - p) N)`. With
+`R = N` rounds at a fixed step `dt = 2 / J` (so `evolution.t = 2 N`),
 `d'` no longer depends on `N` and the accuracy reaches a limit,
 `Phi(sqrt(p / (1 - p)))`; the follow-up sweep of the PR:
 
 ```bash
-for N in 12 10 8 6; do NS=$((N - 1)); for SEED in 42 43; do
+for N in 11 9 7 5; do for SEED in 42 43; do
   for P in 0.0 0.05 0.1 0.2 0.3 0.4 0.6 0.8 1.0; do
     uv run python experiments/QELM_Q/exp_QELM_Q.py N=$N seed=$SEED \
       samples.L=2000 samples.balanced=true \
       projective_measurement.final_measurement=true \
-      projective_measurement.p=$P projective_measurement.nbr_time_evolution=$NS \
-      TFIM.h=10 evolution.t=$((2 * NS)) state_representation=vector \
+      projective_measurement.p=$P projective_measurement.nbr_time_evolution=$N \
+      TFIM.h=10 evolution.t=$((2 * N)) state_representation=vector \
       hydra.run.dir=outputs/fss233/tfim_rN/N${N}_seed${SEED}_p$P
-done; done; done   # seed 42 only at N = 12, for time
+done; done; done   # seed 42 only at N = 11, for time
 uv run python experiments/QELM_Q/plot_bayes_ridge_fss.py outputs/fss233/tfim_rN \
   --sep outputs/fss233/sep_paper --out outputs/fss233/figures_rN
+```
+
+#### Effect of the step `dt` on the collapse (issue #253)
+
+The collapse on `Phi(d' / 2)` assumes that the reservoir forgets the previous
+round before the next one. At a fixed number of rounds `R = 5`, the sweep below
+changes the step `dt = t / 5` through `T_VALUES`, from far below the scrambling
+time (`t_scr ~ 2.25 / J`, issue #243) to about it. `STEP=haar_u1`
+(`unitary_step=haar_u1`) replaces the TFIM step by a Haar U(1) unitary, an
+independent Haar block on each charge sector drawn anew at each step: the
+scrambled model realized exactly, the control. `plot_dt_collapse.py` draws the
+accuracy against `p` and against `d' / 2` for each `dt`, and the gap to the
+control.
+
+```bash
+OMP_NUM_THREADS=1 OUT_DIR=outputs/dt253/tfim N_VALUES="5 7 9 11" \
+  T_VALUES="0.5 1.5 5 10" SEEDS="42 43" P_VALUES="0.1 0.2 0.4 0.6 0.8" \
+  FINAL_VALUES=true BALANCED=true STATE=vector L=2000 MAX_JOBS=4 \
+  ./experiments/QELM_Q/exp_QELM_Q.sh
+OMP_NUM_THREADS=1 OUT_DIR=outputs/dt253/haar STEP=haar_u1 N_VALUES="5 7 9 11" \
+  T_VALUES=10 SEEDS="42 43" P_VALUES="0.1 0.2 0.4 0.6 0.8" \
+  FINAL_VALUES=true BALANCED=true STATE=vector L=2000 MAX_JOBS=4 \
+  ./experiments/QELM_Q/exp_QELM_Q.sh
+uv run python experiments/QELM_Q/plot_dt_collapse.py outputs/dt253/tfim \
+  --haar outputs/dt253/haar --out outputs/dt253/figures
 ```
 
 ### Run many runs at once: `MAX_JOBS` (issue #199)
@@ -365,12 +401,13 @@ so there are never more than `n` alive. `JOBS`, the former name, still works
 when `MAX_JOBS` is not set.
 
 ```bash
-OMP_NUM_THREADS=1 MAX_JOBS=6 N_VALUES=12 STATE=vector \
+OMP_NUM_THREADS=1 MAX_JOBS=6 N_VALUES=11 STATE=vector \
   ./experiments/QELM_Q/exp_QELM_Q.sh
 ```
 
 - **Memory sets `n`, not the cores.** With the density matrix
-  (`STATE=density`, the default), a run at `N = 12` holds `4096 x 4096`
+  (`STATE=density`, the default), a run at `N = 11` (`N_total = 12` with
+  the ancilla) holds `4096 x 4096`
   complex matrices, about 1 to 1.5 GB: on 16 GB of RAM, use at most 6 to 8
   jobs. The state vector (`STATE=vector`) needs far less, and there the
   number of cores is the limit. Set `OMP_NUM_THREADS=1` so that each run
@@ -397,7 +434,7 @@ line of the grid, and `%n` plays the role of `MAX_JOBS`. A sketch, for one
 #!/usr/bin/env bash
 #SBATCH --array=0-104%8          # 5 seeds x 21 p = 105 tasks, 8 at a time
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=2G                 # per task, N = 12 with the density matrix
+#SBATCH --mem=2G                 # per task, N = 11 with the density matrix
 SEEDS=(42 43 44 45 46)
 P_VALUES=($(seq 0 0.05 1))
 SEED=${SEEDS[$((SLURM_ARRAY_TASK_ID / 21))]}
@@ -450,7 +487,7 @@ writes, each with its `.json`:
   density of each sector and the 1 sigma ellipse of each component;
   `ridge_regions.png` and `knn_regions.png`, the decision regions of the
   ridge readout and of the K-NN on the plane, with their misclassified test
-  samples crossed. The regions are the slice of a classifier of all `Ns`
+  samples crossed. The regions are the slice of a classifier of all `N`
   coordinates by the plane through the mean of the samples, so a sample far
   from the plane can lie in the region of the other class and still be
   right; the crosses are the true mistakes.
@@ -489,7 +526,7 @@ comes from when the PCA plane is a blur. `record_sum_direction.png` draws
 `[M]` and `[M, Z]` against the unit vector `u` that sums the record
 (`sum_direction`), with the share of the training variance along `u` and
 the cosine between `u` and the ridge weights: at `p = 1` every qubit is
-measured in every round, each round sums to `Ns - 2 Q`, and the sectors fall
+measured in every round, each round sums to `N - 2 Q`, and the sectors fall
 on two vertical lines of a direction holding about 2 % of the variance.
 `ridge_outputs.png` draws the histogram of the ridge output `phi . W` on the
 test samples, by sector, with the decision threshold: an accuracy of 1 is
@@ -659,6 +696,50 @@ sizes, and the collapse `S(p, N) - S(p_c, N)` against `(p - p_c) N^(1/nu)` at
 the `(p_c, nu)` that minimizes the mismatch of the rescaled curves
 (`QELM.evaluation.finite_size`, the method of Sec. IV of the paper), fitted
 on the seed average and on each seed (the spread gives the error bars).
+A fourth column draws the cost of the collapse in the `(p_c, nu)` plane.
+
+#### Closer to the paper: late-time averages and the `I_3` crossing (issue #251)
+
+At `N <= 12`, with the final entropy alone and steps of 0.05 in `p`, the
+collapse gives `p_c = 0.25`, `nu = 2.2`, against `0.21 +- 0.16` and
+`1.74 +- 0.45` in the paper. The cost of the collapse has a long diagonal
+valley in the `(p_c, nu)` plane, so the window, the sizes and the noise move
+the minimum along it. `AVERAGE_FROM=0.5` averages, over the second half of
+each run, the Rényi entropies `S_1`, `S_2`, `S_inf` of the half chain and,
+when 4 divides `N`, the tripartite mutual information `I_3` of the four
+quarters (`entropy_task.average_from`). `plot_entropy_fss.py` then collapses
+one of them (`--entropy S1_avg`, `S2_avg` or `Sinf_avg`, the rows of Table I)
+on the sizes `N >= --min-N` and the points `p >= --p-min`. It also writes
+`i3_crossings.png`: `I_3` against `p` and the crossings of every pair of
+sizes, an estimate of `p_c` without a fit (Zabalo et al., PRB 101, 060301
+(2020)).
+
+```bash
+MODELS=floquet_circuit N_VALUES="16 14 12 10 8 6" SEEDS="42 43 44 45" PER_P=150 \
+  P_VALUES="0 0.025 0.05 0.075 0.1 0.125 0.15 0.175 0.2 0.225 0.25 0.275 0.3 0.35 0.4" \
+  AVERAGE_FROM=0.5 MAX_JOBS=4 ./experiments/QELM_S/exp_QELM_S.sh
+uv run python experiments/QELM_S/plot_entropy_fss.py outputs/exp_QELM_S/<date_time> \
+  --entropy S1_avg --min-N 8 --p-min 0.05
+```
+
+The title and the JSON give two errors for the collapse. The statistical
+one (`p_c_stat`, `nu_stat`) comes from a bootstrap: each point of `S(p, N)` is
+redrawn with its standard error, from the spread of the trajectories, and
+the collapse is fitted again. The systematic one (`p_c_sys`, `nu_sys`) is
+half the range of the fits over the choices of the data
+(`collapse_choices`): the smallest size kept (`--min-N` or one of the next
+two sizes), `p_min` or `p_min + 0.05`, and all `p` or only `p <= 0.3`.
+`p_c_total` and `nu_total` add the two in quadrature. The spread of the
+seeds alone (`p_c_err`, `nu_err`, the error bars of PR #240) misses the
+systematic part, which dominates at these sizes.
+
+A scratch run of this protocol (N = 6 to 16, 400 to 600 trajectories per
+`p`, `--min-N 8 --p-min 0.05`) gave, for `S_1`, `p_c = 0.209 +- 0.008 (stat)
++- 0.024 (sys)` and `nu = 2.03 +- 0.12 (stat) +- 0.26 (sys)`, in line with
+Table I (`0.21 +- 0.16`, `1.74 +- 0.45`). `S_2` and `S_inf` give the same
+`p_c`. The systematic part is a drift: with `N >= 10` the minimum moves
+along the valley to `p_c = 0.17`, `nu = 1.6`. The `I_3` curves of `N = 8, 12, 16` cross at
+`p = 0.11` to `0.13`.
 
 ### The same chain in continuous time (issue #241)
 
@@ -806,14 +887,15 @@ ENCODING=dense_angle_encoding ./experiments/double_descent/double_descent.sh
 A test of the library on a published result: it reproduces Fig. 7 of
 Agrawal et al., "Observing quantum measurement collapse as a learnability
 phase transition", PRX 14, 041012 (2024), at the paper's `L = 6` system
-qubits, i.e. `N = 7` here (the ancilla `R` is one of the `N` qubits). The
+qubits, i.e. `N = 6` here (`N` counts the system qubits only, issue #235;
+the state has `N_total = 7` qubits with the ancilla `R`). The
 config is `conf/charge_sharpening.yaml`, which composes `conf/config.yaml`
 and changes:
 
 - the initial state, Eq. (B1): `(|0>_R |010101> + |1>_R |010100>) / sqrt(2)`
   (`ancilla_charge_sector.initial=product`), scrambled by 5 all-to-all
   layers of random U(1) gates;
-- the dynamics: `U1_circuit.depth = Ns / 2 = 3` brickwork layers of random
+- the dynamics: `U1_circuit.depth = N / 2 = 3` brickwork layers of random
   charge-conserving gates (`QELM.models.circuits`), each a full period of
   the brickwork (even then odd bonds), open boundaries, one fixed circuit
   instance per seed (`U1_circuit.fixed_instance=true`);
@@ -831,7 +913,7 @@ Each run computes the ancilla entropy `S_R` (nats, as in the paper) of `samples.
 trajectories and its mean, variance and Binder ratio
 `B = 1 - mu_4 / (3 mu_2**2)` (`QELM.evaluation.charge_sharpening`), with
 bootstrap errors. The launcher sweeps `GAMMA_VALUES` (default
-`0.0 0.1 ... 1.0`), `SEEDS` (default `0`) and `N_VALUES` (default `7`):
+`0.0 0.1 ... 1.0`), `SEEDS` (default `0`) and `N_VALUES` (default `6`):
 
 ```bash
 SEEDS="0 1 2 3 4" L=10000 ./experiments/charge_sharpening/charge_sharpening.sh
@@ -845,12 +927,12 @@ panels of Fig. 7 in `charge_sharpening.png`, with the plotted data in
 `charge_sharpening.json`, over the curves digitized from the paper in
 `experiments/charge_sharpening/reference/` (see the README there), and
 writes the deviation at the reference points to `comparison.json`. The
-paper counts the system sites only: its curves `L = 6` and `L = 20` are
-renamed `N = 7` and `N = 21`, our `N` counting the ancilla.
+paper counts the system sites only, as our `N` does: its curves `L = 6` and
+`L = 20` are renamed `N = 6` and `N = 20`.
 
 `notebooks/benchmarks/03_charge_sharpening.ipynb` runs this sweep from
 Jupyter, in `outputs/charge_sharpening_fig7/<date_time>/` (issue #151), with one progress bar for the whole sweep, then shows the three
-panels over the paper's curves, prints the deviation from its `N = 7` curve,
+panels over the paper's curves, prints the deviation from its `N = 6` curve,
 and plots the distribution of `S_R` over the trajectories at a few values of
 `gamma` (`S_R_distribution.png` and `.json` in the sweep folder).
 
@@ -864,7 +946,7 @@ charge).
 Both U(1) benchmarks (charge sharpening and learnability) check along every
 trajectory or record that the global charge is conserved. After each step,
 `QELM.physics.charge_leakage` gives the weight of the state outside the
-sector of its starting charge (the total charge of `R + S`, `Ns // 2`, for
+sector of its starting charge (the total charge of `R + S`, `N // 2`, for
 charge sharpening; the charge `Q` of the record for learnability). The
 largest value over the evolution is saved per run as `charge_leakage`; it is
 exactly 0 for a correct simulation, because every gate and measurement is
@@ -953,6 +1035,178 @@ several sizes `N` cross at `p_success ~ 0.2` in the paper. The figure is
 `notebooks/benchmarks/02_learnability_entropy.ipynb` runs the sweep, in
 `outputs/learnability_fig2c/<date_time>/` with `FIGURES=2c`, and plots
 Fig. 2c.
+
+## Run the charge of a random Haar or Clifford circuit with several readouts
+
+`experiments/haar_readouts/haar_readouts.py` (config `conf/haar_readouts.yaml`)
+asks the question of `QELM_M` (can a readout of the measurement record `M`
+tell the initial charge sector of the system, `N // 2` or `N // 2 - 1`?) for
+gates that conserve nothing: a brickwork of Haar-random U(4) gates, or of
+random two-qubit Clifford gates with `models=clifford_circuit`. With the
+TFIM of `QELM_M` (`h = 10 J`) or U(1) gates, the charge is (almost)
+conserved and a sum of outcomes, so a linear readout reads it; here it is
+not. The reference qubit `R` holds the charge sector
+(`AncillaChargeSectorEncoding`), the `N` system qubits run
+`readouts_task.n_rounds` rounds (default 5) of one brickwork layer followed
+by a Z measurement of each system qubit with probability `p`, and the
+label is the Z outcome of `R`. The state stays pure and is simulated as a
+state vector.
+
+At each `p` of `readouts_task.p_values`, `readouts_task.samples_per_p`
+trajectories (default 2000) are split into training and test sets, and each
+readout of `readouts_task.readouts` is fitted on the flattened record and
+scored on the test set by its accuracy (`accuracy_<readout>_p<p>`) and
+the `R2` of its output against the label (`r2_<readout>_p<p>`; a
+classifier outputs `2 P(Y = +1) - 1`):
+
+- `ridge`: the linear readout, `RidgeCV` with leave-one-out alpha;
+- `logistic`: a logistic regression on the standardized features, `C` by
+  5-fold cross-validation;
+- `ridge_pairs`: the same ridge on the features and the products of every
+  pair of them;
+- `knn`: `sqrt(n_train)` nearest neighbors, weighted by distance;
+- `mlp`: a neural network with two hidden layers of 64 units;
+- `gradient_boosting`: gradient-boosted trees.
+
+`readouts_task.features` sets what the readouts read, each set on its own:
+`M`, the record (default); `X`, `Y`, `Z`, the `<P_k>` of the system qubits in
+the final state after `R` is measured; `XX`, `YY`, `ZZ`, the `<P_i P_j>` on
+every pair; `all`, the six observable sets side by side (the QELM);
+`M_all`, the record and the six sets (the QELM-M). The scores of a set
+other than `M` are named `<readout>_<set>` (`accuracy_ridge_ZZ_p<p>`).
+`S_R_mean_p<p>` is the mean entropy of `R` (bits), the purification curve.
+`haar_circuit.fixed_instance=false` (the default) draws new gates for every
+trajectory; `true` keeps one circuit for the run.
+
+```bash
+uv run python experiments/haar_readouts/haar_readouts.py N=6 readouts_task.samples_per_p=500
+MAX_JOBS=4 ./experiments/haar_readouts/haar_readouts.sh
+uv run python experiments/haar_readouts/plot_haar_readouts.py outputs/haar_readouts/<date_time>
+```
+
+The launcher sweeps `MODELS` (`haar_circuit`, add `clifford_circuit`),
+`GATES` (`random fixed`), `N_VALUES` (`8`) and `SEEDS`
+(`PER_P`, `P_VALUES`, `READOUTS`, `FEATURES`, `MAX_JOBS` change the defaults), one folder per run,
+`<circuit>_<gates>_N<N>_seed<seed>/`. The plot script writes one figure per readout,
+`<readout>.png` with its JSON: the purification curve `S_R(p)` on the left,
+the accuracy of the readout in the middle, with the chance level 1/2, and
+its `R2` on the right (`<circuit>_<readout>.png` when the sweep holds both
+circuits). With `READOUTS=ridge FEATURES="M all M_all"`,
+`compare_<circuit>.png` draws the ridge on `M`, on the QELM features and on
+the QELM-M features on the same panels, one per circuit.
+
+### Benchmark of QELM readouts
+
+More feature maps of the final state benchmark what a readout of the QELM
+can read: `local2` (every one- and two-site Pauli string, cross terms
+included), `born` (the `2**N` Z-basis probabilities of the system),
+`reservoir` (the same after one fixed Haar unitary on the system, drawn once
+per run), `shot` (one Z-basis bitstring, what one run of the experiment
+gives), `M_shot` (the record and that bitstring) and `M_x_all` (the record,
+the six observable sets and their products: weights of the observables that
+depend on the record). They draw from their own generators, so the
+trajectories stay those of a run without them. The ridge quadratic in the
+observables is `READOUTS=ridge_pairs FEATURES=all`; run it as a second
+sweep and give both folders to the plot script, which merges the runs that
+share circuit, gate draw, `N` and seed:
+
+```bash
+OUT_DIR=outputs/haar_readouts/linear READOUTS="ridge logistic" \
+  FEATURES="all local2 born reservoir shot M_shot M_all M_x_all" \
+  MAX_JOBS=4 ./experiments/haar_readouts/haar_readouts.sh
+OUT_DIR=outputs/haar_readouts/pairs READOUTS=ridge_pairs FEATURES=all \
+  MAX_JOBS=4 ./experiments/haar_readouts/haar_readouts.sh
+uv run python experiments/haar_readouts/plot_haar_readouts.py \
+  outputs/haar_readouts/linear outputs/haar_readouts/pairs
+```
+
+`benchmark_<circuit>_<gates>_<readout>.png` then draws, for one gate draw and
+the `ridge` (with the quadratic ridge) or the `logistic` readout, every
+benchmark set on the same panels, with the purification curve.
+
+## Check the chaos and the locality of the reservoirs (issue #243)
+
+```bash
+uv run python experiments/diagnostics/diagnostics_physiques.py
+```
+
+A measurement-induced transition needs a chaotic unitary dynamics (to keep a
+volume law at `p > 0`) and a local one (a light cone, for the competition
+between the spreading and the measurements). The script measures both, with
+the diagnostics of `QELM.evaluation.chaos_locality`, on two families of
+reservoirs (`--families`):
+
+| family | key | reservoir | step |
+| --- | --- | --- | --- |
+| continuous | `tfim_all_to_all` | TFIM of `conf/models/TFIM.yaml`, `h = 10` (`--tfim-h`) | `exp(-i H 0.25)` |
+| continuous | `ising_hz0` | open Ising chain of #241, `h_x = 1.05`, `h_z = 0`, `J_i` in `[0.5, 1.5]` | `exp(-i H 0.3)` |
+| continuous | `ising_hz05` | the same chain with `h_z = 0.5`, the reservoir of #241 | `exp(-i H 0.3)` |
+| continuous | `xxz` | clean Heisenberg chain of #236, `J = Delta = 1`, `h = 0` | `exp(-i H 0.1)` |
+| continuous | `xxz_disorder` | the same chain with fields `h_i` in `[-1, 1]` (`--xxz-h`) | `exp(-i H 0.1)` |
+| discrete | `floquet` | Floquet Ising chain of Skinner et al. (2019), #239 | one half-layer |
+| discrete | `haar` | Haar-random two-qubit gates, as `haar_circuit` | one half-layer |
+| discrete | `clifford` | random two-qubit Clifford gates, as `clifford_circuit` | one half-layer |
+
+The Haar and Clifford circuits draw new gates at every step, as in the
+experiments, and their dynamics is averaged over `--circuit-draws` draws. A
+circuit with new gates at every step has no spectrum, so part A uses their
+Floquet version: one draw of the gates of a period, repeated in time.
+
+The 1D Hamiltonians and the Floquet bricks are rebuilt in
+`QELM.evaluation.chaos_locality` with the conventions of their pull requests
+(#238, #240, #242), so that the diagnostics run on `main`. It writes seven
+figures per family, each with its JSON, in
+`outputs/diagnostics_physiques/<date_time>/<family>/`, and `summary.json`
+(`--out` to change the folder):
+
+- `level_spacing.png` (part A): histogram of the unfolded level spacings of
+  the central third of every symmetry sector (parities, charge, reflection),
+  pooled over `--realisations` disorder draws, against Poisson `exp(-s)`, the
+  GOE `(pi/2) s exp(-pi s^2/4)` and the GUE. The mean gap ratio `<r>` in each
+  title reads without unfolding: 0.386 for Poisson, 0.531 for the GOE, 0.600
+  for the GUE.
+- `entropy_growth.png` (part B1): half-chain `S_A(t)` at `p = 0` from the
+  Néel state (top row) and from `|+y>^N` (bottom row), one curve per `N`
+  (`--N-growth`). `|+y>^N` has zero energy for the TFIM and the Ising chains
+  (infinite temperature), so `S_A` saturates near the Page value; the Néel
+  state is an extreme of the `- J Z Z` couplings and saturates lower; for the
+  SU(2)-symmetric XXZ chain `|+y>^N` is an eigenstate and nothing grows. A local
+  model grows linearly at a rate that does not depend on `N` (`max_rate` in
+  the JSON).
+- `otoc.png` (part B2): `C(x, t) = (1/2) <|[Z_x(t), Z_x0]|^2>` at infinite
+  temperature, `x0 = N/2`: a "V" for a local model.
+- `reference_qubit_delta.png` (part B3a): a reference qubit `R` in a Bell pair
+  with `x0`, the rest of the chain in the Néel state; the mean entropy
+  `-<Delta S_Q(x, t)>` that one extra measurement at `(x, t)` would remove from
+  `R` (averaged over its outcome, not applied), at `--p-volume` and
+  `--p-area`, on a log color scale. It is exactly zero until the information
+  on `R` reaches `x`.
+- `reference_qubit_cutoff.png` (part B3b): `<S_Q(t)>` when the outcomes of
+  the measurements at `|x - x0| > l` are not recorded (the state is averaged
+  over them), for `l` in `--cutoffs` (`-1`: nothing recorded, `S_Q = 1`).
+- `velocities.png` (part B2b, local models only): the entanglement velocity
+  `v_E`, slope of the half-chain `S_A(t) ~ v_E t` (`N = 12`) from random
+  product states (infinite temperature, 1 bit per site at equilibrium),
+  averaged over `--velocity-draws` states (`--velocity-circuit-draws` draws
+  of a random circuit); the butterfly velocity `v_B`, slope
+  of the front `C(r, t*) = 0.5` of the spreading of `Z_0(t)` from the edge of
+  the chain (`N = 11`); and the Lieb-Robinson velocity `v_LR`, 1 site per
+  half-layer for a circuit and the Nachtergaele-Sims bound `7.57 ||h_bond||`
+  for a Hamiltonian. A chaotic local model has `v_E <= v_B <= v_LR`.
+- `scrambling.png` (part B2c, every model): the scrambling time at fixed
+  `N = 11` (`--N-scrambling`). `Z_x0` starts at the centre, and the time is
+  the first one at which `C(x, t) = (1/2) <|[Z_x0(t), Z_x]|^2>` reaches
+  `0.5` (`--scrambling-threshold`) on every site: `~ (N/2) / v_B` for a local
+  model.
+
+The default sizes (`N = 12` for the continuous spectra and 10 for the
+quasi-energies, 6 to 12 for the growth, 10 for the OTOC, 8 for the reference
+qubit, 11 and 12 for the velocities, 11 for the scrambling time) take about
+two hours; `--quick` runs tiny sizes in seconds, `--models ising_hz05 haar` a
+subset of the reservoirs and `--parts spectra growth otoc reference
+velocities scrambling` a subset of the diagnostics (each part of each family
+has its own random generator, so a part run alone gives the same figure as in
+the full run).
 
 ## Write your own
 

@@ -3,9 +3,10 @@
 
 For each sample ``i`` (``samples.L`` in total):
 
-1. Draw a new TFIM (new disorder ``J_ij``) and prepare the initial state
+1. Draw a new TFIM (new disorder ``J_ij``) on every qubit, ancilla
+   included, and prepare the initial state
    ``rho`` with :class:`AncillaChargeSectorEncoding`: the ancilla ``R``
-   (qubit 0) entangled with the charge of the ``N - 1`` system qubits.
+   (qubit 0) entangled with the charge of the ``N`` system qubits.
 2. Evolve ``rho`` for ``evolution.n_steps`` steps of ``evolution.dt``.
    After every step but the last, measure the system qubits projectively in
    the Z basis (:class:`ProjectiveMeasurement`) and store the outcomes
@@ -13,11 +14,11 @@ For each sample ``i`` (``samples.L`` in total):
    features ``Phi`` a skipped qubit counts as ``0``: the regression needs
    numbers, and ``0`` is ``<Z>`` of a fully mixed qubit, i.e. no information.
 3. After the last step, store ``<Z_k>`` for the system qubits
-   ``k = 1 .. N-1`` as the last row of features, and ``<Z_0>`` on the
+   ``k = 1 .. N`` as the last row of features, and ``<Z_0>`` on the
    ancilla as the target ``Y[i]``.
 
-The features ``Phi`` of shape ``(L, n_steps, N - 1)`` are flattened to
-``(L, n_steps * (N - 1))`` and a ridge readout (``training`` block) is fitted
+The features ``Phi`` of shape ``(L, n_steps, N)`` are flattened to
+``(L, n_steps * N)`` and a ridge readout (``training`` block) is fitted
 on the first ``samples.train_size`` samples, then scored on the rest with
 NMSE and R2.
 
@@ -78,22 +79,26 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     solver = RidgeReadout.from_config(cfg)
     P = ProjectiveMeasurement.from_config(cfg)
     # Qubit counts from the config, not from the model or the encoding
-    # (issue #88): N in total, Ns system qubits, Nr ancillas.
-    N, Ns, Nr = check_qubit_counts(cfg)
-    # <Z_i> for i = 0 .. N-1, built once: Z_ops[0] is the ancilla.
-    Z_ops = SingleObservable({"N": N, "observables": ["Z"]}).operators()
+    # (issues #88 and #235): N system qubits, Nr ancillas, N_total in all.
+    N, Nr, N_total = check_qubit_counts(cfg)
+    # <Z_i> for i = 0 .. N_total-1, built once: Z_ops[0] is the ancilla.
+    Z_ops = SingleObservable({"n_qubits": N_total, "observables": ["Z"]}).operators()
+
+    # This TFIM acts on every qubit, the ancilla included, as before issue
+    # #235: its block gets the N_total qubits of the state.
+    tfim_cfg = OmegaConf.merge(cfg, {TransverseFieldIsingModel.name: {"N": N_total}})
 
     n_steps = int(cfg.evolution.n_steps)
     N_M = n_steps - 1  # number of measured steps; step N_M is the last one
     temps = int(cfg.samples.L)
 
-    M = np.zeros((temps, N_M, Ns))
-    X = np.zeros((temps, Ns))
-    Phi = np.zeros((temps, n_steps, Ns))
+    M = np.zeros((temps, N_M, N))
+    X = np.zeros((temps, N))
+    Phi = np.zeros((temps, n_steps, N))
     Y = np.zeros(temps)
 
     for i in tqdm(range(temps)):
-        model = TransverseFieldIsingModel.from_config(cfg)
+        model = TransverseFieldIsingModel.from_config(tfim_cfg)
         rho = sector.rho()
         for j in range(n_steps):
             rho = model.evolve(rho)
@@ -106,7 +111,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
                 # features, i.e. no information (issue #91).
                 Phi[i, j] = np.nan_to_num(result.outcomes, nan=0.0)
             else:
-                for k in range(Ns):
+                for k in range(N):
                     X[i, k] = np.real(np.trace(Z_ops[Nr + k] @ rho))
                 Phi[i, j] = X[i]
         Y[i] = np.real(np.trace(Z_ops[0] @ rho))

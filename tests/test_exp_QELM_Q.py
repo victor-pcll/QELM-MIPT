@@ -20,7 +20,9 @@ from QELM.training import ProjectiveMeasurement
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "experiments" / "QELM_Q" / "exp_QELM_Q.py"
 BASH_SCRIPT = SCRIPT.with_suffix(".sh")
-L, N = 40, 4
+# N system qubits (issue #235): the circuit holds N_TOTAL = N + 1 qubits.
+L, N = 40, 3
+N_TOTAL = N + 1
 OVERRIDES = ["models=TFIM", f"N={N}", f"samples.L={L}"]
 
 
@@ -38,13 +40,12 @@ def _run(*extra: str) -> dict:
 
 
 def test_features_are_final_z_and_target_is_the_charge() -> None:
-    """X holds Ns values <Z_k> in [-1, 1] plus the bias; Y is Q1 or Q2."""
+    """X holds N values <Z_k> in [-1, 1] plus the bias; Y is Q1 or Q2."""
     out = _run("projective_measurement.p=0.5")
-    assert out["X"].shape == (L, N - 1 + 1)
+    assert out["X"].shape == (L, N + 1)
     np.testing.assert_array_equal(out["X"][:, -1], 1.0)
     assert np.all(np.abs(out["X"][:, :-1]) <= 1 + 1e-12)
-    Ns = N - 1
-    assert set(np.unique(out["Y"])) <= {Ns // 2, Ns // 2 - 1}
+    assert set(np.unique(out["Y"])) <= {N // 2, N // 2 - 1}
     assert 0.0 <= out["accuracy"] <= 1.0
     assert np.isfinite(out["r2"]) and np.isfinite(out["nmse"])
 
@@ -66,8 +67,8 @@ def test_same_hamiltonians_and_labels_for_every_p() -> None:
         _run("projective_measurement.p=1.0"),
     )
     np.testing.assert_array_equal(low["Y"], high["Y"])
-    # 4 intermediate rounds of Ns qubits at p = 1.
-    assert high["n_measured_mean"] == 4 * (N - 1)
+    # 4 intermediate rounds of N qubits at p = 1.
+    assert high["n_measured_mean"] == 4 * N
     assert 0 < low["n_measured_mean"] < high["n_measured_mean"]
 
 
@@ -84,7 +85,7 @@ def test_final_round_measures_after_the_last_step() -> None:
     out = _run(
         "projective_measurement.p=1.0", "projective_measurement.final_measurement=true"
     )
-    assert out["n_measured_mean"] == 5 * (N - 1)
+    assert out["n_measured_mean"] == 5 * N
     np.testing.assert_allclose(np.abs(out["X"][:, :-1]), 1.0, atol=1e-12)
     # Same disorder and labels as without the final round.
     np.testing.assert_array_equal(out["Y"], _run("projective_measurement.p=1.0")["Y"])
@@ -103,11 +104,10 @@ def test_six_feature_sets() -> None:
     measurements keep the parity of Q and X_k, Y_k flip it."""
     out = _run("projective_measurement.p=0.5")
     module = _load_script()
-    Ns = N - 1
-    pairs = Ns * (Ns - 1) // 2
+    pairs = N * (N - 1) // 2
     for name in module.FEATURE_SETS:
         phi = out[f"features_{name}"]
-        width = {1: Ns, 2: pairs}[len(name)] * (2 if name == "XY" else 1)
+        width = {1: N, 2: pairs}[len(name)] * (2 if name == "XY" else 1)
         assert phi.shape == (L, width + 1)
         assert np.all(np.abs(phi) <= 1 + 1e-12)
         for score in ("accuracy", "balanced_accuracy", "r2"):
@@ -121,11 +121,10 @@ def test_six_feature_sets() -> None:
 
 def test_record_of_the_intermediate_measurements() -> None:
     """M holds one row per round, +-1 for a measured qubit, 0 otherwise (#179)."""
-    Ns = N - 1
     for p, values in ((0.0, {0.0}), (0.5, {-1.0, 0.0, 1.0}), (1.0, {-1.0, 1.0})):
         out = _run(f"projective_measurement.p={p}")
         # 5 steps, a round between two: 4 rounds.
-        assert out["M"].shape == (L, 4, Ns)
+        assert out["M"].shape == (L, 4, N)
         assert set(np.unique(out["M"])) <= values
         np.testing.assert_array_equal(
             np.count_nonzero(out["M"], axis=(1, 2)), out["n_measured"]
@@ -134,7 +133,7 @@ def test_record_of_the_intermediate_measurements() -> None:
     final = _run(
         "projective_measurement.p=1.0", "projective_measurement.final_measurement=true"
     )
-    assert final["M"].shape == (L, 5, Ns)
+    assert final["M"].shape == (L, 5, N)
     np.testing.assert_allclose(final["M"][:, -1], final["X"][:, :-1], atol=1e-12)
 
 
@@ -265,6 +264,78 @@ def test_rejects_an_unknown_state_representation() -> None:
         _run("state_representation=mps")
 
 
+def test_haar_u1_step_draws_a_haar_unitary_in_the_charge_sector() -> None:
+    """The Haar U(1) step keeps R, the norm and Q, and scrambles the sector (#253).
+
+    A Haar unitary maps any state of the sector to a Haar random one, so the
+    weight of each configuration averages to 1 / C(N, Q); a new unitary is
+    drawn at every call.
+    """
+    module = _load_script()
+    rng = np.random.default_rng(0)
+    N_sys, Q = 4, 2
+    psi = np.zeros(2 ** (N_sys + 1), dtype=complex)
+    # |1>_R |0011>_S: ancilla outcome r = -1, charge 2.
+    psi[2**N_sys + 0b0011] = 1.0
+    step = module.haar_u1_step(-1, 1, N_sys, rng)
+    popcount = np.array([bin(b).count("1") for b in range(2**N_sys)])
+    sector = np.flatnonzero(popcount == Q)
+    weights = []
+    for _ in range(2000):
+        out = step(psi)
+        assert np.linalg.norm(out) == pytest.approx(1.0)
+        np.testing.assert_array_equal(out[: 2**N_sys], 0.0)
+        system = out[2**N_sys :]
+        np.testing.assert_allclose(np.delete(system, sector), 0.0)
+        weights.append(np.abs(system[sector]) ** 2)
+    assert not np.allclose(step(psi), step(psi))
+    np.testing.assert_allclose(np.mean(weights, axis=0), 1 / 6, atol=0.02)
+    # A state spread over two charges is refused.
+    psi[2**N_sys + 0b0111] = 1.0
+    with pytest.raises(ValueError, match="charge sector"):
+        step(psi / np.linalg.norm(psi))
+
+
+def test_haar_u1_step_forgets_the_previous_round() -> None:
+    """At p = 1 a short TFIM step repeats the record; the Haar step does not.
+
+    With dt = 1e-3 / J the configuration barely moves between two rounds,
+    so every round reads the same outcomes. The Haar U(1) step draws a new
+    configuration of the sector each time: two rounds agree with
+    probability 1 / C(N, Q) = 1/6 at N = 4, Q = 2 or 1 / 4 at Q = 1.
+    """
+    common = (
+        "N=4",
+        "samples.L=200",
+        "samples.balanced=true",
+        "state_representation=vector",
+        "projective_measurement.p=1.0",
+        "projective_measurement.final_measurement=true",
+        "evolution.t=0.005",
+    )
+    tfim = _run(*common)
+    haar = _run(*common, "unitary_step=haar_u1")
+    for out in (tfim, haar):
+        # Every round reads the charge exactly: Q qubits in |1>, M = -1.
+        np.testing.assert_array_equal(
+            (out["M"] == -1).sum(axis=2), np.repeat(out["Y"][:, None], 5, axis=1)
+        )
+    same_tfim = np.all(tfim["M"][:, 1:] == tfim["M"][:, :-1], axis=2).mean()
+    same_haar = np.all(haar["M"][:, 1:] == haar["M"][:, :-1], axis=2).mean()
+    assert same_tfim > 0.99
+    assert 0.1 < same_haar < 0.3
+
+
+def test_haar_u1_needs_the_state_vector() -> None:
+    with pytest.raises(ValueError, match="state_representation=vector"):
+        _run("unitary_step=haar_u1")
+
+
+def test_rejects_an_unknown_unitary_step() -> None:
+    with pytest.raises(ValueError, match="unitary_step"):
+        _run("unitary_step=clifford", "state_representation=vector")
+
+
 def test_evolve_with_measurements_takes_a_step_function() -> None:
     """A callable step evolves a state vector like U rho U^dagger evolves rho."""
     module = _load_script()
@@ -375,6 +446,7 @@ def test_bash_sweep_in_parallel_with_the_state_vector(tmp_path: Path) -> None:
     for run in runs:
         config = json.loads((run.parent / "resolved_config.json").read_text())
         assert config["state_representation"] == "vector"
+        assert config["unitary_step"] == "tfim"
 
 
 def test_bash_sweep_with_delta_scales_l_with_n(tmp_path: Path) -> None:
@@ -534,16 +606,15 @@ BAYES_RIDGE_RUN = (
 def test_balanced_labels_alternate_the_two_charges() -> None:
     """samples.balanced=true: Q1, Q2, Q1, ..., exactly L / 2 each (#233)."""
     out = _run("projective_measurement.p=0.5", *BAYES_RIDGE_RUN)
-    Ns = N - 1
-    np.testing.assert_array_equal(out["Y"][0::2], Ns // 2)
-    np.testing.assert_array_equal(out["Y"][1::2], Ns // 2 - 1)
+    np.testing.assert_array_equal(out["Y"][0::2], N // 2)
+    np.testing.assert_array_equal(out["Y"][1::2], N // 2 - 1)
     # Charge sectors are told apart by <Z_k> as with the Born draw.
     assert out["accuracy"] > 0.5
 
 
 def test_balanced_labels_by_default_are_drawn() -> None:
     out = _run("projective_measurement.p=0.5")
-    assert not np.array_equal(out["Y"][0::2], np.full(L // 2, (N - 1) // 2))
+    assert not np.array_equal(out["Y"][0::2], np.full(L // 2, N // 2))
 
 
 @pytest.mark.parametrize("r", [1, -1])
@@ -559,17 +630,17 @@ def test_project_ancilla_is_the_measured_branch(r: int) -> None:
     psi = sector.state()
     for seed in range(20):
         measured, outcome = measure_projective_psi(
-            psi, 0, N, rng=np.random.default_rng(seed)
+            psi, 0, N_TOTAL, rng=np.random.default_rng(seed)
         )
         if outcome == r:
             break
-    np.testing.assert_allclose(module.project_ancilla(psi, r, N), measured)
+    np.testing.assert_allclose(module.project_ancilla(psi, r, N_TOTAL), measured)
     rho = np.outer(psi, psi.conj())
     np.testing.assert_allclose(
-        module.project_ancilla(rho, r, N), np.outer(measured, measured.conj())
+        module.project_ancilla(rho, r, N_TOTAL), np.outer(measured, measured.conj())
     )
     with pytest.raises(ValueError, match="r must be"):
-        module.project_ancilla(psi, 0, N)
+        module.project_ancilla(psi, 0, N_TOTAL)
 
 
 def test_bayes_ridge_readout_of_the_record() -> None:
@@ -577,11 +648,10 @@ def test_bayes_ridge_readout_of_the_record() -> None:
     from QELM.evaluation.bayes_ridge import log_likelihood_features
 
     out = _run("projective_measurement.p=1.0", *BAYES_RIDGE_RUN)
-    Ns = N - 1
     assert out["log_likelihood_M"].shape == (L, 2)
     np.testing.assert_allclose(
         out["log_likelihood_M"],
-        log_likelihood_features(out["M"].astype(int), (Ns // 2, Ns // 2 - 1)),
+        log_likelihood_features(out["M"].astype(int), (N // 2, N // 2 - 1)),
     )
     # p = 1 with a final round: every qubit measured after every step; the
     # TFIM at h = 10 J almost conserves Q, so the record shows it.
@@ -617,7 +687,7 @@ def test_bash_sweep_passes_balanced(tmp_path: Path) -> None:
     env = {
         **os.environ,
         "OUT_DIR": str(tmp_path),
-        "N_VALUES": "4",
+        "N_VALUES": "3",
         "SEEDS": "42",
         "P_VALUES": "0.5",
         "FINAL_VALUES": "true",

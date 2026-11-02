@@ -19,11 +19,11 @@ to ``comparison.json`` in the sweep folder, next to ``charge_sharpening.png``
 and the plotted data ``charge_sharpening.json``
 (:func:`QELM.utils.plots.save_figure`).
 
-Notation (issue #147): ``N`` is the total number of qubits, the ancilla
-``R`` included, and ``L`` the number of trajectories per run
-(``samples.L``). The paper counts the system sites only: its curves,
-named ``L = 6`` and ``L = 20`` in the exports, are renamed ``N = 7`` and
-``N = 21`` here, so that our curve ``N7`` is compared to ``N = 7``.
+Notation (issues #147 and #235): ``N`` is the number of system qubits, the
+ancilla ``R`` excluded, as the paper's ``L``, and ``L`` here is the number
+of trajectories per run (``samples.L``). The paper's curves, named
+``L = 6`` and ``L = 20`` in the exports, are renamed ``N = 6`` and
+``N = 20``, so that our curve ``N6`` is compared to ``N = 6``.
 
 Error bars: with one seed, the bootstrap error over trajectories; with
 several, the standard error over circuit instances, and the shaded band is
@@ -64,7 +64,6 @@ HERE = Path(__file__).resolve().parent
 REFERENCE_DIR = HERE / "reference"
 KEYS = (
     ("N", "N"),
-    ("Ns", "Ns"),
     ("seed", "seed"),
     ("gamma", "weak_measurement.gamma"),
     ("L", "samples.L"),
@@ -82,14 +81,15 @@ SWAP_XY = True
 # has collapsed on 1 (weak gamma) or 0 (strong gamma) and B is dominated by
 # rare outliers (large and negative), which would flatten the panel.
 BINDER_MIN_VAR = 1e-3
-# The paper's system size "L = 6" in a curve name: N = L + 1 with R.
+# The paper's system size "L = 6" in a curve name: our N, the ancilla
+# excluded (issue #235).
 PAPER_SIZE = re.compile(r"\bL\s*=\s*(\d+)")
 FIGURE_NAME = "charge_sharpening"
 
 
-def paper_to_total(name: str) -> str:
-    """Rename the paper's system size ``L = 6`` to our total ``N = 7``."""
-    return PAPER_SIZE.sub(lambda m: f"N = {int(m.group(1)) + 1}", name)
+def paper_to_ours(name: str) -> str:
+    """Rename the paper's system size ``L = 6`` to our ``N = 6``."""
+    return PAPER_SIZE.sub(lambda m: f"N = {int(m.group(1))}", name)
 
 
 def load_references(
@@ -97,7 +97,7 @@ def load_references(
 ) -> dict[str, dict[str, tuple[np.ndarray, np.ndarray]]]:
     """Return ``{metric: {curve name: (x, y)}}`` for the reference files found.
 
-    The curve names are renamed with :func:`paper_to_total`.
+    The curve names are renamed with :func:`paper_to_ours`.
     """
     refs = {}
     for metric, stem, _, _ in PANELS:
@@ -105,7 +105,7 @@ def load_references(
         if path.is_file():
             # The exports hold (value, gamma) pairs: see reference/README.md.
             curves = load_wpd_csv(path, default_name=SOURCE, swap_xy=SWAP_XY)
-            refs[metric] = {paper_to_total(n): xy for n, xy in curves.items()}
+            refs[metric] = {paper_to_ours(n): xy for n, xy in curves.items()}
     return refs
 
 
@@ -130,16 +130,16 @@ def draw_sweep(
         rows, by=("N", "gamma"), metrics=[*metrics, *(f"{m}_err" for m in metrics)]
     )
     refs = load_references(reference_dir)
-    Ns = sizes(summary)
+    n_values = sizes(summary)
     comparison: dict[str, Any] = {}
     # One color per curve, the same in every panel: ours first, then the
     # reference curves by name (the files do not list them in the same order).
     ref_names = sorted({name for curves in refs.values() for name in curves})
-    colors = color_map([*(f"N{N}" for N in Ns), *ref_names])
+    colors = color_map([*(f"N{N}" for N in n_values), *ref_names])
 
     fig, axes = subplots(1, 3, figsize=(16, 5))
     for ax, (metric, _, label, title) in zip(axes, PANELS, strict=True):
-        for N in Ns:
+        for N in n_values:
             curve = sweep_curve(summary, N, "gamma", metric)
             if metric == "binder":
                 var = np.array([r["S_R_var_mean"] for r in curve.rows])

@@ -30,7 +30,7 @@ def test_notebook_runs_the_sweep_and_plots(
     shows: list[tuple] = []
     monkeypatch.setattr(plt, "show", lambda *args, **kwargs: shows.append(args))
     for key, value in {
-        "N_VALUES": "3 4",
+        "N_VALUES": "2 3",
         "SEEDS": "42 43",
         "P_VALUES": "0.5 1.0",
         "ALPHA_RATIOS": "0.5 2.0",
@@ -50,21 +50,21 @@ def test_notebook_runs_the_sweep_and_plots(
     assert Path.cwd() == REPO_ROOT
     assert "16/16" in capsys.readouterr().out  # one bar for the 16 runs
     assert len(namespace["rows"]) == 16
-    # N = 3: 11 weights, so the ratios 0.5 and 2.0 give 6 and 22 training
-    # samples, i.e. 6/11 and 2 after rounding. N = 4: 16 weights, 8 and 32
+    # N = 2: 11 weights, so the ratios 0.5 and 2.0 give 6 and 22 training
+    # samples, i.e. 6/11 and 2 after rounding. N = 3: 16 weights, 8 and 32
     # samples, exactly 0.5 and 2: the grid of ratios depends on N.
     table = namespace["table"]
-    expected = {3: 6 / 11, 4: 0.5}
+    expected = {2: 6 / 11, 3: 0.5}
     assert [(r["N"], r["p"], r["ratio"], r["n_runs"]) for r in table] == [
         (N, p, pytest.approx(ratio), 2)
-        for N in (3, 4)
+        for N in (2, 3)
         for p in (0.5, 1.0)
         for ratio in (expected[N], 2.0)
     ]
-    # Curves against the ratio: one row of panels per N, N = 3 on top.
+    # Curves against the ratio: one row of panels per N, N = 2 on top.
     axes = namespace["axes"]
     assert axes.shape == (2, len(namespace["METRICS"])) == (2, 3)
-    for row, N in zip(axes, (3, 4), strict=True):
+    for row, N in zip(axes, (2, 3), strict=True):
         for ax in row:
             assert ax.get_xscale() == "log"
             assert ax.get_title().endswith(f"N = {N}")
@@ -85,7 +85,7 @@ def test_notebook_runs_the_sweep_and_plots(
     # alpha_ratio on the x axis and p on the y axis.
     heatmaps = [h[0] for h in namespace["HEATMAPS"]]
     assert heatmaps == ["nmse", "r2", "accuracy", "balanced_accuracy"]
-    for N in (3, 4):
+    for N in (2, 3):
         for key in heatmaps:
             grid = namespace["grids"][(N, key)]
             np.testing.assert_allclose(grid.x, [expected[N], 2.0])
@@ -93,13 +93,13 @@ def test_notebook_runs_the_sweep_and_plots(
             assert np.all(np.isfinite(grid.mean)) and np.all(grid.n_runs == 2)
     axes_maps = namespace["axes_maps"]
     assert axes_maps.shape == (2, 4)
-    for row, N in zip(axes_maps, (3, 4), strict=True):
+    for row, N in zip(axes_maps, (2, 3), strict=True):
         for ax in row:
             assert ax.get_xscale() == "log" and ax.get_yscale() == "linear"
             # Plain labels at the powers of 2 within the swept ratios (6/11 is
             # above 0.5), instead of the overlapping 10^k labels.
             ticks = [t.get_text() for t in ax.get_xticklabels()]
-            assert ticks == {3: ["1", "2"], 4: ["0.5", "1", "2"]}[N]
+            assert ticks == {2: ["1", "2"], 3: ["0.5", "1", "2"]}[N]
             assert ax.get_title().endswith(f"N = {N}")
             # The interpolation threshold at alpha_ratio = 1, a vertical line.
             assert any(
@@ -112,9 +112,9 @@ def test_notebook_runs_the_sweep_and_plots(
     drawn = [h for panel in maps["panels"] for h in panel["heatmaps"]]
     assert len(drawn) == 8  # one per metric and N, none from the colorbars
     np.testing.assert_allclose(
-        np.array(drawn[0]["values"]), namespace["grids"][(3, "nmse")].mean
+        np.array(drawn[0]["values"]), namespace["grids"][(2, "nmse")].mean
     )
     np.testing.assert_allclose(
-        np.array(drawn[4]["values"]), namespace["grids"][(4, "nmse")].mean
+        np.array(drawn[4]["values"]), namespace["grids"][(3, "nmse")].mean
     )
     os.chdir(REPO_ROOT)

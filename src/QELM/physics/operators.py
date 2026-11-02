@@ -1,8 +1,15 @@
-"""Single-qubit Pauli matrices and their embedding in an N-qubit chain."""
+"""Single-qubit Pauli matrices and their embedding in an N-qubit chain.
+
+The helpers of :mod:`QELM.physics` take ``N`` as the number of qubits of
+the operator or state they act on, whatever its role. In the experiments,
+``N`` is the number of system qubits and the simulated state has
+``N_total = N + Nr`` qubits, ancillas included (issue #235); see
+:func:`qubit_counts`.
+"""
 
 from __future__ import annotations
 
-from typing import Literal, overload
+from typing import Literal, NamedTuple, overload
 
 import numpy as np
 import scipy.sparse as sp
@@ -88,19 +95,34 @@ def pauli(label: str) -> np.ndarray:
         raise ValueError(f"Unknown observable {label!r}. Known: {known}.") from exc
 
 
-def qubit_counts(rho: np.ndarray, Nr: int = 0) -> tuple[int, int, int]:
-    """Return the qubit counts of a density matrix of shape ``(2**N, 2**N)``.
+class QubitCounts(NamedTuple):
+    """Qubit counts of a state with ancillas (issue #235).
+
+    Attributes:
+        N: Number of system qubits, the size of the studied system.
+        Nr: Number of ancilla (reference) qubits, the first sites.
+        N_total: Number of qubits of the simulated state, ``N + Nr``.
+    """
+
+    N: int
+    Nr: int
+    N_total: int
+
+
+def qubit_counts(rho: np.ndarray, Nr: int = 0) -> QubitCounts:
+    """Return the qubit counts of a density matrix with ``Nr`` ancillas.
 
     Ancillas are the first sites, as in :mod:`QELM.encoding`, so the
-    system is the last ``N - Nr`` qubits.
+    system is the last ``N = N_total - Nr`` qubits of a matrix of shape
+    ``(2**N_total, 2**N_total)``.
 
     Args:
         rho: Density matrix.
         Nr: Number of ancilla qubits included in ``rho``.
 
     Returns:
-        ``(N, Ns, Nr)``: total, system and ancilla qubit counts, with
-        ``N = Ns + Nr``.
+        ``(N, Nr, N_total)``: system, ancilla and total qubit counts, with
+        ``N_total = N + Nr``.
 
     Raises:
         ValueError: If ``rho`` is not square with a power-of-two side, if
@@ -108,17 +130,19 @@ def qubit_counts(rho: np.ndarray, Nr: int = 0) -> tuple[int, int, int]:
             ``Nr``.
     """
     dim = rho.shape[0]
-    N = dim.bit_length() - 1
-    if rho.shape != (dim, dim) or dim < 2 or 2**N != dim:
-        raise ValueError(f"rho must have shape (2**N, 2**N), got {rho.shape}.")
+    N_total = dim.bit_length() - 1
+    if rho.shape != (dim, dim) or dim < 2 or 2**N_total != dim:
+        raise ValueError(
+            f"rho must have shape (2**N_total, 2**N_total), got {rho.shape}."
+        )
     if Nr < 0:
         raise ValueError(f"Nr must be >= 0, got {Nr}.")
-    Ns = N - Nr
-    if Ns < 0:
+    N = N_total - Nr
+    if N < 0:
         raise ValueError(
-            f"Total qubits ({N}) cannot be less than ancilla qubits ({Nr})."
+            f"Total qubits ({N_total}) cannot be less than ancilla qubits ({Nr})."
         )
-    return N, Ns, Nr
+    return QubitCounts(N, Nr, N_total)
 
 
 def local_expectation(state: np.ndarray, op: np.ndarray, site: int) -> float:

@@ -1,8 +1,10 @@
 """Feature extraction: observables measured on the final reservoir state.
 
-Each single observable ``O`` gives the ``N`` features ``<O_i> = Tr(rho O_i)``.
-Each double observable ``(A, B)`` gives the ``N (N - 1) / 2`` two-point
-correlators ``<A_i B_j>`` for ``i < j``. Operators are Pauli labels
+Each single observable ``O`` gives the ``n`` features ``<O_i> = Tr(rho O_i)``.
+Each double observable ``(A, B)`` gives the ``n (n - 1) / 2`` two-point
+correlators ``<A_i B_j>`` for ``i < j``. ``n`` is the number of qubits of
+the state the readout acts on, ancillas included: ``n_qubits``, the
+top-level ``N_total = N + Nr`` in ``conf/`` (issue #235). Operators are Pauli labels
 (``"X"``, ``"Y"`` or ``"Z"``) from YAML. A set can hold several observables
 (or pairs), or none.
 """
@@ -25,8 +27,9 @@ class Observables:
         name: Config key for this observable set; ``from_config`` reads
             ``cfg[name]``.
         params: Scalar parameters from the matching YAML block.
-        N: Number of qubits from ``params["N"]``, used by :meth:`operators`
-            when no ``N`` is passed; ``None`` if the block has no ``N``.
+        n_qubits: Number of qubits of the state, ancillas included, from
+            ``params["n_qubits"]``, used by :meth:`operators` when no
+            ``n_qubits`` is passed; ``None`` if the block has none.
     """
 
     name: str = "base"
@@ -36,11 +39,12 @@ class Observables:
 
         Args:
             params: Parameter names mapped to scalar values from YAML.
-                ``N`` (number of qubits) is optional.
+                ``n_qubits`` (number of qubits of the state, ancillas
+                included) is optional.
         """
         self.params: dict[str, Any] = dict(params)
-        raw_N = params.get("N")
-        self.N: int | None = None if raw_N is None else int(raw_N)
+        raw_n = params.get("n_qubits")
+        self.n_qubits: int | None = None if raw_n is None else int(raw_n)
 
     @classmethod
     def from_config(cls, cfg: DictConfig) -> Self:
@@ -71,29 +75,32 @@ class Observables:
             raise TypeError(f"{cls.name} config must be a mapping.")
         return cls({str(key): value for key, value in raw.items()})
 
-    def _resolve_N(self, N: int | None) -> int:
-        """Return ``N`` if given, else ``self.N``.
+    def _resolve_n_qubits(self, n_qubits: int | None) -> int:
+        """Return ``n_qubits`` if given, else ``self.n_qubits``.
 
         Raises:
             ValueError: If both are ``None``.
         """
-        if N is not None:
-            return N
-        if self.N is None:
+        if n_qubits is not None:
+            return n_qubits
+        if self.n_qubits is None:
             raise ValueError(
-                f"{self.name}: N was not passed and the config block has no N. "
-                f"Pass operators(N=...) or add N to the {self.name} block."
+                f"{self.name}: n_qubits was not passed and the config block has "
+                f"no n_qubits. Pass operators(n_qubits=...) or add n_qubits to "
+                f"the {self.name} block."
             )
-        return self.N
+        return self.n_qubits
 
-    def operators(self, N: int | None = None) -> list[np.ndarray]:
-        """Return the measured operators on ``N`` qubits.
+    def operators(self, n_qubits: int | None = None) -> list[np.ndarray]:
+        """Return the measured operators on ``n_qubits`` qubits.
 
         Args:
-            N: Number of qubits. ``None`` uses ``self.N`` from the config.
+            n_qubits: Number of qubits of the state. ``None`` uses
+                ``self.n_qubits`` from the config.
 
         Returns:
-            Operators of shape ``(2**N, 2**N)``, one per feature.
+            Operators of shape ``(2**n_qubits, 2**n_qubits)``, one per
+            feature.
 
         Raises:
             NotImplementedError: In this base class.
@@ -104,13 +111,12 @@ class Observables:
         """Return the features ``Tr(rho O_k)`` for every operator ``O_k``.
 
         Args:
-            rho: Density matrix of shape ``(2**N, 2**N)``.
+            rho: Density matrix of shape ``(2**n, 2**n)``.
 
         Returns:
             Real array of shape ``(n_features,)``.
         """
-        N, _, _ = qubit_counts(rho)
-        ops = self.operators(N)
+        ops = self.operators(qubit_counts(rho).N_total)
         # Tr(rho O) = sum_ij rho_ij O_ji; real because rho and O are Hermitian.
         return np.array([np.einsum("ij,ji->", rho, op).real for op in ops])
 

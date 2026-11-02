@@ -29,8 +29,8 @@ With several sizes it also locates where their Binder curves cross
 (Fig. 2b) and ``comparison_fig2c.json`` (Fig. 2c) in the sweep folder, next
 to the figures.
 
-Notation (issue #147): ``N`` is the total number of qubits, here the chain
-length since there is no ancilla, and ``L`` the number of records per run
+Notation (issues #147 and #235): ``N`` is the number of system qubits, here
+the chain length since there is no ancilla, and ``L`` the number of records per run
 (``samples.L`` in the config, ``n_records`` in the rows). The paper writes
 its chain length ``L``: its curve names (``L = 6``) are renamed ``N = 6``,
 so that our curve ``N6`` is compared to the reference ``N = 6``.
@@ -267,12 +267,12 @@ def draw_sweep(
         rows, by=("N", "p"), metrics=[*metrics, *(f"{m}_err" for m in metrics)]
     )
     refs = load_references(reference_dir, panels)
-    Ns = sizes(summary)
+    n_values = sizes(summary)
     comparison: dict[str, Any] = {}
     # One color per curve, the same in every panel: ours first, then the
     # reference curves by name.
     ref_names = sorted({name for curves in refs.values() for name in curves})
-    colors = color_map([*(f"N{N}" for N in Ns), *ref_names])
+    colors = color_map([*(f"N{N}" for N in n_values), *ref_names])
 
     if residuals:
         fig, grid = subplots(
@@ -291,7 +291,7 @@ def draw_sweep(
         axes, residual_axes, panels, strict=True
     ):
         drawn = False
-        for N in Ns:
+        for N in n_values:
             curve = sweep_curve(summary, N, "p", metric)
             draw_curve(ax, curve, colors[f"N{N}"], label=f"this work, N = {N}")
             stats = compare_same_size(curve, N, refs.get(metric, {}))

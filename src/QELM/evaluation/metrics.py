@@ -287,17 +287,19 @@ def von_neumann_entropy(
 
     ``rho_R = Tr_S(rho)`` is the 2x2 reduced density matrix of the first
     qubit, the most significant bit of a basis index, after tracing out the
-    ``N - 1`` system qubits. The entropy is ``S = -sum_k l_k log(l_k)`` over
+    ``N`` system qubits. The entropy is ``S = -sum_k l_k log(l_k)`` over
     the eigenvalues ``l_k`` of ``rho_R``. It measures the entanglement
     between ``R`` and ``S`` for a pure global state: 1 bit for
     ``(|0>_R |Q1>_S + |1>_R |Q2>_S) / sqrt(2)`` with orthogonal ``|Q1>`` and
     ``|Q2>``, 0 for a product state.
 
     Args:
-        rho: Global density matrix of shape ``(2**N, 2**N)``, dense or
-            sparse. A sparse matrix is traced entry by entry, without a
-            dense copy (see :func:`QELM.physics.partial_trace`).
-        N: Total number of qubits, ancilla included (``N >= 1``).
+        rho: Global density matrix of the ancilla and the system, of shape
+            ``(2**(N + 1), 2**(N + 1))``, dense or sparse. A sparse matrix
+            is traced entry by entry, without a dense copy (see
+            :func:`QELM.physics.partial_trace`).
+        N: Number of system qubits, ancilla excluded (``N >= 0``, issue
+            #235).
         base: Logarithm base: 2 for bits (default), ``np.e`` for nats.
         eps: Eigenvalues ``<= eps`` are dropped, so that rounding noise
             such as ``-1e-16`` never reaches the logarithm.
@@ -306,17 +308,19 @@ def von_neumann_entropy(
         ``S(rho_R)`` in the chosen base, between 0 and ``log_base(2)``.
 
     Raises:
-        ValueError: If ``N < 1``, ``rho`` is not ``(2**N, 2**N)``, or
+        ValueError: If ``N < 0``, ``rho`` is not
+            ``(2**(N + 1), 2**(N + 1))``, or
             ``base`` is not a positive number other than 1.
     """
-    if N < 1:
-        raise ValueError(f"N must be at least 1, got {N}.")
+    if N < 0:
+        raise ValueError(f"N must be at least 0, got {N}.")
     if not (base > 0 and base != 1):
         raise ValueError(f"base must be positive and different from 1, got {base}.")
-    dim = 2**N
+    dim = 2 ** (N + 1)
     if rho.shape != (dim, dim):
         raise ValueError(
-            f"rho must have shape ({dim}, {dim}) for N={N}, got {rho.shape}."
+            f"rho must have shape ({dim}, {dim}) for N={N} system qubits and "
+            f"the ancilla, got {rho.shape}."
         )
     # Same computation as the general entropy of a subsystem, with A = {0}.
     return entropy.von_neumann_entropy(rho, [0], base=base, eps=eps)

@@ -13,15 +13,15 @@ is conserved. The paper parametrizes ``U_2`` by angles ``phi_{0..3}`` and
 ``theta`` drawn with the measure ``sin(theta)``, which is the Haar measure
 on ``U(2)``; here ``U_2`` is drawn directly from the Haar measure.
 
-Gates act on the ``Ns`` system qubits ``Nr .. N-1`` only, never on the
-``Nr`` ancillas at the start of the chain. Two kinds of layers are used:
+Gates act on the ``N`` system qubits, sites ``Nr .. N + Nr - 1``, only,
+never on the ``Nr`` ancillas at the start of the chain. Two kinds of layers are used:
 
 - brickwork layers: each layer is one full period of the brickwork, an even
   half-layer on the pairs ``(s_0, s_1), (s_2, s_3), ...`` followed by an odd
   half-layer on ``(s_1, s_2), (s_3, s_4), ...``, so that every bond gets a
   gate once per layer. Boundaries are open by default
-  (``boundary="periodic"`` adds the pair ``(s_{Ns-1}, s_0)`` to the odd
-  half-layer when ``Ns`` is even). Taking a layer as a full period is what
+  (``boundary="periodic"`` adds the pair ``(s_{N-1}, s_0)`` to the odd
+  half-layer when ``N`` is even). Taking a layer as a full period is what
   reproduces the paper's Fig. 7 (issue #137);
 - scrambling layers: the system qubits are shuffled and paired at random,
   all to all, which the paper applies 5 times to the product initial state

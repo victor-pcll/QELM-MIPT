@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Sample-to-parameter ratio sweep of the QELM on the measurement record
 # (experiments/QELM_M/exp_QELM_M_ratio.py, issue #96): N fixed, so the
-# number of weights n_params = nbr_time_evolution * Ns + 1 is fixed, and the
+# number of weights n_params = nbr_time_evolution * N + 1 is fixed, and the
 # number of training samples n_train = alpha_ratio * n_params is swept.
 #
 # Run from anywhere, after `uv sync`:
@@ -18,7 +18,7 @@
 #                                 clifford_circuit (issue #171)
 #     N_TEST=200                  test samples per run (experiment.n_test)
 #     ALPHA=1e-3                  ridge penalty (training.alpha), not the ratio
-#     N_VALUES="4"                total numbers of qubits, ancilla included
+#     N_VALUES="4"                numbers of system qubits, ancilla excluded
 #     SEEDS="42 43 44"            seeds (one disorder and measurement draw each)
 #     P_VALUES="0.5 1.0"          measurement probabilities
 #     ALPHA_RATIOS="0.5 1.0 2.0"  training samples per weight
@@ -53,7 +53,7 @@ unset VIRTUAL_ENV
 # ---- Parameters -------------------------------------------------------------
 EXPERIMENT="exp_QELM_M_ratio"
 MODEL="${MODEL:-TFIM}"   # TFIM, haar_circuit or clifford_circuit (issue #171)
-read -r -a N_VALUES <<< "${N_VALUES:-4}"   # number of qubits, ancilla included
+read -r -a N_VALUES <<< "${N_VALUES:-4}"   # system qubits, ancilla excluded (issue #235)
 N_TEST="${N_TEST:-200}"                     # test samples (experiment.n_test)
 # Ridge penalty, independent of the ratio. It must stay > 0 for ratios < 1.
 ALPHA="${ALPHA:-1e-3}"

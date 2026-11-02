@@ -9,18 +9,18 @@ defaults:
   - override training/measurements: weak
   - _self_
 
-# The paper's L = 6 system qubits plus the ancilla R: N = Ns + Nr = 7.
-N: 7
+# The paper's L = N = 6 system qubits, plus the ancilla R: N_total = N + Nr = 7.
+N: 6
 
 # Initial state, Eq. (B1): (|0>_R |010101> + |1>_R |010100>) / sqrt(2), the
-# product states of charge Ns // 2 and Ns // 2 - 1, then scrambled by the
+# product states of charge N // 2 and N // 2 - 1, then scrambled by the
 # scrambling layers of the circuit.
 ancilla_charge_sector:
   N: ${N}
   initial: product
 
 # Brickwork of random U(1) gates on the system qubits (QELM.models.circuits).
-# depth: number of brickwork layers t, the paper's t = L / 2 = Ns / 2. One layer
+# depth: number of brickwork layers t, the paper's t = L / 2 = N / 2. One layer
 #   is a full period of the brickwork (even then odd half-layer). Every system
 #   qubit is weakly measured between two layers (t - 1 rounds), see
 #   charge_sharpening.measure_after_last_layer.
@@ -33,7 +33,7 @@ ancilla_charge_sector:
 U1_circuit:
   N: ${N}
   Nr: ${Nr}
-  depth: ${int:${div:${Ns},2}}
+  depth: ${int:${div:${N},2}}
   scrambling_layers: 5
   boundary: open
   fixed_instance: true
@@ -55,7 +55,7 @@ charge_sharpening:
   # 2 for bits (S_R <= 1).
   entropy_base: 2.718281828459045
 
-# Check that the total charge of R + S (Ns // 2) is conserved along every
+# Check that the total charge of R + S (N // 2) is conserved along every
 # trajectory (issue #134, QELM.physics.charge). The largest weight outside the
 # charge sector, over the trajectory, is its charge_leakage, saved in the .npz;
 # it is exactly 0 when the simulation is correct.

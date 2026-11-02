@@ -45,7 +45,7 @@ def _cfg(*overrides: str):  # noqa: ANN202
 
 def test_config_composes_with_the_paper_parameters() -> None:
     cfg = load_config(config_name="learnability")
-    assert (cfg.N, cfg.Ns, cfg.Nr) == (6, 6, 0)
+    assert (cfg.N, cfg.Nr, cfg.N_total) == (6, 0, 6)
     assert cfg.samples.L == 40000
     assert cfg.learnability.L == 6
     assert cfg.learnability.depth == 6  # t_f = L

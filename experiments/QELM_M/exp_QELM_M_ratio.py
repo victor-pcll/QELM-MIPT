@@ -2,10 +2,10 @@
 """QELM on the measurement record ``M`` at a fixed sample-to-parameter ratio.
 
 Issue #96. The ridge readout of :mod:`exp_QELM_M` learns one weight per
-feature: the flattened record ``M`` of shape ``(nbr_time_evolution, Ns)``
+feature: the flattened record ``M`` of shape ``(nbr_time_evolution, N)``
 and the bias column, so
 
-    n_features = nbr_time_evolution * Ns + 1,
+    n_features = nbr_time_evolution * N + 1,
 
 whatever ``p`` (an unmeasured qubit is still a feature, equal to 0). This
 script sets the number of training samples from the ratio
@@ -83,14 +83,14 @@ EXTRA_METRICS = (
 
 
 def n_params(cfg: DictConfig) -> int:
-    """Number of weights of the readout, ``nbr_time_evolution * Ns + 1``.
+    """Number of weights of the readout, ``nbr_time_evolution * N + 1``.
 
     Computed from the config, before any sample is drawn: one feature per
     measurement step and system qubit, plus the bias column.
     """
-    _, Ns, _ = check_qubit_counts(cfg)
+    N = check_qubit_counts(cfg).N
     steps = int(OmegaConf.select(cfg, base.NBR_TIME_EVOLUTION, default=5))
-    return steps * Ns + 1
+    return steps * N + 1
 
 
 def sample_sizes(alpha_ratio: float, n_features: int, n_test: int) -> tuple[int, int]:
@@ -160,7 +160,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     if results["X"].shape[1] != n_features:
         raise RuntimeError(
             f"X has {results['X'].shape[1]} features, expected {n_features} "
-            "from nbr_time_evolution * Ns + 1."
+            "from nbr_time_evolution * N + 1."
         )
     return {
         **results,

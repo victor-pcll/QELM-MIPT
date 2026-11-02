@@ -27,6 +27,9 @@
 #     P_C_U1=                     p_c for U1_circuit (empty: no classification)
 #     P_C_CONTINUOUS=             p_c for continuous_tfim_1d (empty: none)
 #     N_ROUNDS=                   entropy_task.n_rounds (empty: 2 N)
+#     AVERAGE_FROM=0.5            entropy_task.average_from: late-time averages
+#                                 of S_1, S_2, S_inf and I_3 for
+#                                 plot_entropy_fss.py (empty: none, issue #251)
 #     ALPHA=1e-2                  ridge regularization (training.alpha)
 #     MAX_JOBS=4                  runs at once (default 1)
 #
@@ -52,6 +55,7 @@ P_C_FLOQUET="${P_C_FLOQUET:-0.21}"
 P_C_U1="${P_C_U1:-}"
 P_C_CONTINUOUS="${P_C_CONTINUOUS:-}"
 N_ROUNDS="${N_ROUNDS:-}"
+AVERAGE_FROM="${AVERAGE_FROM:-}"
 MAX_JOBS="${MAX_JOBS:-1}"
 if ! [[ "$MAX_JOBS" =~ ^[1-9][0-9]*$ ]]; then
   echo "MAX_JOBS must be a positive integer, got '$MAX_JOBS'" >&2
@@ -114,6 +118,7 @@ run_one() {
     ${P_LIST:+"entropy_task.p_values=$P_LIST"} \
     ${P_C:+"entropy_task.p_c=$P_C"} \
     ${N_ROUNDS:+"entropy_task.n_rounds=$N_ROUNDS"} \
+    ${AVERAGE_FROM:+"entropy_task.average_from=$AVERAGE_FROM"} \
     ${ALPHA:+"training.alpha=$ALPHA"} \
     "hydra.run.dir=$RUN_DIR"
   status=$?
@@ -125,7 +130,7 @@ run_one() {
 }
 export -f run_one
 export OUT_DIR PER_P P_LIST P_C_HAAR P_C_TFIM P_C_FLOQUET P_C_U1 P_C_CONTINUOUS N_ROUNDS \
-  FAILED_LOG ALPHA
+  AVERAGE_FROM FAILED_LOG ALPHA
 
 QUEUE_STATUS=0
 printf '%s\0' "${RUNS[@]}" \

@@ -32,7 +32,7 @@ unset VIRTUAL_ENV
 # ---- Parameters -------------------------------------------------------------
 EXPERIMENT="projective_readout"
 MODEL="TFIM"
-N_VALUES=(4 6)       # number of qubits, ancilla included
+N_VALUES=(4 6)       # system qubits, ancilla excluded (issue #235)
 SEEDS=(0)            # one run per seed and per N
 L="${L:-200}"        # samples per run (samples.L)
 # -----------------------------------------------------------------------------

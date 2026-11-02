@@ -51,25 +51,26 @@ class DoubleObservable(Observables):
             pauli(a)
             pauli(b)
 
-    def operators(self, N: int | None = None) -> list[np.ndarray]:
+    def operators(self, n_qubits: int | None = None) -> list[np.ndarray]:
         """Return ``A_i B_j`` for each pair, then each ``i < j``.
 
-        That is ``N (N - 1) / 2`` features per pair: ``(0, 1), (0, 2), ...,
-        (N-2, N-1)``.
+        That is ``n (n - 1) / 2`` features per pair: ``(0, 1), (0, 2), ...,
+        (n-2, n-1)``.
 
         Args:
-            N: Number of qubits. ``None`` uses ``self.N`` from the config.
+            n_qubits: Number of qubits of the state, ancillas included.
+                ``None`` uses ``self.n_qubits`` from the config.
 
         Raises:
-            ValueError: If ``N`` is ``None`` and the config has no ``N``.
+            ValueError: If ``n_qubits`` is ``None`` and the config has none.
         """
-        N = self._resolve_N(N)
+        n = self._resolve_n_qubits(n_qubits)
         ops = []
         for a, b in self.pairs:
             A, B = pauli(a), pauli(b)
             ops += [
-                get_site_operator(A, i, N) @ get_site_operator(B, j, N)
-                for i in range(N)
-                for j in range(i + 1, N)
+                get_site_operator(A, i, n) @ get_site_operator(B, j, n)
+                for i in range(n)
+                for j in range(i + 1, n)
             ]
         return ops
