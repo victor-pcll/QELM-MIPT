@@ -35,7 +35,7 @@ def test_conf_tree_mirrors_the_package() -> None:
         # Primary configs: config.yaml, and one per experiment with its own
         # model (charge_sharpening.yaml, issue #137; learnability.yaml, #113;
         # QELM_M_ratio.yaml, #96; double_descent.yaml, #181; QELM_S.yaml,
-        # #230; purification_gullans_huse.yaml, #185).
+        # #230; purification_gullans_huse.yaml, #185; haar_readouts.yaml).
         if path.name
         not in (
             "config.yaml",
@@ -45,6 +45,7 @@ def test_conf_tree_mirrors_the_package() -> None:
             "double_descent.yaml",
             "QELM_S.yaml",
             "purification_gullans_huse.yaml",
+            "haar_readouts.yaml",
         )
     }
     assert found == expected

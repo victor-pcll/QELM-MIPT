@@ -120,6 +120,62 @@ def scrambled_log_likelihood(
     return np.asarray(per_round.sum(axis=1))
 
 
+def frozen_log_likelihood(
+    M: np.ndarray, Q: int, epsilon: float = DEFAULT_EPSILON
+) -> np.ndarray:
+    """Return ``log P(M | Q)`` of each record under the frozen model (#253).
+
+    The opposite limit of :func:`scrambled_log_likelihood`: no dynamics at
+    all between two rounds. The configuration is drawn once, uniform on the
+    charge ``Q`` (the Born rule on the uniform superposition of the
+    encoding), and never moves, so a qubit measured twice gives twice the
+    same outcome and only the distinct measured qubits carry evidence. If
+    ``u`` distinct qubits were measured and ``n`` of them found at ``|1>``
+    (each at its last outcome),
+
+        P(M | Q) = (1 - epsilon) C(N - u, Q - n) / C(N, Q) + epsilon 2**-u,
+
+    with the same leak ``epsilon`` as the scrambled model, here once per
+    record. Up to the probability of which qubits are measured, which does
+    not depend on ``Q``. It is the Bayes rule of a step ``dt`` far below
+    the scrambling time.
+
+    Args:
+        M: Records of shape ``(n, rounds, N)``, see
+            :func:`scrambled_log_likelihood`.
+        Q: Charge of the hypothesis, ``0 <= Q <= N``.
+        epsilon: Probability of a leak per record, in ``[0, 1)``.
+
+    Returns:
+        Array of shape ``(n,)``, finite when ``epsilon > 0``.
+
+    Raises:
+        ValueError: If ``M``, ``Q`` or ``epsilon`` is invalid, as in
+            :func:`scrambled_log_likelihood`.
+    """
+    M = np.asarray(M)
+    if M.ndim != 3:
+        raise ValueError(f"M must have shape (n, rounds, N), got {M.shape}.")
+    if not np.all(np.isin(M, (-1, 0, 1))):
+        raise ValueError("M must hold only -1, 0 and +1.")
+    N = M.shape[2]
+    if not 0 <= Q <= N:
+        raise ValueError(f"Q must be in [0, {N}], got {Q}.")
+    if not 0.0 <= epsilon < 1.0:
+        raise ValueError(f"epsilon must be in [0, 1), got {epsilon}.")
+    last = np.zeros(M.shape[::2], dtype=int)
+    for r in range(M.shape[1]):
+        last = np.where(M[:, r] != 0, M[:, r], last)
+    u = np.sum(last != 0, axis=1)
+    ones = np.sum(last == -1, axis=1)
+    log_h = _log_comb(N - u, Q - ones) - _log_comb(np.array(N), np.array(Q))
+    if epsilon == 0.0:
+        return np.asarray(log_h)
+    return np.asarray(
+        np.logaddexp(np.log1p(-epsilon) + log_h, np.log(epsilon) - u * np.log(2))
+    )
+
+
 def log_likelihood_features(
     M: np.ndarray, charges: Sequence[int], epsilon: float = DEFAULT_EPSILON
 ) -> np.ndarray:
