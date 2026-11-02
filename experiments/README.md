@@ -30,6 +30,28 @@ cfg = json.loads(Path("outputs/.../resolved_config.json").read_text())
 cfg["N"], cfg["N_total"], cfg["samples"]["train_size"]
 ```
 
+## One README per experiment folder (issue #250)
+
+Every experiment folder has its own `README.md`, a short scientific report
+written from [`README_TEMPLATE.md`](README_TEMPLATE.md): the physical model
+and the ML task, the protocol, the results with their numbers, and the
+figures (in the folder's `figures/`) with captions. This file keeps the run
+commands and every option of the launchers.
+
+| Folder | Experiment | Role in the project |
+| --- | --- | --- |
+| [`QELM_Z/`](QELM_Z/README.md) | unitary QELM, ancilla from `<O_k>` | baseline, `p = 0` |
+| [`projective/`](projective/README.md) | ancilla from a projective record | prototype of `QELM_M` |
+| [`QELM_M/`](QELM_M/README.md) | charge sector from the record `M`, TFIM / Haar / Clifford | charge learning, double descent in the ratio |
+| [`QELM_Q/`](QELM_Q/README.md) | charge `Q` from `<Z_k>` and `M` over `(p, h)`, Bayes ceilings, Bayes-Ridge FSS | charge learning (task 1A) |
+| [`learnability/`](learnability/README.md) | Barratt et al. (2022), Fig. 2 | benchmark of charge learning |
+| [`charge_sharpening/`](charge_sharpening/README.md) | Agrawal et al. (2024), Fig. 7 | benchmark of purification |
+| [`haar_readouts/`](haar_readouts/README.md) | sector of a purifying reference qubit, many decoders | purification decoding (task 1B) |
+| [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
+| [`diagnostics/`](diagnostics/README.md) | chaos and locality of every reservoir | why a reservoir shows the MIPT or not |
+| [`double_descent/`](double_descent/README.md) | MNIST with a QELM readout | statistics of the readout |
+| [`example/`](example/README.md) | test sweep and template script | smoke test |
+
 ## Run the test experiment
 
 From the repository root, after `uv sync`:
@@ -740,6 +762,40 @@ Table I (`0.21 +- 0.16`, `1.74 +- 0.45`). `S_2` and `S_inf` give the same
 `p_c`. The systematic part is a drift: with `N >= 10` the minimum moves
 along the valley to `p_c = 0.17`, `nu = 1.6`. The `I_3` curves of `N = 8, 12, 16` cross at
 `p = 0.11` to `0.13`.
+
+### The same chain in continuous time (issue #241)
+
+`models=continuous_tfim_1d` replaces the Floquet bricks by the Hamiltonian
+of an open Ising chain in a tilted field
+(`QELM.models.continuous_tfim_1d.ContinuousTFIMChain`):
+
+    H = - sum_i J_i Z_i Z_{i+1} - h_x sum_i X_i - h_z sum_i Z_i
+
+with `h_x = 1.05`, `h_z = 0.5` (the chaotic point of Kim and Huse, PRL 111,
+127205 (2013)) and each `J_i` uniform in `[0.5, 1.5]`, so that no bond is
+ever cut. The mean ratio of consecutive level spacings is 0.54 at `N = 10`,
+the GOE value: the chain is chaotic. The record is cut into `4 N` windows of
+length `tau = 0.3 / J`, each in `n_sub = 3` micro-steps `exp(-i H dt)`; after
+each micro-step every qubit is measured in Z with probability
+`1 - exp(-gamma dt)`, a Poisson process of rate `gamma = -ln(1 - p) / tau`
+(`QELM.training.measurements.poisson`). A qubit is then measured at least once
+in a window with probability `p`, as after a layer of the Floquet chain, so
+the two models share the same `p` axis. Row `j` of `M` holds the last outcome
+of each qubit in window `j`. `tau = 0.3` matches the entanglement growth of
+the two models at `p = 0` from the Néel state (about 0.15 bit per layer of
+the Floquet chain, 0.5 bit per unit time here). `n_disorder = 12` chains are
+drawn per run, trajectory `i` evolving under chain `i % 12`; the trajectories
+of a chain run as one batch, a matrix product per micro-step.
+
+```bash
+MODELS="continuous_tfim_1d" N_VALUES="12 10 8 6" SEEDS="42 43 44" \
+  P_VALUES="0 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.6" MAX_JOBS=4 \
+  ./experiments/QELM_S/exp_QELM_S.sh
+```
+
+`P_C_CONTINUOUS` sets its phase label (default none). The energy is
+conserved here, unlike in the Floquet chain: the Néel state has a finite
+temperature for this `H`, so the entropy saturates below the Page value.
 
 ## Run the purification decoding (issue #247)
 
