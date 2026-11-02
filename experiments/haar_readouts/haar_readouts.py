@@ -106,9 +106,9 @@ Run from the repository root:
 Everything is written to the Hydra run directory, by default
 ``outputs/<date>/<time>/``, which git ignores:
 
-- ``haar_readouts.npz`` (unless ``readouts_task.save_arrays: false``): ``M`` (``(L, n_rounds, N)``), ``Y``, ``S_R`` and
-  ``p`` (the measurement probability of each trajectory), of shape
-  ``(L,)``;
+- ``haar_readouts.npz`` (unless ``readouts_task.save_arrays: false``):
+  ``M`` (``(L, n_rounds, N)``), ``Y``, ``S_R`` and ``p`` (the measurement
+  probability of each trajectory), of shape ``(L,)``;
 - ``metrics.json``: per ``p``, ``S_R_mean_p<p>``, ``S_R_std_p<p>``,
   ``accuracy_baseline_p<p>`` (the majority label of the training set) and
   ``accuracy_<name>_p<p>`` and ``r2_<name>_p<p>`` for each readout and
