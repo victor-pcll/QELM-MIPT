@@ -1291,6 +1291,35 @@ uv run python experiments/haar_readouts/plot_haar_readouts.py \
 the `ridge` (with the quadratic ridge) or the `logistic` readout, every
 benchmark set on the same panels, with the purification curve.
 
+### Depth T of the QELM: T = 10, T = N, T = 2N (issue #268)
+
+`readouts_task.depth_rule` sets the number of rounds `T` from `N`: a number
+(`10`, the same `T` for every `N`, as Dehghani et al. 2023) or a multiple of
+`N` (`N`, `2N`, the stationary regime of the MIPT). It replaces
+`readouts_task.n_rounds` when set. `depth_scaling.sh` sweeps `N`, the rule
+and the seed (one fixed Haar circuit per seed), with the ridge on the QELM
+features `all`:
+
+```bash
+MAX_JOBS=4 ./experiments/haar_readouts/depth_scaling.sh
+uv run python experiments/haar_readouts/plot_depth_scaling.py outputs/haar_depth/<date_time>
+```
+
+The defaults are `N = 6, 8, 10, 12`, `T` in `10 N 2N`, seeds 42 to 51,
+2000 trajectories per `p` and 22 values of `p` from 0 to 0.4 (`N_VALUES`,
+`DEPTHS`, `SEEDS`, `PER_P`, `P_VALUES`, `READOUTS`, `FEATURES`). The runs
+skip `haar_readouts.npz` (`readouts_task.save_arrays=false`). Each
+`metrics.json` also holds the timings of the run (`time_simulation_s`), the
+condition number of the training `X^T X` (`log10_cond_<set>_p<p>`) and the
+variance of `<Z_k>` over the trajectories, site by site
+(`var_Z_<k>_p<p>`). The plot script writes `depth_profiles` (accuracy and
+`S_R` against `p`, one column per rule), `depth_crossings` (steepest slope
+of the accuracy, crossings of the curves of successive `N`, the sharpest
+rule in `#fa5703`), `depth_cost` (time against `T`), `depth_edges`
+(variance of `<Z_i>` against the site at the largest `N`),
+`depth_conditioning` and `depth_summary.json`. Results:
+[haar_readouts/README.md](haar_readouts/README.md#depth-t-of-the-qelm-issue-268).
+
 ## Check the chaos and the locality of the reservoirs (issue #243)
 
 ```bash
