@@ -20,7 +20,8 @@ sweep folder):
   averaged over the circuits, at a few ``p`` (from ``corr_map.json``, or the
   ``.npz`` of older runs);
 - ``qelm_comparison_N<N>.png``: the three QELMs alone (the state, ``M``,
-  both), ``p`` on a linear axis, when the run has ``ridge_M_quantum``;
+  both) and the Bayes decoder of ``M``, ``p`` on a linear axis, when the run
+  has ``ridge_M_quantum`` (``--label`` prefixes its title);
 - ``summary.json``: the averages and standard errors behind the figures.
 
     uv run python experiments/nonlinear_M/plot_nonlinear_M.py \\
@@ -75,7 +76,11 @@ def load_runs(folders: list[Path]) -> dict[int, list[dict[str, float]]]:
             if match is None:
                 continue
             N, seed = int(match.group(1)), int(match.group(2))
-            runs.setdefault(N, {})[seed] = json.loads(path.read_text())
+            # Runs of the same N and seed in several folders (extra values
+            # of p for the same circuit) are merged.
+            runs.setdefault(N, {}).setdefault(seed, {}).update(
+                json.loads(path.read_text())
+            )
     if not runs:
         raise FileNotFoundError(f"No N<N>_seed<seed>/metrics.json under {folders}.")
     return {N: [by_seed[s] for s in sorted(by_seed)] for N, by_seed in runs.items()}
@@ -310,7 +315,9 @@ def plot_corr_map(folders: list[Path], N: int, out: Path) -> Path | None:
     for folder in folders:
         for run_dir in sorted(folder.glob(f"N{N}_seed*")):
             got = _corr_map(run_dir)
-            if got is not None:
+            # Several folders may hold other values of p for the same
+            # circuits: keep the maps of the first grid only.
+            if got is not None and (levels is None or np.array_equal(got[0], levels)):
                 levels, m = got
                 maps.append(m)
     if not maps or levels is None:
@@ -347,35 +354,48 @@ COMPARISON: tuple[tuple[str, str, str], ...] = (
     ("ridge_quantum", "QELM on the state: <P_k>, <P_i P_j>", "#1f77b4"),
     ("ridge_raw", "QELM on M", "#d62728"),
     ("ridge_M_quantum", "QELM on M and <P_k>, <P_i P_j>", "#fa5703"),
+    ("bayes", "Bayes optimal on M (knows the circuit)", "black"),
 )
 
 
-def plot_comparison(entry: dict[str, Any], N: int, out: Path) -> Path | None:
-    """The three QELMs only (state, record, both), ``p`` on a linear axis."""
+def plot_comparison(
+    entry: dict[str, Any], N: int, out: Path, label: str = ""
+) -> Path | None:
+    """The three QELMs (state, record, both) and Bayes, ``p`` on a linear axis."""
     if not all(f"accuracy_{name}" in entry for name, _, _ in COMPARISON):
         return None
     ps = np.asarray(entry["p"])
-    fig, ax = plt.subplots(figsize=(7, 4.8))
-    for name, label, color in COMPARISON:
+    fig, ax = plt.subplots(figsize=(7, 6))
+    for name, legend, color in COMPARISON:
         mean = np.asarray(entry[f"accuracy_{name}"])
         sem = np.asarray(entry[f"accuracy_{name}_sem"])
-        ax.plot(ps, mean, "-", color=color, marker="o", ms=4, label=label)
+        ax.plot(ps, mean, "-", color=color, marker="o", ms=4, label=legend)
         ax.fill_between(ps, mean - sem, mean + sem, color=color, alpha=0.2, lw=0)
     ax.axhline(0.5, color="grey", ls="--", lw=1, label="chance")
+    ax.axhline(
+        0.75,
+        color="black",
+        ls="--",
+        lw=1,
+        label="3/4: R pure with a random Bloch direction",
+    )
     ax.set_xlabel("measurement probability p")
     ax.set_ylabel("test accuracy")
     ax.set_xlim(0, ps.max())
     ax.set_ylim(0.45, 1.02)
-    ax.legend(fontsize=8)
+    ax.legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.13), ncol=2)
     gates = (
         f"{entry['n_circuits']} fixed circuits"
         if entry["fixed_instance"]
         else "new gates per trajectory"
     )
-    ax.set_title(f"QELM readouts, Haar U(4), N = {N}, T = {int(entry['T'])}, {gates}")
+    head = f"{label}, " if label else ""
+    ax.set_title(
+        f"{head}Haar U(4), N = {N}, T = {int(entry['T'])}, {gates}", fontsize=10
+    )
     fig.tight_layout()
     path = out / f"qelm_comparison_N{N}.png"
-    fig.savefig(path, dpi=150)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return path
 
@@ -385,6 +405,9 @@ def main(argv: list[str] | None = None) -> list[Path]:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("folders", nargs="+", type=Path)
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument(
+        "--label", default="", help="prefix of the comparison title (the encoding)"
+    )
     args = parser.parse_args(argv)
     out = args.out or args.folders[0]
     out.mkdir(parents=True, exist_ok=True)
@@ -394,7 +417,7 @@ def main(argv: list[str] | None = None) -> list[Path]:
     paths = [plot_accuracy(summary[f"N{N}"], N, out) for N in sorted(runs)]
     paths += [plot_gain(summary, out), plot_spectrum(summary, out)]
     for N in sorted(runs):
-        comparison = plot_comparison(summary[f"N{N}"], N, out)
+        comparison = plot_comparison(summary[f"N{N}"], N, out, args.label)
         if comparison is not None:
             paths.append(comparison)
     for N in sorted(runs):

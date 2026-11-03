@@ -23,6 +23,11 @@ haar_circuit:
   fixed_instance: true
 
 nonlinear_task:
+  # Initial state of R and the system: bell (R paired with the middle site),
+  # charge (R entangled with the sectors N // 2 and N // 2 - 1, block
+  # ancilla_charge_sector of config.yaml), ghz ((|0>|0..0> + |1>|1..1>)/sqrt 2)
+  # or w ((|0>|0..0> + |1>|W>)/sqrt 2, W the one-excitation state of the chain).
+  encoding: bell
   # Measurement probabilities, the grid of the issue (0.05 to 0.40 by 0.025)
   # plus p = 0 and three larger values.
   p_values: [0.0, 0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2, 0.225, 0.25,

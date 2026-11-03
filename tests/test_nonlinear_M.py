@@ -292,3 +292,70 @@ def test_sweep_and_figures(tmp_path: Path) -> None:
     summary = json.loads((tmp_path / "fig" / "summary.json").read_text())
     assert summary["N4"]["n_circuits"] == 2
     assert len(summary["N4"]["accuracy_ridge_raw"]) == 3
+
+
+def test_encodings_are_normalized_and_entangle_R() -> None:
+    module = _load(SCRIPT)
+    cfg = load_config([f"N={N}"], config_name="nonlinear_M")
+    for name in module.ENCODINGS:
+        psi = module.initial_state(cfg, name)
+        assert psi.shape == (2 ** (N + 1),)
+        assert np.linalg.norm(psi) == pytest.approx(1.0)
+        assert module.reference_z(psi) == pytest.approx(0.0)
+    w = module.w_state(N)
+    # The W branch: R = 1 and exactly one excited system site.
+    support = np.flatnonzero(np.abs(w) > 0)
+    assert support[0] == 0
+    assert all(bin(i - 2**N).count("1") == 1 for i in support[1:])
+    with pytest.raises(ValueError):
+        module.initial_state(cfg, "cluster")
+
+
+def test_pair_correlations_match_all_pairs() -> None:
+    module = _load(SCRIPT)
+    rng = np.random.default_rng(4)
+    M = rng.choice([-1.0, 0.0, 1.0], size=(50, 3, 4))
+    Y = rng.choice([-1.0, 1.0], size=50)
+    np.testing.assert_allclose(
+        module.correlation_spectrum(M, Y)["pair_all"],
+        feature_label_correlation(all_pairs(M), Y),
+        atol=1e-12,
+    )
+
+
+def test_depth_series_and_figure(tmp_path: Path) -> None:
+    base = {
+        **os.environ,
+        "N_VALUES": "4",
+        "SEEDS": "1 2",
+        "PER_P": "30",
+        "P_VALUES": "0 0.5 1",
+        "MODES": "raw",
+        "MLP": "false",
+        "QUANTUM": "false",
+        "ENCODING": "ghz",
+        "SAVE_ARRAYS": "false",
+    }
+    for T in (2, 3):
+        env = {**base, "DEPTH": str(T), "OUT_DIR": str(tmp_path / f"T{T}")}
+        subprocess.run(["bash", str(BASH_SCRIPT)], check=True, env=env, cwd=REPO_ROOT)
+    metrics = json.loads((tmp_path / "T2" / "N4_seed1" / "metrics.json").read_text())
+    assert metrics["T"] == 2.0
+    assert "accuracy_ridge_quantum_p1" not in metrics
+    subprocess.run(
+        [
+            sys.executable,
+            str(FOLDER / "plot_depth_M.py"),
+            f"2={tmp_path / 'T2'}",
+            f"3={tmp_path / 'T3'}",
+            "--label",
+            "GHZ",
+            "--out",
+            str(tmp_path / "fig"),
+        ],
+        check=True,
+    )
+    curves = json.loads((tmp_path / "fig" / "depth_M_N4.json").read_text())
+    assert sorted(curves) == ["2", "3"]
+    assert curves["2"]["n_circuits"] == 2
+    assert (tmp_path / "fig" / "depth_M_N4.png").stat().st_size > 0

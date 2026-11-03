@@ -144,27 +144,86 @@ and #274. The readouts of `M` take over from `p ≈ 0.14` (`N = 8`) or 0.19
 (`N = 6`). The two are complementary: one reads the state that the
 measurements have not yet collapsed, the other reads the collapses.
 
-### The three QELMs at T = 2N (N = 8, 10 circuits, 8000 trajectories per p)
+### Four encodings at T = 2N: the state, M, both, and Bayes
 
-![QELM comparison](figures/qelm_comparison_N8_T16.png)
+`ENCODING=bell|charge|ghz|w` (`nonlinear_task.encoding`) sets the initial
+state `(|0>_R |a> + |1>_R |b>) / sqrt(2)`:
 
-The ridge on the state (`<P_k>`, `<P_i P_j>`, P = X, Y, Z), on `M`, and on both
-side by side (`ridge_M_quantum`), at `T = 2N = 16` and 8000 trajectories per
-`p` (`figures/T16_summary.json`). With twice the depth, the state readout
-collapses faster than at `T = N`: 1.00 at `p = 0`, 0.60 at `p = 0.05`, then at
-chance (0.50 to 0.51) from `p = 0.075`, as `p_0 ≈ 4 / (N T)` of #274
-predicts. The readout of `M` rises from 0.53 at `p = 0.05` to 0.59 at
-`p = 0.4` and 0.66 at `p = 1` (standard error 0.005 to 0.015). The
-combined readout follows the better of the two everywhere and never beats
-it: 0.61 at `p = 0.05`, then equal to `M` within one standard error. The two
-sources do not add up: at `p ≤ 0.05` the state holds the label, and from
-`p = 0.075` only the record does. Bayes ceiling: 0.57 at `p = 0.05`, 0.74 at
-`p = 0.4`.
+| Encoding | `a` | `b` |
+| --- | --- | --- |
+| `bell` (default) | `\|0...0>` | `\|0..1..0>`, the middle site flipped |
+| `charge` | charge sector `N / 2` | charge sector `N / 2 - 1` (`AncillaChargeSectorEncoding`) |
+| `ghz` | `\|0...0>` | `\|1...1>` |
+| `w` | `\|0...0>` | `\|W> = (\|10...0> + ... + \|0...01>) / sqrt(N)` |
+
+N = 8, T = 16, 10 fixed circuits, 8000 trajectories per `p`, 30 values of `p`
+(25 between 0 and 0.30). Ridge on the state (`<P_k>`, `<P_i P_j>`), on `M`, on
+both side by side (`ridge_M_quantum`), the Bayes decoder of `M`, and the line
+3/4, the Bayes accuracy of a reference that ends pure with a random Bloch
+direction (`E[(1 + |r_z|) / 2]` with `r_z` uniform).
+
+| Encoding | state, p = 0.05 | M, p = 0.4 | M, p = 1 | Bayes, p = 1 |
+| --- | --- | --- | --- | --- |
+| GHZ | 0.60 | 0.71 | 0.81 | 0.88 |
+| Bell | 0.60 | 0.59 | 0.66 | 0.73 |
+| W | 0.60 | 0.56 | 0.61 | 0.73 |
+| charge | 0.60 | 0.51 | 0.53 | 0.70 |
+
+![GHZ](figures/qelm_bayes_ghz_N8_T16.png)
+
+- The state readout does not depend on the encoding: 0.94 at `p = 0.0125`,
+  0.60 at `p = 0.05`, chance from `p ≈ 0.075` (`p_0 ≈ 4 / (N T)`, #274).
+- The readout of `M` depends only on the encoding. GHZ copies the label in Z
+  on every site, so the early outcomes carry it; W spreads one excitation and
+  carries less per site than Bell; the charge leaves no local imprint, and
+  there the linear QELM-M is at about 1/2, as the issue assumed.
+- The combined readout follows the better of the two, and beats both only for
+  GHZ at the crossing (0.63 against 0.60 and 0.57 at `p = 0.05`).
+- Bayes stays under 3/4 except with GHZ, whose reference stays aligned on Z.
+
+Figures: `qelm_bayes_<encoding>_N8_T16.png`, data `<encoding>_T16_summary.json`.
+
+### The QELM on M does not depend on the depth
+
+Same circuits cut at T = 2, 4, 6 (the gates are drawn layer by layer from the
+seed, so the circuit at T = 2 is the first two layers of the one at T = 6),
+10 circuits, 8000 trajectories per `p`, `QUANTUM=false`:
+
+| Encoding | T = 2 (p = 0.2 / 1) | T = 4 | T = 6 | T = 16 |
+| --- | --- | --- | --- | --- |
+| GHZ | 0.65 / 0.82 | 0.66 / 0.81 | 0.65 / 0.82 | 0.64 / 0.81 |
+| Bell | 0.57 / 0.67 | 0.57 / 0.67 | 0.57 / 0.67 | 0.56 / 0.66 |
+| W | 0.55 / 0.61 | 0.55 / 0.62 | 0.54 / 0.61 | 0.54 / 0.61 |
+| charge | 0.51 / 0.55 | 0.52 / 0.54 | 0.52 / 0.54 | 0.52 / 0.53 |
+
+![depth, Bell](figures/depth_M_bell.png)
+
+The curves of every depth lie on each other within one standard error,
+except GHZ at `p ≤ 0.1`, where T = 2 is 0.02 lower (fewer measurements in
+all). What the QELM on M reads is set by the first two rounds, the imprint of
+the encoding on the first outcomes; later rounds add features without
+information. `plot_depth_M.py` draws one figure per encoding
+(`depth_M_<encoding>.png`).
 
 ```bash
-OMP_NUM_THREADS=1 N_VALUES=8 SEEDS="$(seq -s ' ' 42 51)" PER_P=8000 DEPTH=2N \
-  MODES=raw MLP=false SAVE_ARRAYS=false MAX_JOBS=4 \
-  ./experiments/nonlinear_M/nonlinear_M.sh
+# Four encodings at T = 2N:
+for E in bell charge ghz w; do
+  OMP_NUM_THREADS=1 ENCODING=$E N_VALUES=8 SEEDS="$(seq -s ' ' 42 51)" \
+    PER_P=8000 DEPTH=2N MODES=raw MLP=false SAVE_ARRAYS=false MAX_JOBS=4 \
+    OUT_DIR=outputs/nonlinear_M/T16_$E ./experiments/nonlinear_M/nonlinear_M.sh
+  uv run python experiments/nonlinear_M/plot_nonlinear_M.py \
+    outputs/nonlinear_M/T16_$E --label $E
+done
+# Depth series:
+for E in bell w ghz charge; do for T in 2 4 6; do
+  OMP_NUM_THREADS=1 ENCODING=$E DEPTH=$T QUANTUM=false N_VALUES=8 \
+    SEEDS="$(seq -s ' ' 42 51)" PER_P=8000 MODES=raw MLP=false \
+    SAVE_ARRAYS=false MAX_JOBS=4 OUT_DIR=outputs/nonlinear_M/depth/${E}_T$T \
+    ./experiments/nonlinear_M/nonlinear_M.sh
+done; done
+uv run python experiments/nonlinear_M/plot_depth_M.py \
+  2=outputs/nonlinear_M/depth/ghz_T2 4=outputs/nonlinear_M/depth/ghz_T4 \
+  6=outputs/nonlinear_M/depth/ghz_T6 --label GHZ --out outputs/nonlinear_M/depth
 ```
 
 ### Synthesis

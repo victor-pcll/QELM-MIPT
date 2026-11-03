@@ -20,7 +20,9 @@
 #     DEPTH="2N"                 nonlinear_task.depth_rule (default N)
 #     P_VALUES="0 0.1 0.2"       overrides nonlinear_task.p_values
 #     MODES="raw xor_local"      overrides nonlinear_task.modes
+#     ENCODING=ghz               nonlinear_task.encoding: bell (default), charge, ghz, w
 #     MLP=false                  skip the MLP reference
+#     QUANTUM=false              skip the QELM on the state (and on M + state)
 #     FIXED=false                new gates per trajectory (the null control;
 #                                default true, one fixed circuit per seed)
 #     SAVE_ARRAYS=false          skip the .npz (large at N = 12)
@@ -48,6 +50,8 @@ PER_P="${PER_P:-2000}"
 DEPTH="${DEPTH:-N}"
 MLP="${MLP:-true}"
 FIXED="${FIXED:-true}"
+ENCODING="${ENCODING:-bell}"
+QUANTUM="${QUANTUM:-true}"
 SAVE_ARRAYS="${SAVE_ARRAYS:-true}"
 MAX_JOBS="${MAX_JOBS:-1}"
 SKIP_DONE="${SKIP_DONE:-0}"
@@ -98,6 +102,8 @@ run_one() {
     "nonlinear_task.depth_rule=$DEPTH" \
     "nonlinear_task.mlp_reference=$MLP" \
     "haar_circuit.fixed_instance=$FIXED" \
+    "nonlinear_task.encoding=$ENCODING" \
+    "nonlinear_task.quantum_baseline=$QUANTUM" \
     "nonlinear_task.save_arrays=$SAVE_ARRAYS" \
     ${P_LIST:+"nonlinear_task.p_values=$P_LIST"} \
     ${M_LIST:+"nonlinear_task.modes=$M_LIST"} \
@@ -110,7 +116,7 @@ run_one() {
   fi
 }
 export -f run_one
-export OUT_DIR PER_P DEPTH MLP FIXED SAVE_ARRAYS P_LIST M_LIST FAILED_LOG SKIP_DONE
+export OUT_DIR PER_P DEPTH MLP FIXED ENCODING QUANTUM SAVE_ARRAYS P_LIST M_LIST FAILED_LOG SKIP_DONE
 
 QUEUE_STATUS=0
 printf '%s\0' "${RUNS[@]}" \

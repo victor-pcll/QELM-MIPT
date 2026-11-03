@@ -8,9 +8,11 @@ pull requests: Haar U(4) gates and the local encoding.
 For each measurement probability ``p`` of ``nonlinear_task.p_values`` and
 each of its ``nonlinear_task.samples_per_p`` trajectories:
 
-1. Start from :class:`AncillaBellPairEncoding`: the reference qubit ``R``
-   (qubit 0) in a Bell pair with the middle system site ``N // 2``, the
-   other system qubits in ``|0>``.
+1. Start from the encoding ``nonlinear_task.encoding`` (:func:`initial_state`):
+   ``bell`` (default, :class:`AncillaBellPairEncoding`), the reference qubit
+   ``R`` (qubit 0) in a Bell pair with the middle system site ``N // 2``, the
+   other system qubits in ``|0>``; ``charge``, ``R`` entangled with two charge
+   sectors; ``ghz``, ``R`` and the whole chain in a GHZ state.
 2. Run ``T`` rounds (``nonlinear_task.depth_rule``: ``T = N`` by default),
    each one brickwork period of Haar U(4) gates on the system qubits (one
    fixed circuit for the run, set by the seed), then a Z measurement of each
@@ -83,12 +85,11 @@ from sklearn.neural_network import MLPClassifier
 from tqdm import tqdm
 
 from QELM import check_qubit_counts, set_seed
-from QELM.encoding import AncillaBellPairEncoding
+from QELM.encoding import AncillaBellPairEncoding, AncillaChargeSectorEncoding
 from QELM.evaluation.entropy import von_neumann_entropy
 from QELM.evaluation.entropy_regression import stratified_split
 from QELM.features import (
     MODES,
-    all_pairs,
     extract_M_features,
     feature_label_correlation,
     spatial_pairs,
@@ -164,6 +165,57 @@ def reference_z(psi: np.ndarray) -> float:
     return float(np.sum(np.abs(psi[:half]) ** 2) - np.sum(np.abs(psi[half:]) ** 2))
 
 
+ENCODINGS = ("bell", "charge", "ghz", "w")
+
+
+def ghz_state(N: int) -> np.ndarray:
+    """``(|0>_R |0...0>_S + |1>_R |1...1>_S) / sqrt(2)`` on ``N + 1`` qubits."""
+    psi = np.zeros(2 ** (N + 1), dtype=complex)
+    psi[0] = psi[-1] = 1.0 / np.sqrt(2.0)
+    return psi
+
+
+def w_state(N: int) -> np.ndarray:
+    """``(|0>_R |0...0>_S + |1>_R |W>_S) / sqrt(2)`` on ``N + 1`` qubits.
+
+    ``|W> = (|10...0> + |01...0> + ... + |00...1>) / sqrt(N)``: one
+    excitation shared by every site. ``R`` is the most significant qubit.
+    """
+    psi = np.zeros(2 ** (N + 1), dtype=complex)
+    psi[0] = 1.0 / np.sqrt(2.0)
+    for k in range(N):
+        # R = 1 and system site k = 1 (site k is qubit k + 1).
+        psi[2**N + 2 ** (N - 1 - k)] = 1.0 / np.sqrt(2.0 * N)
+    return psi
+
+
+def initial_state(cfg: DictConfig, encoding: str) -> np.ndarray:
+    """State of ``R`` and the system for one of :data:`ENCODINGS`.
+
+    - ``bell``: ``R`` in a Bell pair with the middle site
+      (:class:`AncillaBellPairEncoding`, the local encoding);
+    - ``charge``: ``R`` entangled with the charge sectors ``N // 2`` and
+      ``N // 2 - 1`` (:class:`AncillaChargeSectorEncoding`, as in
+      ``haar_readouts``);
+    - ``ghz``: ``R`` and every system qubit in a GHZ state, the label copied
+      on every site;
+    - ``w``: ``|0...0>`` against the W state of the system
+      (:func:`w_state`), one excitation spread over every site.
+
+    Raises:
+        ValueError: If the encoding is unknown.
+    """
+    if encoding == "bell":
+        return AncillaBellPairEncoding.from_config(cfg).state()
+    if encoding == "charge":
+        return np.asarray(AncillaChargeSectorEncoding.from_config(cfg).state())
+    if encoding == "ghz":
+        return ghz_state(int(cfg.N))
+    if encoding == "w":
+        return w_state(int(cfg.N))
+    raise ValueError(f"encoding must be one of {ENCODINGS}, got {encoding!r}.")
+
+
 def trajectory(
     psi0: np.ndarray,
     circuit: HaarBrickworkCircuit,
@@ -223,9 +275,23 @@ def correlation_spectrum(M: np.ndarray, Y: np.ndarray) -> dict[str, np.ndarray]:
         "abs": np.abs(raw),
         "pair_space": spatial_pairs(M).reshape(L, -1),
         "pair_time": temporal_pairs(M).reshape(L, -1),
-        "pair_all": all_pairs(M),
     }
-    return {name: feature_label_correlation(X, Y) for name, X in blocks.items()}
+    out = {name: feature_label_correlation(X, Y) for name, X in blocks.items()}
+    out["pair_all"] = _pair_correlations(raw, Y)
+    return out
+
+
+def _pair_correlations(raw: np.ndarray, Y: np.ndarray) -> np.ndarray:
+    """``Corr(m_a m_b, Y)`` for every pair ``a < b``, in the order of
+    :func:`all_pairs`, one ``a`` at a time: the full ``(L, K (K - 1) / 2)``
+    array of products takes several GB at ``N T = 128``.
+    """
+    K = raw.shape[1]
+    parts = [
+        feature_label_correlation(raw[:, a, None] * raw[:, a + 1 :], Y)
+        for a in range(K - 1)
+    ]
+    return np.concatenate(parts) if parts else np.zeros(0)
 
 
 def run(cfg: DictConfig) -> dict[str, Any]:
@@ -274,9 +340,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     params["depth"] = T
     circuit = HaarBrickworkCircuit(params, gate_rng)
     fixed = bool(params.get("fixed_instance", True))
-    encoding = AncillaBellPairEncoding.from_config(cfg)
-    site = encoding.site
-    psi0 = encoding.state()
+    bell = AncillaBellPairEncoding.from_config(cfg)
+    site = bell.site
+    psi0 = initial_state(cfg, str(task.get("encoding", "bell")))
 
     L = levels.size * per_p
     p = np.repeat(levels, per_p)
