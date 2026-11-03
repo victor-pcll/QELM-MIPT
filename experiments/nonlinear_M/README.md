@@ -144,6 +144,29 @@ and #274. The readouts of `M` take over from `p ≈ 0.14` (`N = 8`) or 0.19
 (`N = 6`). The two are complementary: one reads the state that the
 measurements have not yet collapsed, the other reads the collapses.
 
+### The three QELMs at T = 2N (N = 8, 10 circuits, 8000 trajectories per p)
+
+![QELM comparison](figures/qelm_comparison_N8_T16.png)
+
+The ridge on the state (`<P_k>`, `<P_i P_j>`, P = X, Y, Z), on `M`, and on both
+side by side (`ridge_M_quantum`), at `T = 2N = 16` and 8000 trajectories per
+`p` (`figures/T16_summary.json`). With twice the depth, the state readout
+collapses faster than at `T = N`: 1.00 at `p = 0`, 0.60 at `p = 0.05`, then at
+chance (0.50 to 0.51) from `p = 0.075`, as `p_0 ≈ 4 / (N T)` of #274
+predicts. The readout of `M` rises from 0.53 at `p = 0.05` to 0.59 at
+`p = 0.4` and 0.66 at `p = 1` (standard error 0.005 to 0.015). The
+combined readout follows the better of the two everywhere and never beats
+it: 0.61 at `p = 0.05`, then equal to `M` within one standard error. The two
+sources do not add up: at `p ≤ 0.05` the state holds the label, and from
+`p = 0.075` only the record does. Bayes ceiling: 0.57 at `p = 0.05`, 0.74 at
+`p = 0.4`.
+
+```bash
+OMP_NUM_THREADS=1 N_VALUES=8 SEEDS="$(seq -s ' ' 42 51)" PER_P=8000 DEPTH=2N \
+  MODES=raw MLP=false SAVE_ARRAYS=false MAX_JOBS=4 \
+  ./experiments/nonlinear_M/nonlinear_M.sh
+```
+
 ### Synthesis
 
 - The Dehghani et al. picture (information only in high-order parities, so a

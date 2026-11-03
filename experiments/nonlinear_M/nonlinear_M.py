@@ -32,6 +32,8 @@ scored on the rest (``accuracy`` of the sign, ``R2`` of the output):
 - ``ridge_quantum`` (``quantum_baseline``): the ridge on the QELM features of
   the final state, ``<P_k>`` and ``<P_i P_j>`` for ``P`` in ``X, Y, Z``,
   after ``R`` is measured, as in ``experiments/haar_readouts``;
+- ``ridge_M_quantum`` (``quantum_baseline``): the ridge on ``vec(M)`` and
+  those QELM features side by side (``M_all`` of ``haar_readouts``);
 - ``mlp_raw`` (``mlp_reference``): a neural network on ``vec(M)``;
 - ``bayes``: the sign of ``r_z``, the optimal decoder of an observer who
   knows the circuit (no training). Its accuracy has expectation
@@ -298,6 +300,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     features = {f"ridge_{mode}": extract_M_features(M, mode, site) for mode in modes}
     if want_quantum:
         features["ridge_quantum"] = Q
+        # The QELM-M of haar_readouts (M_all): the record and the state.
+        features["ridge_M_quantum"] = np.hstack([M.reshape(L, -1), Q])
     metrics: dict[str, float] = {
         "N": float(N),
         "T": float(T),
@@ -384,7 +388,7 @@ def main(cfg: DictConfig) -> None:
     save_config(cfg, out_dir)
     names = ["bayes", *[f"ridge_{m}" for m in cfg.nonlinear_task.modes]]
     if cfg.nonlinear_task.get("quantum_baseline", True):
-        names.append("ridge_quantum")
+        names.extend(["ridge_quantum", "ridge_M_quantum"])
     if cfg.nonlinear_task.get("mlp_reference", True):
         names.append("mlp_raw")
     print(f"N: {cfg.N}  T: {int(metrics['T'])}  seed: {cfg.seed}")

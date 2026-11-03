@@ -19,6 +19,8 @@ sweep folder):
 - ``correlation_map_N<N>.png``: ``|Corr(m_{t,i}, Y)|`` entry by entry,
   averaged over the circuits, at a few ``p`` (from ``corr_map.json``, or the
   ``.npz`` of older runs);
+- ``qelm_comparison_N<N>.png``: the three QELMs alone (the state, ``M``,
+  both), ``p`` on a linear axis, when the run has ``ridge_M_quantum``;
 - ``summary.json``: the averages and standard errors behind the figures.
 
     uv run python experiments/nonlinear_M/plot_nonlinear_M.py \\
@@ -50,6 +52,7 @@ READOUTS: tuple[tuple[str, str, str, str], ...] = (
     ("ridge_xor_full", "QELM-M (all pairs)", "#006d2c", "-"),
     ("mlp_raw", "MLP on M", "#9467bd", ":"),
     ("ridge_quantum", "QELM on the state", "#1f77b4", "-."),
+    ("ridge_M_quantum", "QELM on M and the state", "#fa5703", "-."),
     ("bayes", "Bayes (knows the circuit)", "black", "-"),
 )
 MODES = ("raw_abs", "abs", "xor_local", "xor_cone", "xor_full")
@@ -339,6 +342,44 @@ def plot_corr_map(folders: list[Path], N: int, out: Path) -> Path | None:
     return path
 
 
+# The three QELMs of the comparison figure: (metric, label, color).
+COMPARISON: tuple[tuple[str, str, str], ...] = (
+    ("ridge_quantum", "QELM on the state: <P_k>, <P_i P_j>", "#1f77b4"),
+    ("ridge_raw", "QELM on M", "#d62728"),
+    ("ridge_M_quantum", "QELM on M and <P_k>, <P_i P_j>", "#fa5703"),
+)
+
+
+def plot_comparison(entry: dict[str, Any], N: int, out: Path) -> Path | None:
+    """The three QELMs only (state, record, both), ``p`` on a linear axis."""
+    if not all(f"accuracy_{name}" in entry for name, _, _ in COMPARISON):
+        return None
+    ps = np.asarray(entry["p"])
+    fig, ax = plt.subplots(figsize=(7, 4.8))
+    for name, label, color in COMPARISON:
+        mean = np.asarray(entry[f"accuracy_{name}"])
+        sem = np.asarray(entry[f"accuracy_{name}_sem"])
+        ax.plot(ps, mean, "-", color=color, marker="o", ms=4, label=label)
+        ax.fill_between(ps, mean - sem, mean + sem, color=color, alpha=0.2, lw=0)
+    ax.axhline(0.5, color="grey", ls="--", lw=1, label="chance")
+    ax.set_xlabel("measurement probability p")
+    ax.set_ylabel("test accuracy")
+    ax.set_xlim(0, ps.max())
+    ax.set_ylim(0.45, 1.02)
+    ax.legend(fontsize=8)
+    gates = (
+        f"{entry['n_circuits']} fixed circuits"
+        if entry["fixed_instance"]
+        else "new gates per trajectory"
+    )
+    ax.set_title(f"QELM readouts, Haar U(4), N = {N}, T = {int(entry['T'])}, {gates}")
+    fig.tight_layout()
+    path = out / f"qelm_comparison_N{N}.png"
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    return path
+
+
 def main(argv: list[str] | None = None) -> list[Path]:
     """Draw every figure; return their paths."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -352,6 +393,10 @@ def main(argv: list[str] | None = None) -> list[Path]:
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
     paths = [plot_accuracy(summary[f"N{N}"], N, out) for N in sorted(runs)]
     paths += [plot_gain(summary, out), plot_spectrum(summary, out)]
+    for N in sorted(runs):
+        comparison = plot_comparison(summary[f"N{N}"], N, out)
+        if comparison is not None:
+            paths.append(comparison)
     for N in sorted(runs):
         heat = plot_corr_map(args.folders, N, out)
         if heat is not None:

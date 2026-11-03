@@ -207,6 +207,7 @@ def test_run_metrics_and_reproducibility() -> None:
             "bayes",
             "baseline",
             "ridge_quantum",
+            "ridge_M_quantum",
             "mlp_raw",
             *(f"ridge_{m}" for m in MODES),
         ):
@@ -285,6 +286,7 @@ def test_sweep_and_figures(tmp_path: Path) -> None:
         "gain_vs_p.png",
         "correlation_spectrum.png",
         "correlation_map_N4.png",
+        "qelm_comparison_N4.png",
     ):
         assert (tmp_path / "fig" / name).stat().st_size > 0
     summary = json.loads((tmp_path / "fig" / "summary.json").read_text())
