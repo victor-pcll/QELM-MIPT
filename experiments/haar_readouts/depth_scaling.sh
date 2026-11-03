@@ -29,6 +29,8 @@
 #     FEATURES="all"              feature sets (readouts_task.features)
 #     MAX_JOBS=4                  runs at once (default 1); each run then
 #                                 uses one BLAS thread
+#     SKIP_DONE=1                 skip the runs of OUT_DIR that already have
+#                                 their metrics.json (resume a stopped sweep)
 #
 # A failed run does not stop the others: the sweep goes to the end, lists the
 # failed runs in $OUT_DIR/failed_runs.txt and exits with 1.
@@ -47,6 +49,7 @@ read -r -a DEPTHS <<< "${DEPTHS:-10 N 2N}"
 read -r -a SEEDS <<< "${SEEDS:-42 43 44 45 46 47 48 49 50 51}"
 PER_P="${PER_P:-2000}"
 MAX_JOBS="${MAX_JOBS:-1}"
+SKIP_DONE="${SKIP_DONE:-0}"
 # The grid of the issue, p = 0.05 to 0.4 by 0.025 with 0.14, 0.16, 0.18 and
 # 0.22 around p_c, plus p = 0 and 0.0125, 0.025: at T = N and 2N the QELM
 # loses the charge before p = 0.05.
@@ -93,6 +96,10 @@ run_one() {
   local N D SEED RUN_DIR status
   read -r N D SEED <<< "$1"
   RUN_DIR="$OUT_DIR/haar_fixed_N${N}_T${D}_seed${SEED}"
+  if [[ "${SKIP_DONE:-0}" == "1" && -f "$RUN_DIR/metrics.json" ]]; then
+    echo "--- N=$N depth_rule=$D seed=$SEED already done, skipped"
+    return 0
+  fi
   echo "--- N=$N depth_rule=$D seed=$SEED samples_per_p=$PER_P"
   uv run python experiments/haar_readouts/haar_readouts.py \
     "models=haar_circuit" \
@@ -114,7 +121,7 @@ run_one() {
   fi
 }
 export -f run_one
-export OUT_DIR PER_P P_LIST R_LIST F_LIST FAILED_LOG
+export OUT_DIR PER_P P_LIST R_LIST F_LIST FAILED_LOG SKIP_DONE
 if (( MAX_JOBS > 1 )); then
   export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 fi

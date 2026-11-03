@@ -164,6 +164,20 @@ def test_bash_sweep_and_figures(tmp_path: Path, plot: ModuleType) -> None:
         for s in (1, 2)
     ]
     run = tmp_path / "haar_fixed_N4_TN_seed1"
+    # SKIP_DONE=1 resumes a sweep: the runs already done are not rerun.
+    done = (run / "metrics.json").stat().st_mtime_ns
+    (tmp_path / "haar_fixed_N3_T2_seed2" / "metrics.json").unlink()
+    result = subprocess.run(
+        ["bash", str(BASH_SCRIPT)],
+        check=True,
+        env={**env, "SKIP_DONE": "1"},
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert result.stdout.count("already done, skipped") == 7
+    assert (run / "metrics.json").stat().st_mtime_ns == done
+    assert (tmp_path / "haar_fixed_N3_T2_seed2" / "metrics.json").is_file()
     assert not (run / "haar_readouts.npz").exists()
     metrics = json.loads((run / "metrics.json").read_text())
     assert metrics["n_rounds"] == 4
@@ -174,6 +188,7 @@ def test_bash_sweep_and_figures(tmp_path: Path, plot: ModuleType) -> None:
         "depth_profiles",
         "depth_crossings",
         "depth_cost",
+        "depth_collapse",
         "depth_edges",
         "depth_conditioning",
     ):

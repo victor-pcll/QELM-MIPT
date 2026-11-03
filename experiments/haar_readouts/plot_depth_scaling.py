@@ -17,6 +17,8 @@ seeds (standard error as error bars) and writes, in the sweep folder unless
   the crossing points ``p_x`` of the accuracy curves of successive sizes;
   right, the same for ``S_R``. The rule whose crossings agree best (the
   smallest spread over the pairs of sizes) is drawn in :data:`ACCENT`;
+- ``depth_collapse``: the accuracy of every rule and ``N`` against ``p``
+  and against ``p N T``, the mean number of measurements of the circuit;
 - ``depth_cost``: left, the simulation time of one run against ``T``, one
   curve per ``N``; right, the steepest accuracy slope against that time;
 - ``depth_edges``: the variance over the trajectories of ``<Z_i>`` against
@@ -393,10 +395,73 @@ def draw_crossings(
                 lw=2.5 if rule == summary[best_key] else 1.5,
             )
             table[f"{rule}: {key}"] = points
+        if not any(
+            c["p_x"] is not None for r in rules for c in summary["rules"][r][key]
+        ):
+            ax.text(
+                0.5,
+                0.5,
+                "no crossing\nfor any rule",
+                transform=ax.transAxes,
+                ha="center",
+                va="center",
+                fontsize=14,
+                color="0.3",
+            )
+            ax.set_xticks([])
+            ax.set_yticks([])
         ax.set_xlabel("mean N of the pair (N, N + 2)")
         ax.set_ylabel(r"crossing $p_\times$")
         ax.set_title(text)
         ax.legend(fontsize=9)
+    return fig, table
+
+
+def draw_collapse(
+    rows: list[dict[str, Any]], summary: dict[str, Any]
+) -> tuple[plt.Figure, dict[str, Any]]:
+    """Accuracy against ``p`` and against ``p N T``, every rule and ``N``.
+
+    ``p N T`` is the mean number of measurements in the whole circuit. Left:
+    the curves against ``p``; right: against ``p N T``, where they fall on
+    each other if that number alone sets the drop. Colors are the sizes,
+    markers the rules.
+    """
+    colors = _size_colors(rows)
+    markers = {"10": "o", "N": "s", "2N": "^"}
+    fig, (ax_p, ax_n) = subplots(1, 2, figsize=(11.5, 4.6))
+    table: dict[str, Any] = {}
+    for rule, by_n in groups(rows).items():
+        for n, runs in by_n.items():
+            T = int(runs[0]["n_rounds"])
+            p, acc, err = curve(runs, f"accuracy_{SCORE}")
+            style = {
+                "marker": markers.get(rule, "D"),
+                "ms": 4,
+                "color": colors[n],
+                "lw": 1,
+            }
+            label = f"N = {n}, T = {T} (rule {rule})"
+            ax_p.errorbar(p, acc, yerr=err, label=label, **style)
+            ax_n.errorbar(p * n * T, acc, yerr=err, label=label, **style)
+            fit = summary["rules"][rule]["sizes"][str(n)]["fit"]
+            table[label] = {
+                "p": p.tolist(),
+                "pNT": (p * n * T).tolist(),
+                "accuracy": acc.tolist(),
+                "p0_N_T": fit["p0"] * n * T,
+            }
+    for ax in (ax_p, ax_n):
+        ax.axhline(0.5, color="0.6", lw=1)
+        ax.set_ylim(0.4, 1.02)
+        ax.set_ylabel("accuracy on the charge sector (test)")
+    ax_p.set_xlabel("p")
+    ax_p.set_xlim(-0.005, 0.2)
+    ax_p.set_title("QELM ridge, every rule and N")
+    ax_n.set_xlabel(r"mean number of measurements $p\,N\,T$")
+    ax_n.set_xlim(-0.5, 20)
+    ax_n.set_title("The same against p N T")
+    ax_n.legend(fontsize=7, ncol=2)
     return fig, table
 
 
@@ -489,7 +554,7 @@ def draw_edges(rows: list[dict[str, Any]]) -> tuple[plt.Figure, dict[str, Any]] 
                 "edge_over_center": edge / center if center > 0 else float("nan"),
             }
         T = int(runs[0]["n_rounds"])
-        ax.set_title(f"N = {n_max}, {RULE_TITLES.get(rule, rule)} (T = {T})")
+        ax.set_title(f"N = {n_max}, T = {T} (rule {rule})")
         ax.set_xlabel("site i")
         ax.legend(fontsize=9)
     axes[0, 0].set_ylabel(r"Var$_{\mathrm{traj}}\,\langle Z_i \rangle$")
@@ -538,6 +603,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         ("depth_profiles", draw_profiles(rows, summary)),
         ("depth_crossings", draw_crossings(rows, summary)),
         ("depth_cost", draw_cost(rows, summary)),
+        ("depth_collapse", draw_collapse(rows, summary)),
         ("depth_edges", draw_edges(rows)),
         ("depth_conditioning", draw_conditioning(rows)),
     ):
