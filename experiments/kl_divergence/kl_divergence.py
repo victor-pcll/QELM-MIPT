@@ -58,16 +58,130 @@ from QELM import check_qubit_counts, set_seed
 from QELM.evaluation.kl_divergence import (
     BOUNDS,
     STATISTICS,
+    averaged_log_likelihood,
     circuit_ensemble_statistics,
     circuit_log_likelihood_ratio,
     divergence_statistics,
     draw_circuit,
+    hypothesis_states,
+    log_ratio,
     sample_circuit_records,
+    sample_state_records,
     sep_log_likelihood_ratio,
     split_by_charge,
+    state_log_likelihood,
 )
 from QELM.evaluation.learnability import default_charges, sample_records
 from QELM.utils import save_config
+
+Arrays = tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+
+
+def _charge_u1(
+    L: int,
+    p: float,
+    depth: int,
+    charges: tuple[int, ...],
+    boundary: str,
+    every: str,
+    n_records: int,
+    batch: int,
+    n_circuits: int,
+    per_circuit: int,
+    rng: np.random.Generator,
+) -> Arrays:
+    """Charge encoding with U(1) gates, the setup of Barratt et al."""
+    llr, charge = [], []
+    for start in range(0, n_records, batch):
+        records = sample_records(
+            L,
+            p,
+            min(batch, n_records - start),
+            depth=depth,
+            charges=charges,
+            boundary=boundary,
+            measure_every=every,
+            rng=rng,
+        )
+        llr.append(sep_log_likelihood_ratio(records.outcomes, charges, boundary, every))
+        charge.append(records.charge)
+    circuit_llr = np.zeros((n_circuits, per_circuit))
+    circuit_charge = np.zeros((n_circuits, per_circuit), dtype=int)
+    for c in range(n_circuits):
+        circuit = draw_circuit(L, depth, boundary, every, rng)
+        outcomes, ch = sample_circuit_records(
+            L,
+            p,
+            per_circuit,
+            circuit,
+            charges=charges,
+            boundary=boundary,
+            measure_every=every,
+            rng=rng,
+        )
+        circuit_llr[c] = circuit_log_likelihood_ratio(
+            outcomes, circuit, charges, boundary, every
+        )
+        circuit_charge[c] = ch
+    return np.concatenate(llr), np.concatenate(charge), circuit_llr, circuit_charge
+
+
+def _states(
+    L: int,
+    p: float,
+    depth: int,
+    labels: tuple[int, ...],
+    states: list[np.ndarray],
+    gates: str,
+    boundary: str,
+    every: str,
+    n_records: int,
+    batch: int,
+    n_circuits: int,
+    per_circuit: int,
+    rng: np.random.Generator,
+) -> Arrays:
+    """Any encoding and gate set (:func:`hypothesis_states`, issue #270)."""
+    llr, charge = [], []
+    for start in range(0, n_records, batch):
+        outcomes, label = sample_state_records(
+            L,
+            p,
+            min(batch, n_records - start),
+            states,
+            depth=depth,
+            gates=gates,
+            boundary=boundary,
+            measure_every=every,
+            rng=rng,
+        )
+        logs = [
+            averaged_log_likelihood(outcomes, psi, gates, boundary, every)
+            for psi in states
+        ]
+        llr.append(log_ratio(*logs))
+        charge.append(np.asarray(labels)[label])
+    circuit_llr = np.zeros((n_circuits, per_circuit))
+    circuit_charge = np.zeros((n_circuits, per_circuit), dtype=int)
+    for c in range(n_circuits):
+        circuit = draw_circuit(L, depth, boundary, every, rng, gates=gates)
+        outcomes, label = sample_state_records(
+            L,
+            p,
+            per_circuit,
+            states,
+            circuit=circuit,
+            boundary=boundary,
+            measure_every=every,
+            rng=rng,
+        )
+        logs = [
+            state_log_likelihood(outcomes, circuit, psi, boundary, every)
+            for psi in states
+        ]
+        circuit_llr[c] = log_ratio(*logs)
+        circuit_charge[c] = np.asarray(labels)[label]
+    return np.concatenate(llr), np.concatenate(charge), circuit_llr, circuit_charge
 
 
 def run(cfg: DictConfig) -> dict[str, Any]:
@@ -102,48 +216,31 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     for name, value in (("batch", batch), ("records_per_circuit", per_circuit)):
         if value < 2 or value % 2:
             raise ValueError(f"kl.{name} must be even and >= 2, got {value}.")
+    encoding = str(params.get("encoding", "charge"))
+    gates = str(params.get("gates", "u1"))
+    site = params.get("site", None)
     rng = np.random.default_rng(seed)
-
-    llr, charge = [], []
-    for start in range(0, n_records, batch):
-        records = sample_records(
-            L,
-            p,
-            min(batch, n_records - start),
-            depth=depth,
-            charges=charges,
-            boundary=boundary,
-            measure_every=every,
-            rng=rng,
+    if encoding == "charge" and gates == "u1":
+        sep_llr, sep_charge, circuit_llr, circuit_charge = _charge_u1(
+            L, p, depth, charges, boundary, every, n_records, batch, n_circuits,
+            per_circuit, rng,
+        )  # fmt: skip
+        labels: tuple[int, ...] = tuple(charges)
+    else:
+        labels, states = hypothesis_states(L, encoding, charges, site)
+        sep_llr, sep_charge, circuit_llr, circuit_charge = _states(
+            L, p, depth, labels, states, gates, boundary, every, n_records, batch,
+            n_circuits, per_circuit, rng,
+        )  # fmt: skip
+    sep = divergence_statistics(*split_by_charge(sep_llr, sep_charge, labels))
+    per_stats = [
+        divergence_statistics(
+            *split_by_charge(circuit_llr[c], circuit_charge[c], labels)
         )
-        llr.append(sep_log_likelihood_ratio(records.outcomes, charges, boundary, every))
-        charge.append(records.charge)
-    sep_llr, sep_charge = np.concatenate(llr), np.concatenate(charge)
-    sep = divergence_statistics(*split_by_charge(sep_llr, sep_charge, charges))
-
-    circuit_llr = np.zeros((n_circuits, per_circuit))
-    circuit_charge = np.zeros((n_circuits, per_circuit), dtype=int)
-    per_stats = []
-    for c in range(n_circuits):
-        circuit = draw_circuit(L, depth, boundary, every, rng)
-        outcomes, ch = sample_circuit_records(
-            L,
-            p,
-            per_circuit,
-            circuit,
-            charges=charges,
-            boundary=boundary,
-            measure_every=every,
-            rng=rng,
-        )
-        circuit_llr[c] = circuit_log_likelihood_ratio(
-            outcomes, circuit, charges, boundary, every
-        )
-        circuit_charge[c] = ch
-        per_stats.append(
-            divergence_statistics(*split_by_charge(circuit_llr[c], ch, charges))
-        )
+        for c in range(n_circuits)
+    ]
     ensemble = circuit_ensemble_statistics(per_stats) if per_stats else {}
+    charges = labels
 
     return {
         "llr": sep_llr,
@@ -153,6 +250,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "p": p,
         "L": L,
         "charges": charges,
+        "encoding": encoding,
+        "gates": gates,
         "n_records": int(sep_llr.size),
         "n_circuits": n_circuits,
         **{f"sep_{k}": v for k, v in sep.items()},
@@ -166,6 +265,8 @@ def metrics(results: dict[str, Any]) -> dict[str, Any]:
         "p": float(results["p"]),
         "L": int(results["L"]),
         "charges": [int(q) for q in results["charges"]],
+        "encoding": str(results.get("encoding", "charge")),
+        "gates": str(results.get("gates", "u1")),
         "n_records": int(results["n_records"]),
         "n_circuits": int(results["n_circuits"]),
     }

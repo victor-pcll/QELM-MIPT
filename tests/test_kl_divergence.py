@@ -16,17 +16,24 @@ from scipy.stats import norm
 from QELM.evaluation.kl_divergence import (
     BOUNDS,
     STATISTICS,
+    averaged_log_likelihood,
     circuit_ensemble_statistics,
     circuit_log_likelihood,
     circuit_log_likelihood_ratio,
     divergence_statistics,
     draw_circuit,
+    hypothesis_states,
+    log_ratio,
+    random_gates,
     sample_circuit_records,
+    sample_state_records,
     sep_log_likelihood_ratio,
     split_by_charge,
+    state_log_likelihood,
 )
 from QELM.evaluation.learnability import (
     UNMEASURED,
+    charge_state,
     default_charges,
     sample_records,
     sep_log_likelihood,
@@ -311,3 +318,103 @@ def test_circuit_ensemble_statistics() -> None:
     assert out["kl_plus_minus_n_infinite"] == 1
     with pytest.raises(ValueError):
         circuit_ensemble_statistics([])
+
+
+# ---------------------------------------------------------------------------
+# Local encoding and Haar U(4) gates (reference qubit, issue #270 follow-up)
+
+
+@pytest.mark.parametrize("gates", ["u1", "u4"])
+def test_averaged_law_is_normalized_and_is_the_haar_average(gates: str) -> None:
+    records = all_records()
+    loc = location_log_prob(records, P)
+    _, states = hypothesis_states(L, "local")
+    for psi in states:
+        log_p = averaged_log_likelihood(records, psi, gates) + loc
+        assert np.exp(log_p).sum() == pytest.approx(1.0, abs=1e-12)
+    record = np.array([[[1, UNMEASURED, 0, UNMEASURED], [UNMEASURED, 1, 1, 0]]])
+    rng = np.random.default_rng(11)
+    for psi in states:
+        probs = [
+            math.exp(
+                state_log_likelihood(
+                    record, draw_circuit(L, 1, rng=rng, gates=gates), psi
+                )[0]
+            )
+            for _ in range(3000)
+        ]
+        sem = np.std(probs) / math.sqrt(len(probs))
+        exact = math.exp(averaged_log_likelihood(record, psi, gates)[0])
+        assert np.mean(probs) == pytest.approx(exact, abs=5 * sem + 1e-12)
+
+
+def test_averaged_u1_law_from_charge_states_is_the_sep() -> None:
+    records = all_records()[:500]
+    for q in CHARGES:
+        assert np.allclose(
+            averaged_log_likelihood(records, charge_state(L, q), "u1"),
+            sep_log_likelihood(records, q),
+        )
+
+
+def test_hypothesis_states() -> None:
+    labels, states = hypothesis_states(4, "local")
+    assert labels == (0, 1)
+    # Neel |0101> with site 2 set to 0 or 1: |0101> -> |0101>, |0111>.
+    assert [int(np.argmax(np.abs(s))) for s in states] == [0b0101, 0b0111]
+    labels, states = hypothesis_states(4, "local", site=1)
+    assert [int(np.argmax(np.abs(s))) for s in states] == [0b0001, 0b0101]
+    labels, states = hypothesis_states(4, "charge")
+    assert labels == (2, 1)
+    assert np.allclose(states[0], charge_state(4, 2))
+    with pytest.raises(ValueError, match="encoding"):
+        hypothesis_states(4, "global")
+    with pytest.raises(ValueError, match="site"):
+        hypothesis_states(4, "local", site=4)
+
+
+def test_u4_gates_are_unitary_and_rejected_when_unknown() -> None:
+    gates = random_gates(50, "u4", np.random.default_rng(12))
+    eye = np.einsum("nij,nkj->nik", gates, gates.conj())
+    assert np.allclose(eye, np.eye(4))
+    with pytest.raises(ValueError, match="gates"):
+        random_gates(2, "so4", np.random.default_rng(0))
+    with pytest.raises(ValueError, match="gates"):
+        averaged_log_likelihood(np.zeros((1, 2, L), np.int8), charge_state(L, 2), "x")
+
+
+def test_local_u4_has_no_infinite_mass_and_matches_exact_sums() -> None:
+    """Without a conserved charge, no record is impossible: the KL is finite."""
+    records = all_records()
+    loc = location_log_prob(records, P)
+    _, states = hypothesis_states(L, "local")
+    circuit = draw_circuit(L, DEPTH, rng=np.random.default_rng(13), gates="u4")
+    logs = [state_log_likelihood(records, circuit, s) + loc for s in states]
+    exact = exact_divergences(*logs)
+    assert exact["infinite_mass_plus"] == exact["infinite_mass_minus"] == 0.0
+    outcomes, label = sample_state_records(
+        L, P, 20000, states, circuit=circuit, rng=np.random.default_rng(14)
+    )
+    llr = log_ratio(*(state_log_likelihood(outcomes, circuit, s) for s in states))
+    stats = divergence_statistics(llr[label == 0], llr[label == 1])
+    assert math.isfinite(stats["kl_plus_minus"])
+    assert stats["bound_le_cam"] > 0
+    assert_close(stats, exact)
+    # Averaged over the Haar U(4) gates, the two laws are the same.
+    averaged = [averaged_log_likelihood(records, s, "u4") for s in states]
+    assert np.allclose(averaged[0], averaged[1])
+
+
+def test_local_u1_keeps_the_infinite_mass() -> None:
+    """With U(1) gates the two branches differ by one particle, as for Q."""
+    records = all_records()
+    loc = location_log_prob(records, P)
+    _, states = hypothesis_states(L, "local")
+    logs = [averaged_log_likelihood(records, s, "u1") + loc for s in states]
+    assert exact_divergences(*logs)["infinite_mass_plus"] > 0
+
+
+def test_sample_state_records_needs_a_circuit_or_a_depth() -> None:
+    _, states = hypothesis_states(L, "local")
+    with pytest.raises(ValueError, match="circuit or a depth"):
+        sample_state_records(L, P, 4, states)

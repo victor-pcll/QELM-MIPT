@@ -86,6 +86,13 @@ def load_summary(sweep_dir: str | Path) -> list[dict[str, Any]]:
     return summarize(rows, by=("N", "p"), metrics=metrics)
 
 
+def _positive(summary: Sequence[dict[str, Any]], metric: str) -> bool:
+    """Whether ``metric`` is finite and positive somewhere in the sweep."""
+    return any(
+        np.isfinite(r[f"{metric}_mean"]) and r[f"{metric}_mean"] > 0 for r in summary
+    )
+
+
 def _has(summary: Sequence[dict[str, Any]], metric: str) -> bool:
     return any(np.isfinite(r[f"{metric}_mean"]) for r in summary)
 
@@ -280,8 +287,20 @@ def draw_finite_size(
         _curve(a, summary, N, "sep_js_bits", color, f"N = {N}", log=True)
         _curve(b, summary, N, "sep_infinite_mass", color, f"N = {N}", log=True)
         if _has(summary, "circuit_js_bits"):
-            _curve(a, summary, N, "circuit_js_bits", color, "", "--", log=True)
+            # Label the dashed curves when the solid ones are all 0 (not drawn).
+            label = "" if _positive(summary, "sep_js_bits") else f"N = {N}"
+            _curve(a, summary, N, "circuit_js_bits", color, label, "--", log=True)
             _curve(b, summary, N, "circuit_infinite_mass", color, "", "--", log=True)
+    if not any(
+        _positive(summary, f"{prefix}_infinite_mass") for prefix, _ in OBSERVERS
+    ):
+        b.text(
+            0.5,
+            0.5,
+            r"$\pi_\infty = 0$ at every $p$: the KL is finite",
+            transform=b.transAxes,
+            ha="center",
+        )
     for ax, title in (
         (a, "(a) $I(Q;M)$ [bits]"),
         (b, r"(b) infinite mass $\pi_\infty$"),
@@ -316,8 +335,13 @@ def draw_finite_size(
     c.legend(fontsize=9)
 
     betas: list[dict[str, float]] = []
+    prefix = "sep"
     if p_c is not None:
-        betas = fit_beta(summary, p_c)
+        # The observer who does not know the gates, unless it learns nothing
+        # (Haar U(4) gates and the local encoding): then the one who does.
+        prefix = "sep" if _positive(summary, "sep_jeffreys_finite") else "circuit"
+        metric = f"{prefix}_jeffreys_finite"
+        betas = fit_beta(summary, p_c, metric)
         for fit in betas:
             N = int(fit["N"])
             rows = [
@@ -325,11 +349,11 @@ def draw_finite_size(
                 for r in summary
                 if r["N"] == N
                 and float(r["p"]) > p_c
-                and np.isfinite(r["sep_jeffreys_finite_mean"])
-                and r["sep_jeffreys_finite_mean"] > 0
+                and np.isfinite(r[f"{metric}_mean"])
+                and r[f"{metric}_mean"] > 0
             ]
             x = np.array([float(r["p"]) - p_c for r in rows])
-            y = np.array([r["sep_jeffreys_finite_mean"] for r in rows])
+            y = np.array([r[f"{metric}_mean"] for r in rows])
             d.loglog(x, y, "o", color=colors[str(N)])
             d.loglog(
                 x,
@@ -342,7 +366,7 @@ def draw_finite_size(
             d.legend(fontsize=9)
     d.set_xlabel("$p - p_c$")
     d.set_ylabel(r"finite $D_{sym}$ [nats]")
-    d.set_title(r"(d) $D_{sym} \sim (p - p_c)^\beta$, gates unknown")
+    d.set_title(rf"(d) $D_{{sym}} \sim (p - p_c)^\beta$, {SHORT[prefix]}")
     return fig, axes, {"alpha": alphas, "beta": betas, "p_c": p_c}
 
 

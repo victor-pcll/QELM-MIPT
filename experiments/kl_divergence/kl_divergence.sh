@@ -23,6 +23,9 @@
 #     P_VALUES="0.05 0.1"         measurement probabilities
 #     JOBS=4                      runs in parallel (default 1)
 #     P_C=0.175                   dashed line of the figures
+#     ENCODING=local              charge (default) or local: the reference
+#                                 qubit in a Bell pair with the middle site
+#     GATES=u4                    u1 (default) or u4 (Haar U(4))
 
 set -euo pipefail
 
@@ -44,6 +47,8 @@ read -r -a SEEDS <<< "${SEEDS:-0}"
 read -r -a P_VALUES <<< "${P_VALUES:-0.05 0.075 0.1 0.125 0.15 0.175 0.2 0.225 0.25 0.275 0.3 0.325 0.35 0.375 0.4}"
 JOBS="${JOBS:-1}"
 P_C="${P_C:-0.175}"
+ENCODING="${ENCODING:-charge}"
+GATES="${GATES:-u1}"
 # -----------------------------------------------------------------------------
 
 STAMP="$(date +%Y-%m-%d_%H-%M-%S)"
@@ -63,6 +68,8 @@ run_one() {
     "kl.p=$P" \
     "kl.n_circuits=$N_C" \
     "kl.records_per_circuit=$PER_CIRCUIT" \
+    "kl.encoding=$ENCODING" \
+    "kl.gates=$GATES" \
     "hydra.run.dir=$RUN_DIR" > "$OUT_DIR/N${N}_seed${SEED}_p${P}.log" 2>&1 \
     || { cat "$OUT_DIR/N${N}_seed${SEED}_p${P}.log"; return 1; }
   echo "done N=$N seed=$SEED p=$P"

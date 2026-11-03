@@ -48,6 +48,7 @@ def test_config_composes_with_the_issue_parameters() -> None:
     assert cfg.samples.L == 8000
     assert (cfg.kl.L, cfg.kl.depth) == (8, 8)
     assert (cfg.kl.n_circuits, cfg.kl.records_per_circuit) == (20, 1000)
+    assert (cfg.kl.encoding, cfg.kl.gates, cfg.kl.site) == ("charge", "u1", None)
     cfg = load_config(["N=10"], config_name="kl_divergence")
     assert (cfg.kl.L, cfg.kl.depth) == (10, 10)
 
@@ -135,3 +136,20 @@ def test_fit_beta_recovers_a_power_law() -> None:
     (fit,) = plot.fit_beta(summary, 0.2)
     assert fit["beta"] == pytest.approx(0.7)
     assert fit["n_points"] == 3
+
+
+@pytest.mark.parametrize("gates", ["u1", "u4"])
+def test_run_with_the_local_encoding(gates: str, tmp_path: Path) -> None:
+    script = _load(SCRIPT)
+    out = script.run(_cfg("kl.p=0.3", "kl.encoding=local", f"kl.gates={gates}"))
+    assert out["charges"] == (0, 1)
+    assert set(np.unique(out["charge"])) == {0, 1}
+    if gates == "u4":
+        # No conserved charge: no record is impossible, and the Haar average
+        # forgets which branch the chain started in.
+        assert out["sep_infinite_mass"] == out["circuit_infinite_mass"] == 0.0
+        assert out["sep_js"] == pytest.approx(0.0, abs=1e-12)
+        assert out["circuit_js"] > 0.0
+    script.save(out, tmp_path)
+    metrics = json.loads((tmp_path / "metrics.json").read_text())
+    assert (metrics["encoding"], metrics["gates"]) == ("local", gates)

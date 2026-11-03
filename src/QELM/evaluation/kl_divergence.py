@@ -78,6 +78,7 @@ from QELM.evaluation.learnability import (
     _generator,
     apply_gates,
     charge_state,
+    default_charges,
     measurement_rounds,
     random_u1_gates,
     sep_log_likelihood,
@@ -141,7 +142,40 @@ def sep_log_likelihood_ratio(
     q_plus, q_minus = _two_charges(charges)
     log_plus = sep_log_likelihood(outcomes, q_plus, boundary, measure_every)
     log_minus = sep_log_likelihood(outcomes, q_minus, boundary, measure_every)
-    return _ratio(log_plus, log_minus)
+    return log_ratio(log_plus, log_minus)
+
+
+GATES = ("u1", "u4")
+ENCODINGS = ("charge", "local")
+
+
+def random_gates(n: int, gates: str, rng: np.random.Generator) -> np.ndarray:
+    """Draw ``n`` random two-qubit gates of the gate set ``gates``.
+
+    Args:
+        n: Number of gates.
+        gates: ``"u1"`` for the U(1) gates of
+            :func:`~QELM.evaluation.learnability.random_u1_gates` (they
+            conserve the charge), ``"u4"`` for Haar-random gates of U(4)
+            (they conserve nothing).
+        rng: Random generator.
+
+    Returns:
+        Complex array of shape ``(n, 4, 4)``.
+
+    Raises:
+        ValueError: If ``gates`` is unknown.
+    """
+    if gates == "u1":
+        return random_u1_gates(n, rng)
+    if gates == "u4":
+        z = (rng.standard_normal((n, 4, 4)) + 1j * rng.standard_normal((n, 4, 4))) / (
+            math.sqrt(2.0)
+        )
+        q, r = np.linalg.qr(z)
+        d = np.diagonal(r, axis1=1, axis2=2)
+        return np.asarray(q * (d / np.abs(d))[:, None, :])
+    raise ValueError(f"gates must be one of {GATES}, got {gates!r}.")
 
 
 def draw_circuit(
@@ -150,8 +184,9 @@ def draw_circuit(
     boundary: str = "open",
     measure_every: str = "layer",
     rng: np.random.Generator | None = None,
+    gates: str = "u1",
 ) -> list[np.ndarray]:
-    """Draw one random U(1) brickwork, the gates of every measurement round.
+    """Draw one random brickwork, the gates of every measurement round.
 
     Args:
         L: Number of sites, at least 2.
@@ -161,6 +196,8 @@ def draw_circuit(
             :func:`~QELM.evaluation.learnability.measurement_rounds`.
         rng: Random generator; ``None`` draws one from the global NumPy
             state.
+        gates: Gate set, ``"u1"`` (default) or ``"u4"``, see
+            :func:`random_gates`.
 
     Returns:
         One complex array per round, of shape ``(n_bonds, 4, 4)``: the gates
@@ -168,7 +205,57 @@ def draw_circuit(
     """
     gen = _generator(rng)
     rounds = measurement_rounds(L, depth, measure_every, boundary)
-    return [random_u1_gates(len(bonds), gen) for bonds in rounds]
+    return [random_gates(len(bonds), gates, gen) for bonds in rounds]
+
+
+def hypothesis_states(
+    L: int,
+    encoding: str,
+    charges: Sequence[int] | None = None,
+    site: int | None = None,
+) -> tuple[tuple[int, ...], list[np.ndarray]]:
+    """Return the labels and the initial chain state of each hypothesis.
+
+    - ``"charge"`` (Barratt et al.): label ``Q``, the chain in the uniform
+      superposition of the bitstrings of charge ``Q``
+      (:func:`~QELM.evaluation.learnability.charge_state`), ``charges``
+      ``(Q+, Q-)``, by default ``(L // 2, L // 2 - 1)``.
+    - ``"local"`` (Gullans and Huse): a reference qubit ``R`` in a Bell pair
+      with site ``site`` (``L // 2`` by default) of the Néel state
+      ``|0101...>`` (:func:`QELM.evaluation.purification.reference_bell_state`).
+      ``R`` is never touched, so its final Z outcome is its initial one:
+      the label is ``r = 0`` or ``1`` (prior 1/2 each), and given ``r`` the
+      chain starts in the Néel state with site ``site`` set to ``r``.
+
+    Args:
+        L: Number of sites.
+        encoding: ``"charge"`` or ``"local"``.
+        charges: Charges of the ``"charge"`` encoding.
+        site: Site paired with ``R`` in the ``"local"`` encoding.
+
+    Returns:
+        ``(labels, states)``: the two labels and the two normalized state
+        vectors of shape ``(2**L,)``.
+
+    Raises:
+        ValueError: If ``encoding`` is unknown or ``site`` out of range.
+    """
+    if encoding == "charge":
+        qs = _two_charges(default_charges(L) if charges is None else charges)
+        return qs, [charge_state(L, q).astype(complex) for q in qs]
+    if encoding == "local":
+        x0 = L // 2 if site is None else int(site)
+        if not 0 <= x0 < L:
+            raise ValueError(f"site must be in [0, {L - 1}], got {x0}.")
+        neel = int("".join("01"[i % 2] for i in range(L)), 2)
+        mask = 1 << (L - 1 - x0)
+        states = []
+        for r in (0, 1):
+            psi = np.zeros(2**L, dtype=complex)
+            psi[(neel & ~mask) | (mask if r else 0)] = 1.0
+            states.append(psi)
+        return (0, 1), states
+    raise ValueError(f"encoding must be one of {ENCODINGS}, got {encoding!r}.")
 
 
 def _apply_round(
@@ -179,6 +266,85 @@ def _apply_round(
     for gate, (i, j) in zip(gates, bonds, strict=True):
         psi = apply_gates(psi, np.broadcast_to(gate, (n, 4, 4)), i, j)
     return psi
+
+
+def sample_state_records(
+    L: int,
+    p: float,
+    n_records: int,
+    states: Sequence[np.ndarray],
+    *,
+    circuit: Sequence[np.ndarray] | None = None,
+    depth: int | None = None,
+    gates: str = "u1",
+    boundary: str = "open",
+    measure_every: str = "layer",
+    rng: np.random.Generator | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Draw records by the Born rule, from given initial states.
+
+    Record ``k`` starts in ``states[k % len(states)]``. With ``circuit``,
+    every record goes through those gates; without it, each record gets its
+    own random circuit of ``depth`` steps of the gate set ``gates`` (records
+    of the Haar-averaged law). After the gates of each round, every site is
+    measured in Z with probability ``p``.
+
+    Args:
+        L: Number of sites.
+        p: Measurement probability per site and per round, in ``[0, 1]``.
+        n_records: Number of records.
+        states: Initial state vectors, shape ``(2**L,)`` each.
+        circuit: Fixed gates of every round, from :func:`draw_circuit`;
+            ``None`` for a fresh circuit per record.
+        depth: Number of time steps without ``circuit``.
+        gates: Gate set of the fresh circuits, see :func:`random_gates`.
+        boundary: ``"open"`` or ``"periodic"``.
+        measure_every: ``"layer"`` or ``"period"``.
+        rng: Random generator; ``None`` draws one from the global NumPy
+            state.
+
+    Returns:
+        ``(outcomes, label)``: the records, shape ``(n, rounds, L)``, and the
+        index in ``states`` of the start of each, shape ``(n,)``.
+
+    Raises:
+        ValueError: If an argument is out of range, or neither ``circuit``
+            nor ``depth`` is given.
+    """
+    if not 0.0 <= p <= 1.0:
+        raise ValueError(f"p must be in [0, 1], got {p}.")
+    if n_records < 1:
+        raise ValueError(f"n_records must be >= 1, got {n_records}.")
+    if circuit is not None:
+        rounds = _rounds_of(L, circuit, boundary, measure_every)
+    elif depth is not None:
+        rounds = measurement_rounds(L, int(depth), measure_every, boundary)
+    else:
+        raise ValueError("Give a circuit or a depth.")
+    gen = _generator(rng)
+    bits = site_bits(L)
+    label = np.arange(n_records) % len(states)
+    psi = np.stack([np.asarray(states[int(k)], dtype=np.complex128) for k in label])
+    outcomes = np.full((n_records, len(rounds), L), UNMEASURED, dtype=np.int8)
+    for t, bonds in enumerate(rounds):
+        if circuit is not None:
+            psi = _apply_round(psi, circuit[t], bonds)
+        else:
+            for i, j in bonds:
+                psi = apply_gates(psi, random_gates(n_records, gates, gen), i, j)
+        measured = gen.random((n_records, L)) < p
+        draws = gen.random((n_records, L))
+        for site in range(L):
+            rows = np.flatnonzero(measured[:, site])
+            if rows.size == 0:
+                continue
+            p_one = (np.abs(psi[rows][:, bits[:, site] == 1]) ** 2).sum(axis=1)
+            outcome = (draws[rows, site] < p_one).astype(np.int8)
+            kept = psi[rows] * (bits[None, :, site] == outcome[:, None])
+            kept /= np.linalg.norm(kept, axis=1, keepdims=True)
+            psi[rows] = kept
+            outcomes[rows, t, site] = outcome
+    return outcomes, label
 
 
 def sample_circuit_records(
@@ -192,11 +358,12 @@ def sample_circuit_records(
     measure_every: str = "layer",
     rng: np.random.Generator | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Draw records of one fixed circuit, by the Born rule.
+    """Draw records of one fixed circuit from charge states, by the Born rule.
 
-    As :func:`~QELM.evaluation.learnability.sample_records`, but every
-    record goes through the same gates ``circuit``; only the measured sites
-    and the outcomes are random.
+    :func:`sample_state_records` from the states
+    :func:`~QELM.evaluation.learnability.charge_state` of ``charges``:
+    every record goes through the same gates ``circuit``; only the measured
+    sites and the outcomes are random.
 
     Args:
         L: Number of sites.
@@ -218,53 +385,39 @@ def sample_circuit_records(
         ValueError: If ``p`` or ``n_records`` is out of range, or the circuit
             does not have one array per round.
     """
-    if not 0.0 <= p <= 1.0:
-        raise ValueError(f"p must be in [0, 1], got {p}.")
-    if n_records < 1:
-        raise ValueError(f"n_records must be >= 1, got {n_records}.")
-    rounds = _rounds_of(L, circuit, boundary, measure_every)
-    gen = _generator(rng)
-    bits = site_bits(L)
     qs = [int(q) for q in charges]
-    charge = np.array([qs[k % len(qs)] for k in range(n_records)])
-    psi = np.stack([charge_state(L, q) for q in charge]).astype(complex)
-    outcomes = np.full((n_records, len(rounds), L), UNMEASURED, dtype=np.int8)
-    for t, bonds in enumerate(rounds):
-        psi = _apply_round(psi, circuit[t], bonds)
-        measured = gen.random((n_records, L)) < p
-        draws = gen.random((n_records, L))
-        for site in range(L):
-            rows = np.flatnonzero(measured[:, site])
-            if rows.size == 0:
-                continue
-            p_one = (np.abs(psi[rows][:, bits[:, site] == 1]) ** 2).sum(axis=1)
-            outcome = (draws[rows, site] < p_one).astype(np.int8)
-            kept = psi[rows] * (bits[None, :, site] == outcome[:, None])
-            kept /= np.linalg.norm(kept, axis=1, keepdims=True)
-            psi[rows] = kept
-            outcomes[rows, t, site] = outcome
-    return outcomes, charge
+    outcomes, label = sample_state_records(
+        L,
+        p,
+        n_records,
+        [charge_state(L, q) for q in qs],
+        circuit=circuit,
+        boundary=boundary,
+        measure_every=measure_every,
+        rng=rng,
+    )
+    return outcomes, np.asarray(qs)[label]
 
 
-def circuit_log_likelihood(
+def state_log_likelihood(
     outcomes: np.ndarray,
     circuit: Sequence[np.ndarray],
-    Q: int,
+    psi0: np.ndarray,
     boundary: str = "open",
     measure_every: str = "layer",
 ) -> np.ndarray:
-    """Return ``ln P(M | Q, U)`` of each record for the known circuit ``U``.
+    """Return ``ln P(M | psi0, U)`` of each record for the known circuit ``U``.
 
-    The state starts at :func:`charge_state` ``(L, Q)``; each round applies
-    the gates of ``circuit`` then projects the measured sites on their
-    outcomes. ``P(M | Q, U)`` is the squared norm left at the end (without
-    the factor of the measured positions, common to every ``Q``); the
-    state is renormalized after each round and the logarithms summed.
+    The state starts at ``psi0``; each round applies the gates of ``circuit``
+    then projects the measured sites on their outcomes. ``P(M | psi0, U)`` is
+    the squared norm left at the end (without the factor of the measured
+    positions, common to every hypothesis); the state is renormalized after
+    each round and the logarithms summed.
 
     Args:
         outcomes: Records of shape ``(n, rounds, L)``.
         circuit: Gates of every round, from :func:`draw_circuit`.
-        Q: Charge of the hypothesis.
+        psi0: Normalized initial state vector, shape ``(2**L,)``.
         boundary: ``"open"`` or ``"periodic"``, as used to draw ``circuit``.
         measure_every: ``"layer"`` or ``"period"``, as used to draw it.
 
@@ -279,7 +432,7 @@ def circuit_log_likelihood(
             f"The records have {outcomes.shape[1]} rounds, the circuit {len(rounds)}."
         )
     bits = site_bits(L)
-    psi = np.tile(charge_state(L, Q).astype(complex), (n, 1))
+    psi = np.tile(np.asarray(psi0, dtype=complex), (n, 1))
     log_p = np.zeros(n)
     for t, bonds in enumerate(rounds):
         psi = _apply_round(psi, circuit[t], bonds)
@@ -298,6 +451,121 @@ def circuit_log_likelihood(
         scale = np.where(alive, 1.0 / np.sqrt(np.where(alive, norm2, 1.0)), 0.0)
         psi = psi * scale[:, None]
     return log_p
+
+
+def averaged_log_likelihood(
+    outcomes: np.ndarray,
+    psi0: np.ndarray,
+    gates: str = "u1",
+    boundary: str = "open",
+    measure_every: str = "layer",
+) -> np.ndarray:
+    """Return ``ln P(M | psi0)`` averaged over the random gates.
+
+    Each gate enters the Born probability once as ``U`` and once as
+    ``U^dagger``, so the average over independent gates is exact gate by
+    gate. On the diagonal of the density matrix:
+
+    - ``"u1"``: the symmetric exclusion process of
+      :func:`~QELM.evaluation.learnability.sep_log_likelihood`, the
+      configuration kept or the two bits swapped with probability 1/2;
+    - ``"u4"``: a Haar U(4) gate maps the pair to the maximally mixed state,
+      ``E[U rho U^dagger] = Tr_ij(rho) x I / 4``: the four configurations of
+      the pair become equally likely.
+
+    The start is the diagonal ``|psi0|^2``. This is exact when ``psi0`` is a
+    computational basis state (the ``"local"`` encoding), or when the first
+    round of gates removes the coherences, as for the charge states
+    (:mod:`QELM.evaluation.learnability`).
+
+    Args:
+        outcomes: Records of shape ``(n, rounds, L)``.
+        psi0: Initial state vector, shape ``(2**L,)``.
+        gates: ``"u1"`` or ``"u4"``.
+        boundary: ``"open"`` or ``"periodic"``.
+        measure_every: ``"layer"`` or ``"period"``; with ``"layer"`` the
+            number of rounds must be even.
+
+    Returns:
+        Array of shape ``(n,)``, ``-inf`` where the record is impossible.
+
+    Raises:
+        ValueError: If ``gates`` is unknown or the rounds do not match.
+    """
+    if gates not in GATES:
+        raise ValueError(f"gates must be one of {GATES}, got {gates!r}.")
+    outcomes = np.asarray(outcomes)
+    n, n_rounds, L = outcomes.shape
+    per_step = 2 if measure_every == "layer" else 1
+    if n_rounds % per_step:
+        raise ValueError(
+            f"measure_every='layer' needs an even number of rounds, got {n_rounds}."
+        )
+    rounds = measurement_rounds(L, n_rounds // per_step, measure_every, boundary)
+    bits = site_bits(L)
+    configs = np.arange(2**L)
+
+    def partners(i: int, j: int) -> np.ndarray:
+        """The 4 configurations reached by setting the bits of ``i``, ``j``."""
+        mi, mj = 1 << (L - 1 - i), 1 << (L - 1 - j)
+        base = configs & ~(mi | mj)
+        return np.stack([base | a | b for a in (0, mi) for b in (0, mj)])
+
+    def swap(i: int, j: int) -> np.ndarray:
+        flip = (1 << (L - 1 - i)) | (1 << (L - 1 - j))
+        return np.where(bits[:, i] != bits[:, j], configs ^ flip, configs)
+
+    maps = [
+        [swap(i, j) if gates == "u1" else partners(i, j) for i, j in bonds]
+        for bonds in rounds
+    ]
+    v = np.tile(np.abs(np.asarray(psi0)) ** 2, (n, 1))
+    log_p = np.zeros(n)
+    for t in range(n_rounds):
+        for gate_map in maps[t]:
+            if gates == "u1":
+                v = 0.5 * (v + v[:, gate_map])
+            else:
+                v = 0.25 * v[:, gate_map].sum(axis=1)
+        m = outcomes[:, t, :]
+        for site in range(L):
+            measured = m[:, site] != UNMEASURED
+            if not measured.any():
+                continue
+            agree = bits[None, :, site] == m[:, site, None]
+            v = np.where(measured[:, None] & ~agree, 0.0, v)
+        total = v.sum(axis=1)
+        with np.errstate(divide="ignore"):
+            log_p += np.log(total)
+        v = np.divide(v, total[:, None], out=np.zeros_like(v), where=total[:, None] > 0)
+    return log_p
+
+
+def circuit_log_likelihood(
+    outcomes: np.ndarray,
+    circuit: Sequence[np.ndarray],
+    Q: int,
+    boundary: str = "open",
+    measure_every: str = "layer",
+) -> np.ndarray:
+    """Return ``ln P(M | Q, U)`` of each record for the known circuit ``U``.
+
+    :func:`state_log_likelihood` from :func:`charge_state` ``(L, Q)``.
+
+    Args:
+        outcomes: Records of shape ``(n, rounds, L)``.
+        circuit: Gates of every round, from :func:`draw_circuit`.
+        Q: Charge of the hypothesis.
+        boundary: ``"open"`` or ``"periodic"``, as used to draw ``circuit``.
+        measure_every: ``"layer"`` or ``"period"``, as used to draw it.
+
+    Returns:
+        Array of shape ``(n,)``, ``-inf`` where the record is impossible.
+    """
+    L = np.shape(outcomes)[2]
+    return state_log_likelihood(
+        outcomes, circuit, charge_state(L, Q), boundary, measure_every
+    )
 
 
 def circuit_log_likelihood_ratio(
@@ -327,7 +595,7 @@ def circuit_log_likelihood_ratio(
     log_minus = circuit_log_likelihood(
         outcomes, circuit, q_minus, boundary, measure_every
     )
-    return _ratio(log_plus, log_minus)
+    return log_ratio(log_plus, log_minus)
 
 
 def _two_charges(charges: Sequence[int]) -> tuple[int, int]:
@@ -337,7 +605,8 @@ def _two_charges(charges: Sequence[int]) -> tuple[int, int]:
     return qs[0], qs[1]
 
 
-def _ratio(log_plus: np.ndarray, log_minus: np.ndarray) -> np.ndarray:
+def log_ratio(log_plus: np.ndarray, log_minus: np.ndarray) -> np.ndarray:
+    """Return ``log_plus - log_minus``, refusing records impossible under both."""
     both = np.isneginf(log_plus) & np.isneginf(log_minus)
     if np.any(both):
         raise ValueError("A record has zero probability under both charges.")

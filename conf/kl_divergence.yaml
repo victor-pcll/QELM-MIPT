@@ -33,6 +33,12 @@ samples:
 #   skips this observer.
 # records_per_circuit: records drawn from each fixed circuit, half at each
 #   charge. Even.
+# encoding: what the observer learns. charge: the global charge Q (Barratt
+#   et al.); local: the Z outcome of a reference qubit in a Bell pair with
+#   site `site` of the Neel state (Gullans and Huse). See
+#   QELM.evaluation.kl_divergence.hypothesis_states.
+# gates: u1 (conserve the charge) or u4 (Haar U(4), conserve nothing).
+# site: site paired with the reference, null for N // 2.
 kl:
   L: ${N}
   p: 0.2
@@ -43,3 +49,6 @@ kl:
   batch: 4000
   n_circuits: 20
   records_per_circuit: 1000
+  encoding: charge
+  gates: u1
+  site: null

@@ -1225,7 +1225,9 @@ them), and writes the log-likelihood ratios `ln P(M | Q+) / P(M | Q-)` to
 Environment variables: `N_VALUES` (default `6 8 10`), `P_VALUES` (0.05 to 0.40
 by 0.025), `SEEDS` (`0`), `L` (8000), `N_C` (20), `PER_CIRCUIT` (1000),
 `JOBS` (runs in parallel, default 1), `P_C` (0.175, the dashed line and the
-origin of the fit `(p - p_c)**beta`), `OUT_ROOT`, `OUT_DIR`. The default sweep
+origin of the fit `(p - p_c)**beta`), `ENCODING` (`charge`, or `local` for a
+reference qubit in a Bell pair with the middle site), `GATES` (`u1`, or `u4`
+for Haar U(4) gates), `OUT_ROOT`, `OUT_DIR`. The default sweep
 takes about 1 h 30 min on one core, most of it at `N = 10` (about 4 min per
 `p`); with `JOBS=4` about 25 min. The report is in
 [`kl_divergence/README.md`](kl_divergence/README.md), the notebook

@@ -154,6 +154,72 @@ cluster can take `N = 12, 14` with the same launcher), `T = N`, open
 boundaries. `p_c = 0.175` in the figures is the value of the issue, drawn as a
 reference, not fitted.
 
+## Local encoding: a reference qubit on the middle site (validation, `N = 6, 8`)
+
+Does the infinite mass come from the global target? The same diagnostic
+with a local target (`kl.encoding=local`, `ENCODING=local` in the launcher):
+a reference qubit `R` in a Bell pair with site `N // 2` of the Néel state
+`|0101...>` (Gullans and Huse). `R` is never touched, so its final Z outcome
+`r` is its initial one; given `r`, the chain starts in the Néel state with
+the middle site set to `r` (`hypothesis_states`). Both gate sets were run
+(`kl.gates`): the U(1) gates above, and Haar U(4) gates, which conserve
+nothing (`GATES=u4`). For the observer who does not know the gates, the
+average over U(4) gates is exact as well: each gate leaves the pair in the
+maximally mixed state (`averaged_log_likelihood`). Sweep: `N = 6, 8`,
+`p = 0.05` to `0.40` by 0.05, seed 0, `L = 8000`, `N_c = 20` circuits of
+1000 records.
+
+- **With U(1) gates, `pi_inf` does not collapse.** The two branches still
+  differ by one particle (the Néel state with the middle site 0 or 1), so a
+  record that counts the particles of a round is again impossible under one
+  branch: `pi_inf = 0.03` to `0.95` (`N = 8`, `p = 0.05` to `0.4`), the same
+  as for the charge. The KL stays infinite. `I(r; M)` grows with `N` at every
+  `p` of the sweep (`alpha < 0`), with no crossing.
+- **With Haar U(4) gates, `pi_inf = 0` exactly and the KL is finite**, both
+  ways and for every circuit: no record is impossible when no charge is
+  conserved. The Le Cam bound is no longer trivial (0.10 to 0.22, below the
+  Bayes error 0.25 to 0.41). This is the clean setting for an
+  information-theoretic statement, with two caveats:
+  - the observer who does not know the gates learns **nothing**
+    (`I = 0`, accuracy 0.5 at every `p`): averaged over Haar U(4) gates, the
+    first gate on the middle site forgets which branch it started in, so the
+    two averaged laws are identical. Only the observer who knows the circuit
+    learns `r`;
+  - the label is the **Z outcome** of `R`. Once the record purifies `R`, its
+    Bloch vector points in a random direction, and `Z` is guessed right with
+    probability `(1 + |z|) / 2`, 3/4 on average for a uniform direction. The
+    Bayes accuracy indeed saturates at 0.75 (0.754 at `p = 0.4`, `N = 6`)
+    and `I(r; M)` at 0.28 bit, far from 1 bit: the KL of the Z label
+    measures purification only partly. The full purification is `S_R`
+    (`experiments/haar_readouts/`).
+  - The finite KL `D(P_0 || P_1)` of the observer who knows the circuit
+    grows smoothly from 0.14 to 1.03 nats (`N = 8`). `I(r; M)` for
+    `N = 6, 8` crosses near `p ~ 0.15`, close to the Haar MIPT
+    (`p_c ~ 0.17`), but with two sizes and an error of about 0.01 bit the
+    crossing is not resolved: `N = 10, 12` are needed (cluster).
+
+![Local encoding, U(1) gates](figures/local_u1_kl_vs_accuracy.png)
+
+**Figure 4. Local encoding, U(1) gates.** As Figure 1, the label being the Z
+outcome of the reference qubit paired with the middle site. The infinite mass
+(pink) is as large as for the charge. Produced by
+`ENCODING=local GATES=u1 N_VALUES="6 8" ./experiments/kl_divergence/kl_divergence.sh`.
+
+![Local encoding, Haar U(4) gates](figures/local_u4_kl_vs_accuracy.png)
+
+**Figure 5. Local encoding, Haar U(4) gates.** As Figure 1. Blue: the
+observer who does not know the gates stays at 0.5. Orange: the observer who
+knows the circuit, saturating at 3/4; bottom, its finite Jeffreys distance
+(green) and `I(r; M)` (purple); `pi_inf = 0`, hence not drawn. Shaded: spread
+between the 20 circuits.
+
+![Local encoding, Haar U(4) gates, finite size](figures/local_u4_kl_finite_size.png)
+
+**Figure 6. Local encoding, Haar U(4) gates, finite size.** As Figure 2 for
+the observer who knows the circuit: `I(r; M)` for `N = 6, 8` (a), `pi_inf = 0`
+(b), the rate `alpha` from two sizes only (c), and the finite Jeffreys
+distance against `p - p_c` (d).
+
 ## Figures
 
 ![Bayes accuracy and divergences against p](figures/kl_vs_accuracy.png)
