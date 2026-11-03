@@ -45,6 +45,7 @@ commands and every option of the launchers.
 | [`QELM_M/`](QELM_M/README.md) | charge sector from the record `M`, TFIM / Haar / Clifford | charge learning, double descent in the ratio |
 | [`QELM_Q/`](QELM_Q/README.md) | charge `Q` from `<Z_k>` and `M` over `(p, h)`, Bayes ceilings, Bayes-Ridge FSS | charge learning (task 1A) |
 | [`learnability/`](learnability/README.md) | Barratt et al. (2022), Fig. 2 | benchmark of charge learning |
+| [`kl_divergence/`](kl_divergence/README.md) | KL and Jensen-Shannon divergences between `P(M \| Q+)` and `P(M \| Q-)` | why the Bayes accuracy of charge learning takes off |
 | [`charge_sharpening/`](charge_sharpening/README.md) | Agrawal et al. (2024), Fig. 7 | benchmark of purification |
 | [`haar_readouts/`](haar_readouts/README.md) | sector of a purifying reference qubit, many decoders | purification decoding (task 1B) |
 | [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
@@ -1202,6 +1203,33 @@ several sizes `N` cross at `p_success ~ 0.2` in the paper. The figure is
 `notebooks/benchmarks/02_learnability_entropy.ipynb` runs the sweep, in
 `outputs/learnability_fig2c/<date_time>/` with `FIGURES=2c`, and plots
 Fig. 2c.
+
+## Run the KL divergence of the conditional record laws (issue #270)
+
+```bash
+./experiments/kl_divergence/kl_divergence.sh
+```
+
+It runs `experiments/kl_divergence/kl_divergence.py` (config
+`conf/kl_divergence.yaml`, library `QELM.evaluation.kl_divergence`) for every
+`N`, seed and `p`, in the learnability setup above, then
+`plot_kl_divergence.py` on the sweep. Each run draws `L` records from fresh
+circuits (the observer who does not know the gates, Haar-averaged likelihood)
+and `N_C` fixed circuits of `PER_CIRCUIT` records each (the observer who knows
+them), and writes the log-likelihood ratios `ln P(M | Q+) / P(M | Q-)` to
+`kl_divergence.npz` and the divergences to `metrics.json` (`sep_*` and
+`circuit_*`, see the docstring of the script). The figures
+`kl_vs_accuracy.png`, `kl_finite_size.png`, `kl_bounds.png` and the fits
+`scaling.json` land in the sweep folder, `outputs/kl_divergence/<date_time>/`.
+
+Environment variables: `N_VALUES` (default `6 8 10`), `P_VALUES` (0.05 to 0.40
+by 0.025), `SEEDS` (`0`), `L` (8000), `N_C` (20), `PER_CIRCUIT` (1000),
+`JOBS` (runs in parallel, default 1), `P_C` (0.175, the dashed line and the
+origin of the fit `(p - p_c)**beta`), `OUT_ROOT`, `OUT_DIR`. The default sweep
+takes about 1 h 30 min on one core, most of it at `N = 10` (about 4 min per
+`p`); with `JOBS=4` about 25 min. The report is in
+[`kl_divergence/README.md`](kl_divergence/README.md), the notebook
+`notebooks/results/09_kl_divergence.ipynb`.
 
 ## Run the charge of a random Haar or Clifford circuit with several readouts
 

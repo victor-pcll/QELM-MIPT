@@ -1,0 +1,45 @@
+# Separability of P(M | Q+) and P(M | Q-) through the Kullback-Leibler and
+# Jensen-Shannon divergences (issue #270). Primary config of
+# experiments/kl_divergence/kl_divergence.py: the learnability setup of
+# Barratt et al., PRL 129, 200602 (2022) (conf/learnability.yaml), with the
+# block below.
+#
+#   uv run python experiments/kl_divergence/kl_divergence.py N=8 kl.p=0.2
+defaults:
+  - config
+  - _self_
+
+# The chain of the learnability benchmark: N sites, no ancilla.
+N: 8
+Nr: 0
+
+# Records for the observer who does not know the gates (Haar-averaged
+# likelihood, Eve of Barratt et al.), each from a fresh circuit, half drawn
+# at each charge (PER_P = 8000 of the issue).
+samples:
+  L: 8000
+
+# Setup (QELM.evaluation.learnability and QELM.evaluation.kl_divergence).
+# p: probability of measuring each site after each layer (measure_every).
+# depth: number of time steps T, each an even then an odd layer; T = N as in
+#   the learnability benchmark.
+# charges: (Q+, Q-), null for (N // 2, N // 2 - 1).
+# boundary: open or periodic.
+# measure_every: layer (2 T rounds) or period (T rounds), as in
+#   conf/learnability.yaml.
+# batch: records simulated at once for the Haar-averaged observer; memory
+#   grows as batch * 2**N. Even, so each batch holds both charges equally.
+# n_circuits: N_c, fixed circuits for the observer who knows the gates; 0
+#   skips this observer.
+# records_per_circuit: records drawn from each fixed circuit, half at each
+#   charge. Even.
+kl:
+  L: ${N}
+  p: 0.2
+  depth: ${N}
+  charges: null
+  boundary: open
+  measure_every: layer
+  batch: 4000
+  n_circuits: 20
+  records_per_circuit: 1000
