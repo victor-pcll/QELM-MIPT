@@ -1,0 +1,50 @@
+# Statistical convergence of the QELM ridge in PER_P, the number of
+# trajectories per measurement probability (issue #267, follow-up of PR #261).
+# Primary config of experiments/per_p_convergence/per_p_convergence.py.
+#
+#   uv run python experiments/per_p_convergence/per_p_convergence.py
+defaults:
+  - config
+  - override models: haar_circuit
+  - _self_
+
+# One ancilla: the reference qubit R, qubit 0, entangled with the charge
+# sector of the N system qubits (ancilla_charge_sector), never acted on.
+Nr: 1
+N: 8
+
+# haar_circuit (conf/models/haar_circuit.yaml): open chain. Each circuit of
+# the ensemble is one fixed draw of the gates, kept for every p and every
+# trajectory; fixed_instance is set by the script.
+
+samples:
+  # 80 % train, 20 % test at each (circuit, p, PER_P), stratified on Y.
+  train_fraction: 0.8
+
+convergence:
+  # Measurement probabilities: the three regimes of the issue (0.05 volume
+  # law, 0.18 near p_c, 0.40 area law) and the points between them for the
+  # map accuracy(p, PER_P).
+  p_values: [0.02, 0.05, 0.08, 0.1, 0.12, 0.15, 0.18, 0.2, 0.25, 0.3, 0.4]
+  # The regimes drawn as curves by the plots.
+  regimes: [0.05, 0.18, 0.4]
+  # Trajectories per p, each twice the previous one. The trajectories of the
+  # largest value are simulated once per (circuit, p); each smaller value
+  # takes their first PER_P (nested sets).
+  per_p_values: [500, 1000, 2000, 4000, 8000, 16000, 32000]
+  # Independent Haar circuits (one fixed draw of gates each).
+  n_circuits: 20
+  # Indices of the circuits of this run; null runs 0 .. n_circuits - 1. Each
+  # circuit is seeded by (seed, its index), so a cluster can run the circuits
+  # in separate jobs (circuit_ids=[3]) and merge them afterwards
+  # (merge_per_p_convergence.py): the result is that of one run.
+  circuit_ids: null
+  # Rounds of (one brickwork period, measurement of each system qubit with
+  # probability p): T = N = 8, so that 2 T >= N (light cone across the chain).
+  n_rounds: 8
+  # Saturation criterion |mu(PER_P) - mu(2 PER_P)| < tolerance.
+  tolerance: 0.005
+  # Trajectories simulated together, as one array of state vectors.
+  batch_size: 2000
+  # Processes, one circuit each; 0 uses every core.
+  n_jobs: 0
