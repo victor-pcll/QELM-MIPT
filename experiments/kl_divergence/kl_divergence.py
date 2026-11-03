@@ -32,12 +32,22 @@ default, which git ignores):
 
 - ``kl_divergence.npz``: ``llr`` and ``charge`` of the records of step 1,
   and ``circuit_llr``, ``circuit_charge`` (shape ``(N_c, records)``) of
-  step 2;
+  step 2. Outside the default setup (``kl.encoding=local`` or
+  ``kl.gates=u4``), also the records of step 2, ``circuit_outcomes`` (shape
+  ``(N_c, records, rounds, N)``, -1 for an unmeasured site), and, for the
+  local encoding, ``circuit_bloch`` (shape ``(N_c, records, 3)``): the exact
+  ``(<X_R>, <Y_R>, <Z_R>)`` of the reference qubit given each record and
+  its circuit, the targets of a regression of the Bloch vector from ``M``;
 - ``metrics.json``: ``p``, ``L`` (chain length), ``n_records``,
   ``n_circuits``, every statistic of step 1 as ``sep_<key>`` with its Monte
   Carlo error ``sep_<key>_err``, and of step 2 as ``circuit_<key>`` (mean
   over the circuits), ``circuit_<key>_std`` (spread) and
-  ``circuit_<key>_err`` (``std / sqrt(N_c)``). An infinite KL is written
+  ``circuit_<key>_err`` (``std / sqrt(N_c)``). For the local encoding, the
+  purification of the reference qubit as well
+  (:data:`QELM.evaluation.kl_divergence.REFERENCE_STATISTICS`):
+  ``circuit_S_R``, ``circuit_information_R = 1 - S_R``,
+  ``circuit_purity_R``, ``circuit_bloch_norm``, ``circuit_abs_z`` and
+  ``circuit_z_accuracy``. An infinite KL is written
   ``Infinity``, which Python's ``json`` reads back as ``inf``;
 - ``.hydra/config.yaml`` and ``resolved_config.json``.
 """
@@ -57,6 +67,7 @@ from omegaconf import DictConfig
 from QELM import check_qubit_counts, set_seed
 from QELM.evaluation.kl_divergence import (
     BOUNDS,
+    REFERENCE_STATISTICS,
     STATISTICS,
     averaged_log_likelihood,
     circuit_ensemble_statistics,
@@ -65,6 +76,8 @@ from QELM.evaluation.kl_divergence import (
     draw_circuit,
     hypothesis_states,
     log_ratio,
+    reference_bloch,
+    reference_statistics,
     sample_circuit_records,
     sample_state_records,
     sep_log_likelihood_ratio,
@@ -140,8 +153,16 @@ def _states(
     n_circuits: int,
     per_circuit: int,
     rng: np.random.Generator,
-) -> Arrays:
-    """Any encoding and gate set (:func:`hypothesis_states`, issue #270)."""
+    local: bool = False,
+) -> tuple[np.ndarray, ...]:
+    """Any encoding and gate set (:func:`hypothesis_states`, issue #270).
+
+    Returns the four arrays of :func:`_charge_u1`, then, with the known
+    circuits, the records ``circuit_outcomes`` (shape ``(N_c, records,
+    rounds, L)``) and, for the ``"local"`` encoding, the Bloch vectors of the
+    reference qubit given each record ``circuit_bloch`` (shape ``(N_c,
+    records, 3)``; empty for ``"charge"``).
+    """
     llr, charge = [], []
     for start in range(0, n_records, batch):
         outcomes, label = sample_state_records(
@@ -163,6 +184,9 @@ def _states(
         charge.append(np.asarray(labels)[label])
     circuit_llr = np.zeros((n_circuits, per_circuit))
     circuit_charge = np.zeros((n_circuits, per_circuit), dtype=int)
+    rounds = (2 if every == "layer" else 1) * depth
+    circuit_outcomes = np.zeros((n_circuits, per_circuit, rounds, L), dtype=np.int8)
+    circuit_bloch = np.zeros((n_circuits, per_circuit, 3) if local else (0,))
     for c in range(n_circuits):
         circuit = draw_circuit(L, depth, boundary, every, rng, gates=gates)
         outcomes, label = sample_state_records(
@@ -181,7 +205,19 @@ def _states(
         ]
         circuit_llr[c] = log_ratio(*logs)
         circuit_charge[c] = np.asarray(labels)[label]
-    return np.concatenate(llr), np.concatenate(charge), circuit_llr, circuit_charge
+        circuit_outcomes[c] = outcomes
+        if local:
+            circuit_bloch[c] = reference_bloch(
+                outcomes, circuit, states, boundary, every
+            )
+    return (
+        np.concatenate(llr),
+        np.concatenate(charge),
+        circuit_llr,
+        circuit_charge,
+        circuit_outcomes,
+        circuit_bloch,
+    )
 
 
 def run(cfg: DictConfig) -> dict[str, Any]:
@@ -220,6 +256,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     gates = str(params.get("gates", "u1"))
     site = params.get("site", None)
     rng = np.random.default_rng(seed)
+    circuit_outcomes = np.zeros((0,), dtype=np.int8)
+    circuit_bloch = np.zeros((0,))
     if encoding == "charge" and gates == "u1":
         sep_llr, sep_charge, circuit_llr, circuit_charge = _charge_u1(
             L, p, depth, charges, boundary, every, n_records, batch, n_circuits,
@@ -228,9 +266,12 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         labels: tuple[int, ...] = tuple(charges)
     else:
         labels, states = hypothesis_states(L, encoding, charges, site)
-        sep_llr, sep_charge, circuit_llr, circuit_charge = _states(
+        (
+            sep_llr, sep_charge, circuit_llr, circuit_charge, circuit_outcomes,
+            circuit_bloch,
+        ) = _states(
             L, p, depth, labels, states, gates, boundary, every, n_records, batch,
-            n_circuits, per_circuit, rng,
+            n_circuits, per_circuit, rng, local=encoding == "local",
         )  # fmt: skip
     sep = divergence_statistics(*split_by_charge(sep_llr, sep_charge, labels))
     per_stats = [
@@ -240,6 +281,14 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         for c in range(n_circuits)
     ]
     ensemble = circuit_ensemble_statistics(per_stats) if per_stats else {}
+    if circuit_bloch.size:
+        reference = [reference_statistics(b) for b in circuit_bloch]
+        for key in REFERENCE_STATISTICS:
+            values = np.array([r[key] for r in reference])
+            std = float(np.std(values, ddof=1)) if values.size > 1 else 0.0
+            ensemble[key] = float(np.mean(values))
+            ensemble[f"{key}_std"] = std
+            ensemble[f"{key}_err"] = std / np.sqrt(values.size)
     charges = labels
 
     return {
@@ -247,6 +296,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "charge": sep_charge,
         "circuit_llr": circuit_llr,
         "circuit_charge": circuit_charge,
+        "circuit_outcomes": circuit_outcomes,
+        "circuit_bloch": circuit_bloch,
         "p": p,
         "L": L,
         "charges": charges,
@@ -294,6 +345,8 @@ def save(results: dict[str, Any], out_dir: Path) -> Path:
         charge=results["charge"],
         circuit_llr=results["circuit_llr"],
         circuit_charge=results["circuit_charge"],
+        circuit_outcomes=results.get("circuit_outcomes", np.zeros(0, np.int8)),
+        circuit_bloch=results.get("circuit_bloch", np.zeros(0)),
     )
     (out_dir / "metrics.json").write_text(json.dumps(metrics(results), indent=2) + "\n")
     return npz_path

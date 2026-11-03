@@ -42,7 +42,7 @@ import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from QELM.evaluation.kl_divergence import BOUNDS, STATISTICS
+from QELM.evaluation.kl_divergence import BOUNDS, REFERENCE_STATISTICS, STATISTICS
 from QELM.utils import latest_sweep, load_sweep, summarize
 from QELM.utils.plots import (
     COLORS,
@@ -80,6 +80,8 @@ def load_summary(sweep_dir: str | Path) -> list[dict[str, Any]]:
         metrics += [f"sep_{key}", f"circuit_{key}"]
         if key in STATISTICS:
             metrics += [f"sep_{key}_err", f"circuit_{key}_err", f"circuit_{key}_std"]
+    for key in REFERENCE_STATISTICS:
+        metrics += [f"circuit_{key}", f"circuit_{key}_err", f"circuit_{key}_std"]
     for row in rows:
         for m in metrics:
             row.setdefault(m, float("nan"))
@@ -189,6 +191,20 @@ def draw_kl_vs_accuracy(
                 style,
                 log=True,
                 spread=prefix == "circuit",
+            )
+        if _has(summary, "circuit_information_R"):
+            # Local encoding: what the record holds on the whole qubit R,
+            # 1 - <S_R>, next to I(r; M) of its Z label.
+            _curve(
+                bottom,
+                summary,
+                N,
+                "circuit_information_R",
+                COLORS[3],
+                r"$1 - \langle S_R \rangle$ [bits], gates known",
+                "--",
+                log=True,
+                spread=True,
             )
         _p_c_line(top, p_c)
         _p_c_line(bottom, p_c)

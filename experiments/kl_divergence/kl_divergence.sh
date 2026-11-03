@@ -26,6 +26,7 @@
 #     ENCODING=local              charge (default) or local: the reference
 #                                 qubit in a Bell pair with the middle site
 #     GATES=u4                    u1 (default) or u4 (Haar U(4))
+#     DEPTH_FACTOR=2              time steps T = DEPTH_FACTOR * N (default 1)
 
 set -euo pipefail
 
@@ -49,6 +50,7 @@ JOBS="${JOBS:-1}"
 P_C="${P_C:-0.175}"
 ENCODING="${ENCODING:-charge}"
 GATES="${GATES:-u1}"
+DEPTH_FACTOR="${DEPTH_FACTOR:-1}"
 # -----------------------------------------------------------------------------
 
 STAMP="$(date +%Y-%m-%d_%H-%M-%S)"
@@ -70,6 +72,7 @@ run_one() {
     "kl.records_per_circuit=$PER_CIRCUIT" \
     "kl.encoding=$ENCODING" \
     "kl.gates=$GATES" \
+    "kl.depth=$((DEPTH_FACTOR * N))" \
     "hydra.run.dir=$RUN_DIR" > "$OUT_DIR/N${N}_seed${SEED}_p${P}.log" 2>&1 \
     || { cat "$OUT_DIR/N${N}_seed${SEED}_p${P}.log"; return 1; }
   echo "done N=$N seed=$SEED p=$P"

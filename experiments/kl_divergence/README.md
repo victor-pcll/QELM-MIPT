@@ -190,8 +190,24 @@ maximally mixed state (`averaged_log_likelihood`). Sweep: `N = 6, 8`,
     probability `(1 + |z|) / 2`, 3/4 on average for a uniform direction. The
     Bayes accuracy indeed saturates at 0.75 (0.754 at `p = 0.4`, `N = 6`)
     and `I(r; M)` at 0.28 bit, far from 1 bit: the KL of the Z label
-    measures purification only partly. The full purification is `S_R`
-    (`experiments/haar_readouts/`).
+    measures purification only partly.
+- **The whole qubit: Bloch vector and `S_R`.** For the observer who knows
+  the circuit, the state of `R` given the record is computed exactly for
+  every record (`reference_bloch`): its Bloch vector `(<X_R>, <Y_R>, <Z_R>)`,
+  saved per record in `circuit_bloch` (the targets of a regression of the
+  Bloch vector from `M`), and its entropy `S_R`. The information the record
+  holds on `R` is `1 - <S_R>`. With U(4) gates, at `N = 8`, `<S_R>` falls
+  from 0.84 (`p = 0.05`) to 0.25 (`p = 0.2`) and 0.009 (`p = 0.4`): the
+  record purifies `R` almost completely, while the Z label keeps
+  `E|z| = 0.50` and an accuracy of 0.75. `1 - <S_R>` follows the finite
+  Jeffreys distance closely (Figure 5). Check: `(1 + E|z|) / 2` (from the
+  Bloch vectors) and the Bayes accuracy (from the likelihood ratios) agree
+  within 0.002. The size crossing of `<S_R>` (`N = 6` vs `8`) is near
+  `p ~ 0.1`, below the Haar `p_c ~ 0.17`; at `T = N` the purification is not
+  stationary (Gullans and Huse read `S_R` at later times), so this is not yet
+  an estimate of `p_c`. With U(1) gates the two branches differ in charge, `R`
+  purifies along Z, and the Z label carries everything (`I(r; M)` within
+  0.01 bit of `1 - <S_R>`).
   - The finite KL `D(P_0 || P_1)` of the observer who knows the circuit
     grows smoothly from 0.14 to 1.03 nats (`N = 8`). `I(r; M)` for
     `N = 6, 8` crosses near `p ~ 0.15`, close to the Haar MIPT
@@ -210,8 +226,9 @@ outcome of the reference qubit paired with the middle site. The infinite mass
 **Figure 5. Local encoding, Haar U(4) gates.** As Figure 1. Blue: the
 observer who does not know the gates stays at 0.5. Orange: the observer who
 knows the circuit, saturating at 3/4; bottom, its finite Jeffreys distance
-(green) and `I(r; M)` (purple); `pi_inf = 0`, hence not drawn. Shaded: spread
-between the 20 circuits.
+(green), `I(r; M)` of the Z label (purple) and the information on the whole
+qubit `1 - <S_R>` (yellow), which reaches 1 bit; `pi_inf = 0`, hence not
+drawn. Shaded: spread between the 20 circuits.
 
 ![Local encoding, Haar U(4) gates, finite size](figures/local_u4_kl_finite_size.png)
 
@@ -219,6 +236,49 @@ between the 20 circuits.
 the observer who knows the circuit: `I(r; M)` for `N = 6, 8` (a), `pi_inf = 0`
 (b), the rate `alpha` from two sizes only (c), and the finite Jeffreys
 distance against `p - p_c` (d).
+
+## Cluster runs
+
+What the sweeps above leave open, and the command for each (from the
+repository root; `JOBS` runs points in parallel, one core each; each run
+writes its own folder, so a sweep can also be split across jobs by
+`N_VALUES` and `P_VALUES` into the same `OUT_DIR`, then plotted with
+`plot_kl_divergence.py OUT_DIR`).
+
+1. **Local encoding, Haar U(4) gates: is there a size crossing of `S_R` and
+   of the finite KL, and where?** The main run. The observer who does not
+   know the gates learns nothing here, so `L` can be small.
+
+   ```bash
+   ENCODING=local GATES=u4 N_VALUES="8 10 12" L=200 N_C=20 PER_CIRCUIT=1000 \
+   P_VALUES="0.05 0.075 0.1 0.125 0.15 0.175 0.2 0.225 0.25 0.3 0.35 0.4" \
+   JOBS=<cores> ./experiments/kl_divergence/kl_divergence.sh
+   ```
+
+   Then the same with `DEPTH_FACTOR=2` (`T = 2N`), to check that the
+   crossing does not move with time. To read: `circuit_S_R` (and
+   `circuit_information_R`), `circuit_kl_plus_minus` (finite),
+   `circuit_jeffreys_finite`, `circuit_bound_le_cam`, against `p` for each
+   `N`. Per record, `kl_divergence.npz` keeps `circuit_outcomes` (the
+   record `M`) and `circuit_bloch` (the exact `(<X_R>, <Y_R>, <Z_R>)`), the
+   data of the regression below. Cost: the state vector of `N = 12` is 4096
+   amplitudes, about 20 times `N = 8` per record.
+2. **Charge encoding, U(1) gates, larger sizes**, to sharpen the crossing
+   of `I(Q; M)` at `p ~ 0.17`: `N_VALUES="12 14"` with the defaults
+   (`N = 14`: `2^14` configurations for the exclusion process and the
+   state vector; plan about 10 times `N = 10`).
+
+**Regression of the Bloch vector (next step, not in this experiment).** A
+decoder trained on `M` to output `(<X_R>, <Y_R>, <Z_R>)` instead of the Z
+label is free of the 3/4 ceiling: its target is the state of `R` given the
+record, and the purity `(1 + |r|^2) / 2` and `S_R` follow from it. Two
+points to fix before running it: the Bloch vector given `M` depends on the
+circuit (its direction is set by the gates), so the regression is
+meaningful for one fixed circuit at a time (the QELM setting), not across
+random circuits; and the exact Bayes decoder reaches `R^2 = 1` by
+construction, so the score to report is that of a decoder that does not
+simulate the circuit (ridge on `M` or on QELM features), against the exact
+targets of `circuit_bloch`.
 
 ## Figures
 

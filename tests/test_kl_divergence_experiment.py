@@ -150,6 +150,17 @@ def test_run_with_the_local_encoding(gates: str, tmp_path: Path) -> None:
         assert out["sep_infinite_mass"] == out["circuit_infinite_mass"] == 0.0
         assert out["sep_js"] == pytest.approx(0.0, abs=1e-12)
         assert out["circuit_js"] > 0.0
+    # The Bloch vector of R: its Z part estimates the same Bayes accuracy
+    # (another estimator, equal in expectation; 60 records).
+    assert out["circuit_bloch"].shape == (3, 20, 3)
+    assert out["circuit_outcomes"].shape == (3, 20, 8, 4)
+    assert out["circuit_z_accuracy"] == pytest.approx(
+        out["circuit_bayes_accuracy"], abs=0.05
+    )
+    assert 0.0 <= out["circuit_S_R"] <= 1.0
     script.save(out, tmp_path)
     metrics = json.loads((tmp_path / "metrics.json").read_text())
     assert (metrics["encoding"], metrics["gates"]) == ("local", gates)
+    assert "circuit_information_R" in metrics
+    with np.load(tmp_path / "kl_divergence.npz") as data:
+        assert data["circuit_bloch"].shape == (3, 20, 3)

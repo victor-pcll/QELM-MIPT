@@ -453,6 +453,138 @@ def state_log_likelihood(
     return log_p
 
 
+def reference_bloch(
+    outcomes: np.ndarray,
+    circuit: Sequence[np.ndarray],
+    states: Sequence[np.ndarray],
+    boundary: str = "open",
+    measure_every: str = "layer",
+) -> np.ndarray:
+    """Return the Bloch vector of the reference qubit given each record.
+
+    The ``"local"`` encoding (:func:`hypothesis_states`) is the state
+    ``(|0>_R |b_0> + |1>_R |b_1>) / sqrt(2)``. The circuit and the
+    projections on the record act on the chain only, as an operator ``K``,
+    and leave ``|0>_R K|b_0> + |1>_R K|b_1>``: the state of ``R`` given the
+    record is ``rho_rs = <K b_s | K b_r> / norm``. Both branches are evolved
+    together and renormalized together after each round.
+
+    ``z = <Z_R>`` is tied to the Bayes posterior of the label,
+    ``P(r = 0 | M, U) = (1 + z) / 2``, so the Bayes accuracy of the Z label is
+    ``E[(1 + |z|) / 2]``. The norm ``|r|`` gives the entropy ``S_R``
+    (:func:`bloch_entropy`), whose decrease measures the purification.
+
+    Args:
+        outcomes: Records of shape ``(n, rounds, L)``.
+        circuit: Gates of every round, from :func:`draw_circuit`.
+        states: The two branches ``(b_0, b_1)``, normalized.
+        boundary: ``"open"`` or ``"periodic"``.
+        measure_every: ``"layer"`` or ``"period"``.
+
+    Returns:
+        Array of shape ``(n, 3)``: ``(<X_R>, <Y_R>, <Z_R>)`` for each record.
+
+    Raises:
+        ValueError: If a record is impossible under both branches.
+    """
+    outcomes = np.asarray(outcomes)
+    n, _, L = outcomes.shape
+    rounds = _rounds_of(L, circuit, boundary, measure_every)
+    if outcomes.shape[1] != len(rounds):
+        raise ValueError(
+            f"The records have {outcomes.shape[1]} rounds, the circuit {len(rounds)}."
+        )
+    if len(states) != 2:
+        raise ValueError(f"Need two branches, got {len(states)}.")
+    bits = site_bits(L)
+    dim = 2**L
+    # Rows 2k and 2k + 1: the two branches of record k.
+    psi = np.tile(
+        np.stack([np.asarray(s, dtype=np.complex128) for s in states]), (n, 1)
+    )
+    rec = np.repeat(np.arange(n), 2)
+    for t, bonds in enumerate(rounds):
+        psi = _apply_round(psi, circuit[t], bonds)
+        m = outcomes[rec, t, :]
+        for site in range(L):
+            measured = m[:, site] != UNMEASURED
+            if not measured.any():
+                continue
+            agree = bits[None, :, site] == m[:, site, None]
+            psi = np.where(measured[:, None] & ~agree, 0.0, psi)
+        pair = psi.reshape(n, 2, dim)
+        total = (np.abs(pair) ** 2).sum(axis=(1, 2))
+        if np.any(total < 1e-24):
+            raise ValueError("A record has zero probability under both branches.")
+        psi = (pair / np.sqrt(total)[:, None, None]).reshape(2 * n, dim)
+    pair = psi.reshape(n, 2, dim)
+    w0 = (np.abs(pair[:, 0]) ** 2).sum(axis=1)
+    w1 = (np.abs(pair[:, 1]) ** 2).sum(axis=1)
+    rho01 = np.einsum("nd,nd->n", pair[:, 1].conj(), pair[:, 0])
+    return np.stack([2 * rho01.real, -2 * rho01.imag, w0 - w1], axis=1)
+
+
+def bloch_entropy(bloch: np.ndarray) -> np.ndarray:
+    """Return the von Neumann entropy (bits) of qubits of Bloch vectors ``bloch``.
+
+    Args:
+        bloch: Array of shape ``(..., 3)``.
+
+    Returns:
+        ``S = h((1 + |r|) / 2)``, shape ``(...)``; 0 for a pure state, 1 for
+        the maximally mixed one.
+    """
+    r = np.clip(np.linalg.norm(np.asarray(bloch, dtype=float), axis=-1), 0.0, 1.0)
+    lam = np.stack([(1 + r) / 2, (1 - r) / 2])
+    with np.errstate(divide="ignore", invalid="ignore"):
+        terms = np.where(lam > 0, -lam * np.log2(lam), 0.0)
+    return np.asarray(terms.sum(axis=0))
+
+
+REFERENCE_STATISTICS: tuple[str, ...] = (
+    "S_R",
+    "information_R",
+    "purity_R",
+    "bloch_norm",
+    "abs_z",
+    "z_accuracy",
+)
+
+
+def reference_statistics(bloch: np.ndarray) -> dict[str, float]:
+    """Return the purification of the reference qubit over Born-sampled records.
+
+    Args:
+        bloch: Bloch vectors of ``R`` given each record, shape ``(n, 3)``
+            (:func:`reference_bloch`), the records drawn with their Born
+            probability from the mixture of the two branches.
+
+    Returns:
+        Every key of :data:`REFERENCE_STATISTICS` with its Monte Carlo error
+        ``<key>_err``: ``S_R`` the mean entropy of ``R`` (bits);
+        ``information_R = 1 - S_R``, the information the record holds on
+        ``R`` (1 bit when every record purifies it); ``purity_R`` the mean
+        ``Tr rho_R^2 = (1 + |r|^2) / 2``; ``bloch_norm`` the mean ``|r|``;
+        ``abs_z`` the mean ``|<Z_R>|``; and ``z_accuracy = (1 + abs_z) / 2``,
+        the Bayes accuracy of the Z label, which a decoder of ``Z`` cannot
+        exceed even when ``R`` is pure (3/4 for a uniform direction).
+    """
+    b = np.asarray(bloch, dtype=float)
+    norm = np.linalg.norm(b, axis=1)
+    S = bloch_entropy(b)
+    out: dict[str, float] = {}
+    for key, values in (
+        ("S_R", S),
+        ("information_R", 1.0 - S),
+        ("purity_R", (1.0 + norm**2) / 2.0),
+        ("bloch_norm", norm),
+        ("abs_z", np.abs(b[:, 2])),
+        ("z_accuracy", (1.0 + np.abs(b[:, 2])) / 2.0),
+    ):
+        out[key], out[f"{key}_err"] = _mean_err(values)
+    return out
+
+
 def averaged_log_likelihood(
     outcomes: np.ndarray,
     psi0: np.ndarray,

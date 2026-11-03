@@ -15,8 +15,10 @@ from scipy.stats import norm
 
 from QELM.evaluation.kl_divergence import (
     BOUNDS,
+    REFERENCE_STATISTICS,
     STATISTICS,
     averaged_log_likelihood,
+    bloch_entropy,
     circuit_ensemble_statistics,
     circuit_log_likelihood,
     circuit_log_likelihood_ratio,
@@ -25,6 +27,8 @@ from QELM.evaluation.kl_divergence import (
     hypothesis_states,
     log_ratio,
     random_gates,
+    reference_bloch,
+    reference_statistics,
     sample_circuit_records,
     sample_state_records,
     sep_log_likelihood_ratio,
@@ -418,3 +422,64 @@ def test_sample_state_records_needs_a_circuit_or_a_depth() -> None:
     _, states = hypothesis_states(L, "local")
     with pytest.raises(ValueError, match="circuit or a depth"):
         sample_state_records(L, P, 4, states)
+
+
+# ---------------------------------------------------------------------------
+# Bloch vector and entropy of the reference qubit (local encoding)
+
+
+@pytest.mark.parametrize("gates", ["u1", "u4"])
+def test_reference_bloch_is_the_bayes_posterior_and_a_martingale(gates: str) -> None:
+    records = all_records()
+    loc = location_log_prob(records, P)
+    _, states = hypothesis_states(L, "local")
+    circuit = draw_circuit(L, DEPTH, rng=np.random.default_rng(15), gates=gates)
+    logs = [state_log_likelihood(records, circuit, s) + loc for s in states]
+    weight = 0.5 * (np.exp(logs[0]) + np.exp(logs[1]))
+    keep = weight > 0
+    bloch = reference_bloch(records[keep], circuit, states)
+    # z = 2 P(r = 0 | M, U) - 1.
+    posterior = 0.5 * np.exp(logs[0][keep]) / weight[keep]
+    assert np.allclose(bloch[:, 2], 2 * posterior - 1)
+    assert np.all(np.linalg.norm(bloch, axis=1) <= 1 + 1e-12)
+    # Averaged over the records, R is still maximally mixed.
+    assert np.allclose(weight[keep] @ bloch, 0.0, atol=1e-12)
+
+
+def test_reference_bloch_without_measurements_is_mixed() -> None:
+    _, states = hypothesis_states(L, "local")
+    circuit = draw_circuit(L, 2, rng=np.random.default_rng(16), gates="u4")
+    outcomes, _ = sample_state_records(
+        L, 0.0, 10, states, circuit=circuit, rng=np.random.default_rng(17)
+    )
+    bloch = reference_bloch(outcomes, circuit, states)
+    assert np.allclose(bloch, 0.0)
+    stats = reference_statistics(bloch)
+    assert stats["S_R"] == pytest.approx(1.0)
+    assert stats["information_R"] == pytest.approx(0.0, abs=1e-12)
+    assert stats["z_accuracy"] == pytest.approx(0.5)
+
+
+def test_bloch_entropy_and_reference_statistics() -> None:
+    bloch = np.array([[0, 0, 1], [1, 0, 0], [0, 0, 0], [0.6, 0, 0]])
+    S = bloch_entropy(bloch)
+    h = -(0.8 * math.log2(0.8) + 0.2 * math.log2(0.2))
+    assert np.allclose(S, [0, 0, 1, h])
+    stats = reference_statistics(bloch)
+    assert stats["S_R"] == pytest.approx(np.mean(S))
+    assert stats["purity_R"] == pytest.approx(np.mean([1, 1, 0.5, 0.68]))
+    assert stats["abs_z"] == pytest.approx(0.25)
+    assert stats["z_accuracy"] == pytest.approx(0.625)
+    assert set(stats) == {
+        *REFERENCE_STATISTICS,
+        *(f"{k}_err" for k in REFERENCE_STATISTICS),
+    }
+
+
+def test_reference_bloch_checks_its_arguments() -> None:
+    _, states = hypothesis_states(L, "local")
+    circuit = draw_circuit(L, 1, rng=np.random.default_rng(18))
+    with pytest.raises(ValueError, match="two branches"):
+        reference_bloch(np.zeros((1, 2, L), np.int8), circuit, states[:1])
+    with pytest.raises(ValueError, match="rounds"):
+        reference_bloch(np.zeros((1, 4, L), np.int8), circuit, states)
