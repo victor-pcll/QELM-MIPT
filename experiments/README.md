@@ -14,8 +14,9 @@ folders in the new convention (`documentation/configuration.md`, "Runs
 written before issue #235").
 
 Next to `metrics.json`, every Python experiment script (`projective/`,
-`QELM_Z/`, `QELM_M/`, `QELM_Q/`, `QELM_S/`, `QELM_R/`, `charge_sharpening/`,
-`purification/`, `learnability/`, `double_descent/`, `haar_readouts/`) writes
+`QELM_Z/`, `QELM_M/`, `QELM_Q/`, `QELM_S/`, `charge_sharpening/`,
+`purification/`, `learnability/`, `double_descent/`, `haar_readouts/`,
+`per_p_convergence/`) writes
 `resolved_config.json`, the config of the run with every interpolation
 evaluated (`QELM.utils.save_config`, issue #85). `.hydra/config.yaml` keeps the
 formulas as written in `conf/`, such as `depth: ${int:${div:${N},2}}`;
@@ -47,6 +48,7 @@ commands and every option of the launchers.
 | [`learnability/`](learnability/README.md) | Barratt et al. (2022), Fig. 2 | benchmark of charge learning |
 | [`charge_sharpening/`](charge_sharpening/README.md) | Agrawal et al. (2024), Fig. 7 | benchmark of purification |
 | [`haar_readouts/`](haar_readouts/README.md) | sector of a purifying reference qubit, many decoders | purification decoding (task 1B) |
+| [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
 | [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
 | [`diagnostics/`](diagnostics/README.md) | chaos and locality of every reservoir | why a reservoir shows the MIPT or not |
 | [`double_descent/`](double_descent/README.md) | MNIST with a QELM readout | statistics of the readout |
@@ -1291,34 +1293,43 @@ uv run python experiments/haar_readouts/plot_haar_readouts.py \
 the `ridge` (with the quadratic ridge) or the `logistic` readout, every
 benchmark set on the same panels, with the purification curve.
 
-### Depth T of the QELM: T = 10, T = N, T = 2N (issue #268)
+### Statistical convergence in `PER_P` (issue #267)
 
-`readouts_task.depth_rule` sets the number of rounds `T` from `N`: a number
-(`10`, the same `T` for every `N`, as Dehghani et al. 2023) or a multiple of
-`N` (`N`, `2N`, the stationary regime of the MIPT). It replaces
-`readouts_task.n_rounds` when set. `depth_scaling.sh` sweeps `N`, the rule
-and the seed (one fixed Haar circuit per seed), with the ridge on the QELM
-features `all`:
+How many trajectories per `p` (`PER_P`) the QELM ridge of the section
+above needs before its accuracy stops moving, averaged over independent
+fixed Haar circuits:
 
 ```bash
-MAX_JOBS=4 ./experiments/haar_readouts/depth_scaling.sh
-uv run python experiments/haar_readouts/plot_depth_scaling.py outputs/haar_depth/<date_time>
+uv run python experiments/per_p_convergence/per_p_convergence.py \
+  hydra.run.dir=outputs/per_p_convergence/N8
+uv run python experiments/per_p_convergence/plot_per_p_convergence.py \
+  outputs/per_p_convergence/N8
 ```
 
-The defaults are `N = 6, 8, 10, 12`, `T` in `10 N 2N`, seeds 42 to 51,
-2000 trajectories per `p` and 22 values of `p` from 0 to 0.4 (`N_VALUES`,
-`DEPTHS`, `SEEDS`, `PER_P`, `P_VALUES`, `READOUTS`, `FEATURES`). The runs
-skip `haar_readouts.npz` (`readouts_task.save_arrays=false`). Each
-`metrics.json` also holds the timings of the run (`time_simulation_s`), the
-condition number of the training `X^T X` (`log10_cond_<set>_p<p>`) and the
-variance of `<Z_k>` over the trajectories, site by site
-(`var_Z_<k>_p<p>`). The plot script writes `depth_profiles` (accuracy and
-`S_R` against `p`, one column per rule), `depth_crossings` (steepest slope
-of the accuracy, crossings of the curves of successive `N`, the sharpest
-rule in `#fa5703`), `depth_cost` (time against `T`), `depth_edges`
-(variance of `<Z_i>` against the site at the largest `N`),
-`depth_conditioning` and `depth_summary.json`. Results:
-[haar_readouts/README.md](haar_readouts/README.md#depth-t-of-the-qelm-issue-268).
+The defaults (`conf/per_p_convergence.yaml`, block `convergence`) are those
+of the issue: `N = 8`, `T = n_rounds = 8`, 20 circuits, `PER_P` in 500,
+1000, ..., 32 000, 11 values of `p` from 0.02 to 0.4, an 80 / 20 split and
+the tolerance 0.005. All the trajectories of one fixed circuit share its
+gates, so they are simulated together as one array of state vectors; each
+circuit runs in its own process (`convergence.n_jobs`, 0 for every core).
+On 4 cores the defaults take about 25 minutes. For the projection of
+`PER_P*` with `N`, run other sizes at the three regimes, with `T = N`:
+
+```bash
+uv run python experiments/per_p_convergence/per_p_convergence.py N=10 \
+  convergence.n_rounds=10 'convergence.p_values=[0.05,0.18,0.4]' \
+  hydra.run.dir=outputs/per_p_convergence/N10
+uv run python experiments/per_p_convergence/plot_per_p_convergence.py \
+  outputs/per_p_convergence/N8 outputs/per_p_convergence/N6 \
+  outputs/per_p_convergence/N10 --out outputs/per_p_convergence/figures
+```
+
+Each run folder holds `per_p_convergence.npz` (test and training accuracy,
+chosen `alpha`, spectrum of `X^T X` and its effective rank, axes circuit,
+`p`, `PER_P`), `summary.json` (mean, spread and standard error over the
+circuits, `PER_P*` per `p` and for every `p`) and `resolved_config.json`.
+The notebook `notebooks/results/09_per_p_convergence.ipynb` runs the same
+sweeps and draws the figures.
 
 ## Check the chaos and the locality of the reservoirs (issue #243)
 
