@@ -126,9 +126,10 @@ READOUTS = ("M", "state", "M_state")
 # Nonlinear diagnostics of the QELM on M (bloch_task.nonlinear_readouts): a
 # ridge on [vec(M), vec(|M|)] and a small MLP on the same features.
 NONLINEAR_READOUTS = ("M_abs", "M_mlp")
-# Hidden layers and weight decay of the MLP readout.
-MLP_HIDDEN = (128, 64)
-MLP_ALPHA = 1e-3
+# Hidden layers and weight decay of the MLP readout: the most robust of the
+# settings tried at N = 8 with 1600 to 25600 training trajectories (README).
+MLP_HIDDEN = (512,)
+MLP_ALPHA = 1.0
 COMPONENTS = ("x", "y", "z")
 LABELS = ("exact", "shots", "both")
 # Rotations that map the eigenbasis of X, Y, Z onto that of Z: a Z

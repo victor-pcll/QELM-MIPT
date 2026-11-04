@@ -446,3 +446,33 @@ def test_fss_sweep_and_figures(tmp_path: Path) -> None:
     )
     per_n = json.loads((fig / "summary.json").read_text())["N4"]
     assert any(v is not None for v in per_n["r2_bloch_M_mlp"])
+
+
+def test_readout_learning_curve(tmp_path: Path) -> None:
+    script = FOLDER / "readout_learning_curve.py"
+    out = BP.run(_cfg("bloch_task.labels=exact", "bloch_task.samples_per_p=120"))
+    npz = tmp_path / "bloch_purity.npz"
+    keep = out["p"] > 0
+    np.savez(npz, M=out["M"][keep], bloch=out["bloch"][keep], p=out["p"][keep])
+    subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            str(npz),
+            "--sizes",
+            "40",
+            "80",
+            "500",
+            "--n-test",
+            "30",
+        ],
+        check=True,
+    )
+    curve = json.loads((tmp_path / f"learning_curve_N{N}.json").read_text())
+    assert curve["N"] == N
+    assert set(curve["p"]) == {"0.3", "1"}
+    entry = curve["p"]["0.3"]
+    assert set(entry) == {"ridge_M", "ridge_M_abs", "mlp"}
+    assert entry["ridge_M"][2] is None  # 500 > 90 training trajectories
+    assert all(v is not None for v in entry["mlp"][:2])
+    assert (tmp_path / f"learning_curve_N{N}.png").exists()
