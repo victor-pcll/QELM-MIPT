@@ -66,6 +66,8 @@ CURVES = (
 )
 N_BOOT = 1000
 MIN_SIGNIFICANCE = 2.0
+# Share of resamplings where an estimate must exist to enter the fit.
+FIT_MIN_DEFINED = 0.9
 
 
 def p_grid(N: int, T: int) -> np.ndarray:
@@ -311,8 +313,70 @@ def plot_accuracy(summary: dict[str, Any], N: int, T: int, out: Path) -> Path:
 MARKERS = {4: "s", 6: "^", 8: "o", 10: "D", 12: "v"}
 
 
-def plot_p_star(summary: dict[str, Any], out: Path) -> Path:
-    """``p_cross`` and ``p_min`` against ``N T`` (top) and ``p* N T`` (bottom)."""
+def power_law_fit(
+    summary: dict[str, Any], min_defined: float = FIT_MIN_DEFINED
+) -> dict[str, Any]:
+    """Least-squares fit of ``log p* = log A + a log N + b log T`` per estimate.
+
+    Only the ``(N, T)`` where the estimate exists in at least ``min_defined``
+    of the bootstrap resamplings enter; three points at least, with two
+    values of ``N`` and two of ``T``. If ``p*`` depended on ``N T`` only,
+    ``a = b``; ``a = b = -1`` is a constant ``p* N T``.
+
+    Returns:
+        ``{encoding: {name: {A, a, b, rms_log, n_points} or None}}``.
+    """
+    out: dict[str, Any] = {}
+    for encoding, entries in summary.items():
+        out[encoding] = {}
+        for name in ("p_cross", "p_min"):
+            pts = [
+                e
+                for e in entries.values()
+                if e[name] is not None and e[f"{name}_defined_fraction"] >= min_defined
+            ]
+            Ns = {e["N"] for e in pts}
+            Ts = {e["T"] for e in pts}
+            if len(pts) < 3 or len(Ns) < 2 or len(Ts) < 2:
+                out[encoding][name] = None
+                continue
+            A = np.column_stack(
+                [
+                    np.ones(len(pts)),
+                    np.log([e["N"] for e in pts]),
+                    np.log([e["T"] for e in pts]),
+                ]
+            )
+            y = np.log([e[name] for e in pts])
+            coef = np.linalg.lstsq(A, y, rcond=None)[0]
+            res = y - A @ coef
+            out[encoding][name] = {
+                "A": float(np.exp(coef[0])),
+                "a": float(coef[1]),
+                "b": float(coef[2]),
+                "rms_log": float(np.sqrt(np.mean(res**2))),
+                "n_points": len(pts),
+            }
+    return out
+
+
+# Rows of the scaling figure: (y label, factor of p* as a function of N, T).
+SCALING_ROWS = (
+    ("p*", lambda N, T: 1.0),
+    ("p* N T", lambda N, T: float(N * T)),
+    ("p* T", lambda N, T: float(T)),
+)
+
+
+def plot_p_star(
+    summary: dict[str, Any], out: Path, fits: dict[str, Any] | None = None
+) -> Path:
+    """``p_cross`` and ``p_min`` against ``N T``: ``p*``, ``p* N T``, ``p* T``.
+
+    One column per encoding, one marker per ``N``; the points of one ``N``
+    are joined. Estimates defined in less than :data:`FIT_MIN_DEFINED` of the
+    resamplings are drawn hollow.
+    """
     import matplotlib
 
     matplotlib.use("Agg")
@@ -320,52 +384,73 @@ def plot_p_star(summary: dict[str, Any], out: Path) -> Path:
     import matplotlib.ticker
 
     encodings = list(summary)
+    rows = len(SCALING_ROWS)
     fig, axes = plt.subplots(
-        2, len(encodings), figsize=(4.2 * len(encodings), 7.5), squeeze=False
+        rows,
+        len(encodings),
+        figsize=(4.2 * len(encodings), 3.4 * rows),
+        squeeze=False,
+        sharex=True,
     )
     for col, encoding in enumerate(encodings):
-        entries = sorted(summary[encoding].values(), key=lambda e: (e["NT"], e["N"]))
-        top, bottom = axes[0, col], axes[1, col]
-        for name, color, legend in (
-            ("p_cross", "black", "p_cross (QELM = Bayes on M)"),
-            ("p_min", "#fa5703", "p_min (QELM minimum)"),
-        ):
-            pts = [e for e in entries if e[name] is not None]
-            if not pts:
-                continue
-            nt = np.asarray([e["NT"] for e in pts], dtype=float)
-            val = np.asarray([e[name] for e in pts])
-            err = np.asarray([e[f"{name}_err"] or 0.0 for e in pts])
-            top.plot(nt, val, "-", color=color, lw=1, alpha=0.5, label=legend)
-            bottom.plot(nt, val * nt, "-", color=color, lw=1, alpha=0.5)
-            for e, x, y, dy in zip(pts, nt, val, err, strict=True):
-                m = MARKERS.get(int(e["N"]), "o")
-                top.errorbar(x, y, yerr=dy, fmt=m, color=color, ms=6, capsize=2)
-                bottom.errorbar(
-                    x, y * x, yerr=dy * x, fmt=m, color=color, ms=6, capsize=2
-                )
-        top.set_xscale("log")
-        top.set_yscale("log")
-        bottom.set_xscale("log")
-        plain = matplotlib.ticker.ScalarFormatter()
-        for axis in (top.xaxis, top.yaxis, bottom.xaxis):
-            axis.set_major_formatter(plain)
-            axis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+        entries = sorted(summary[encoding].values(), key=lambda e: (e["N"], e["T"]))
+        sizes = sorted({int(e["N"]) for e in entries})
+        for name, color in (("p_cross", "black"), ("p_min", "#fa5703")):
+            for N in sizes:
+                pts = [e for e in entries if e["N"] == N and e[name] is not None]
+                if not pts:
+                    continue
+                m = MARKERS.get(N, "o")
+                for row, (_, factor) in enumerate(SCALING_ROWS):
+                    ax = axes[row, col]
+                    k = np.asarray([factor(e["N"], e["T"]) for e in pts])
+                    nt = np.asarray([e["NT"] for e in pts], dtype=float)
+                    val = np.asarray([e[name] for e in pts]) * k
+                    err = np.asarray([e[f"{name}_err"] or 0.0 for e in pts]) * k
+                    ax.plot(nt, val, "-", color=color, lw=0.8, alpha=0.5)
+                    for e, x, y, dy in zip(pts, nt, val, err, strict=True):
+                        solid = e[f"{name}_defined_fraction"] >= FIT_MIN_DEFINED
+                        ax.errorbar(
+                            x,
+                            y,
+                            yerr=dy,
+                            fmt=m,
+                            color=color,
+                            mfc=color if solid else "white",
+                            ms=6,
+                            capsize=2,
+                        )
         ticks = sorted({e["NT"] for e in entries})
-        top.set_xticks(ticks)
-        bottom.set_xticks(ticks)
-        bottom.set_ylim(bottom=0)
-        top.set_title(LABELS.get(encoding, encoding))
-        top.set_ylabel("p*")
-        bottom.set_ylabel("p* N T")
-        bottom.set_xlabel("N T")
-        for ax in (top, bottom):
+        for row, (label, _) in enumerate(SCALING_ROWS):
+            ax = axes[row, col]
+            ax.set_xscale("log")
+            if row == 0:
+                ax.set_yscale("log")
+                ax.yaxis.set_major_formatter(matplotlib.ticker.ScalarFormatter())
+                ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+            else:
+                ax.set_ylim(bottom=0)
+            ax.xaxis.set_major_formatter(matplotlib.ticker.ScalarFormatter())
+            ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+            ax.set_xticks(ticks)
+            ax.tick_params(axis="x", labelsize=7, labelrotation=90)
+            ax.set_ylabel(label)
             ax.grid(alpha=0.25, lw=0.5, which="both")
-        top.legend(fontsize=8)
-    sizes = sorted({int(e["N"]) for enc in summary.values() for e in enc.values()})
-    for N in sizes:
-        axes[1, 0].plot([], [], MARKERS.get(N, "o"), color="grey", label=f"N = {N}")
-    axes[1, 0].legend(fontsize=8)
+        axes[-1, col].set_xlabel("N T")
+        title = LABELS.get(encoding, encoding)
+        fit = (fits or {}).get(encoding, {}).get("p_cross")
+        if fit:
+            title += f"\np_cross ~ N^{fit['a']:.2f} T^{fit['b']:.2f}"
+        axes[0, col].set_title(title, fontsize=10)
+    for name, color, legend in (
+        ("p_cross", "black", "p_cross (QELM = Bayes on M)"),
+        ("p_min", "#fa5703", "p_min (QELM minimum)"),
+    ):
+        axes[0, 0].plot([], [], "-", color=color, label=legend)
+    all_sizes = sorted({int(e["N"]) for enc in summary.values() for e in enc.values()})
+    for N in all_sizes:
+        axes[0, 0].plot([], [], MARKERS.get(N, "o"), color="grey", label=f"N = {N}")
+    axes[0, 0].legend(fontsize=7)
     fig.suptitle("Characteristic p of the QELM against the space-time volume N T")
     fig.tight_layout()
     path = out / "p_star_vs_NT.png"
@@ -405,7 +490,17 @@ def main(argv: list[str] | None = None) -> list[Path]:
     sizes = sorted({(e["N"], e["T"]) for enc in summary.values() for e in enc.values()})
     paths = [plot_accuracy(summary, N, T, args.out) for N, T in sizes]
     if len({N * T for N, T in sizes}) > 1:
-        paths.append(plot_p_star(summary, args.out))
+        fits = power_law_fit(summary)
+        (args.out / "fits.json").write_text(json.dumps(fits, indent=2))
+        paths.append(plot_p_star(summary, args.out, fits))
+        for encoding, by_name in fits.items():
+            for name, fit in by_name.items():
+                if fit:
+                    print(
+                        f"{encoding:7s} {name:7s} ~ {fit['A']:.2f} N^{fit['a']:.2f} "
+                        f"T^{fit['b']:.2f} (rms log {fit['rms_log']:.3f}, "
+                        f"{fit['n_points']} points)"
+                    )
     for encoding, entries in summary.items():
         for key, e in entries.items():
             print(

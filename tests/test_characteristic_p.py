@@ -165,6 +165,9 @@ def test_plot_writes_the_figures(tmp_path: Path) -> None:
     assert all(p.stat().st_size > 0 for p in paths)
     summary = json.loads((tmp_path / "fig" / "summary.json").read_text())
     assert set(summary["ghz"]) == {"N4_T4", "N8_T8"}
+    # Two points: too few for the power-law fit, which is written as null.
+    fits = json.loads((tmp_path / "fig" / "fits.json").read_text())
+    assert fits["ghz"]["p_cross"] is None
 
 
 def test_grid_cli(capsys: pytest.CaptureFixture[str]) -> None:
@@ -200,3 +203,31 @@ def test_launcher_and_plot(tmp_path: Path) -> None:
     assert run.stat().st_mtime_ns == stamp
     paths = cp.main(["plot", str(sweep), "--out", str(tmp_path / "fig")])
     assert [p.name for p in paths] == ["accuracy_vs_pNT_N4_T2.png"]
+
+
+def test_power_law_fit_recovers_exponents() -> None:
+    summary: dict = {"ghz": {}}
+    for N in (4, 6, 8):
+        for T in (2, 4, 8):
+            summary["ghz"][f"N{N}_T{T}"] = {
+                "N": N,
+                "T": T,
+                "NT": N * T,
+                "p_cross": 2.0 * N**-0.3 * T**-1.1,
+                "p_cross_defined_fraction": 1.0,
+                "p_min": None,
+                "p_min_defined_fraction": 0.0,
+            }
+    fits = cp.power_law_fit(summary)
+    fit = fits["ghz"]["p_cross"]
+    assert fit["A"] == pytest.approx(2.0)
+    assert fit["a"] == pytest.approx(-0.3)
+    assert fit["b"] == pytest.approx(-1.1)
+    assert fit["rms_log"] == pytest.approx(0.0, abs=1e-12)
+    assert fit["n_points"] == 9
+    # No estimate defined: no fit.
+    assert fits["ghz"]["p_min"] is None
+    # Rarely defined estimates are left out of the fit.
+    for entry in summary["ghz"].values():
+        entry["p_cross_defined_fraction"] = 0.5
+    assert cp.power_law_fit(summary)["ghz"]["p_cross"] is None
