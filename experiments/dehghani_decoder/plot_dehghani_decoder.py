@@ -12,6 +12,9 @@ and draws, in ``--out`` (default: the input folder):
   record alone (its crossing in ``N`` is the purification transition), the
   share of weight-1 parities, and the gain of the MLP over the ridge on the
   purified trajectories, against ``p``, for both cases;
+- ``qelm_accuracy_vs_p.png`` (if ``qelm_*.json`` runs exist): the full QELM
+  case, ridge and MLP on ``M``, on the state features and on both, over all
+  trajectories and over those where ``R`` is mixed after the last step;
 - ``summary.json``: the mean and standard error over circuits of every
   curve.
 
@@ -123,7 +126,7 @@ def plot_accuracy(runs: dict[int, list[dict]], out: Path) -> None:
 
 def plot_purification_parity(runs: dict[int, list[dict]], out: Path) -> None:
     """Purified fraction, weight-1 share and MLP gain, against ``p``."""
-    fig, axes = plt.subplots(1, 3, figsize=(14, 4.2))
+    fig, axes = plt.subplots(1, 4, figsize=(18.5, 4.2))
     for j, N in enumerate(runs):
         c = N_COLORS[j % len(N_COLORS)]
         p, m, e = curve(runs[N], lambda r: r["M"]["purified"])
@@ -143,6 +146,23 @@ def plot_purification_parity(runs: dict[int, list[dict]], out: Path) -> None:
                 p, m, color=c, ls=ls, lw=2, marker="o" if ls == "-" else None, ms=4
             )
             axes[2].fill_between(p, m - e, m + e, color=c, alpha=0.12, lw=0)
+        for case, marker in (("M", "o"), ("M_final", "^")):
+            w = np.array(
+                [[r[case]["weight_one"] for r in run["rows"]] for run in runs[N]]
+            )
+            a = np.array(
+                [[r[case]["ridge"]["acc_pure"] for r in run["rows"]] for run in runs[N]]
+            )
+            ok = ~np.isnan(w) & ~np.isnan(a)
+            axes[3].scatter(
+                (1 + w[ok]) / 2, a[ok], s=10, color=c, marker=marker, alpha=0.6
+            )
+    axes[3].plot([0.5, 1], [0.5, 1], color="#52514e", lw=1)
+    axes[3].set_xlabel("parity prediction (1 + share of weight ≤ 1) / 2")
+    axes[3].set_ylabel("ridge accuracy, purified trajectories")
+    axes[3].set_title(
+        "each point: one circuit, one p (o: M, ^: M + readout)", fontsize=9
+    )
     axes[0].set_ylabel("purified fraction 1 − S_Q (record M)")
     axes[0].legend(frameon=False, fontsize=9)
     axes[1].set_ylabel("share of parities of weight ≤ 1")
@@ -151,12 +171,78 @@ def plot_purification_parity(runs: dict[int, list[dict]], out: Path) -> None:
     axes[1].plot([], [], color="#52514e", ls="-", label="record M")
     axes[1].plot([], [], color="#52514e", ls="--", label="M + final readout")
     axes[1].legend(frameon=False, fontsize=9)
-    for ax in axes:
+    for ax in axes[:3]:
         _style(ax)
         ax.axvline(0.16, color="#898781", lw=0.8, ls=":")
         ax.set_xlabel("measurement probability p")
     fig.tight_layout()
     fig.savefig(out / "purification_parity.png", dpi=200)
+    plt.close(fig)
+
+
+QELM_CURVES = {
+    "M/ridge": ("ridge on M", "#eb6834", "-", "o"),
+    "M/mlp": ("MLP on M", "#eb6834", "--", None),
+    "state/ridge": ("ridge on ⟨P_k⟩, ⟨P_i P_j⟩", "#2a78d6", "-", "s"),
+    "M+state/ridge": (
+        "ridge on M + ⟨P_k⟩ + ⟨P_i P_j⟩ (full QELM)",
+        "#1baf7a",
+        "-",
+        "D",
+    ),
+    "M+state/mlp": ("MLP on M + ⟨P_k⟩ + ⟨P_i P_j⟩", "#1baf7a", "--", None),
+}
+
+
+def load_qelm(folder: Path) -> dict[int, list[dict]]:
+    """Return ``{N: [run, ...]}`` for the ``--case qelm`` runs of ``folder``."""
+    runs: dict[int, list[dict]] = defaultdict(list)
+    for path in sorted(folder.glob("qelm_N*_seed*.json")):
+        run = json.loads(path.read_text())
+        runs[int(run["N"])].append(run)
+    return dict(sorted(runs.items()))
+
+
+def plot_qelm(runs: dict[int, list[dict]], out: Path) -> None:
+    """Full QELM case: accuracy over all, then over mixed-R trajectories.
+
+    The second row stops where more than 95 % of the trajectories are pure.
+    """
+    Ns = list(runs)
+    fig, axes = plt.subplots(
+        2, len(Ns), figsize=(3.6 * len(Ns), 6.4), sharey=True, squeeze=False
+    )
+    for j, N in enumerate(Ns):
+        for i, key in enumerate(("acc", "acc_mixed")):
+            ax = axes[i, j]
+            for name, (label, color, ls, marker) in QELM_CURVES.items():
+                p, m, e = curve(runs[N], lambda r, k=name, q=key: r[k][q])
+                if key == "acc_mixed":  # too few mixed trajectories left
+                    _, f, _ = curve(runs[N], lambda r: r["purified"])
+                    m, e = np.where(f > 0.95, np.nan, m), np.where(f > 0.95, np.nan, e)
+                ax.plot(
+                    p, m, ls=ls, color=color, lw=2, marker=marker, ms=4, label=label
+                )
+                ax.fill_between(p, m - e, m + e, color=color, alpha=0.15, lw=0)
+            if key == "acc":
+                p, m, e = curve(runs[N], lambda r: r["bayes_M"]["acc"])
+                ax.plot(p, m, ls=":", color="#0b0b0b", lw=2, label="Bayes on M (exact)")
+            ax.axhline(0.5, color="#898781", lw=1, ls="--")
+            ax.axvline(0.16, color="#898781", lw=0.8, ls=":")
+            _style(ax)
+            ax.set_ylim(0.45, 1.02)
+            where = (
+                "all trajectories" if key == "acc" else "R mixed after the last step"
+            )
+            ax.set_title(f"N = {N}, T = {2 * N}: {where}", fontsize=10)
+            if i == 1:
+                ax.set_xlabel("measurement probability p")
+            if j == 0:
+                ax.set_ylabel("accuracy of σ_P on R (mean over P)")
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=3, frameon=False, fontsize=9)
+    fig.tight_layout(rect=(0, 0, 1, 0.88))
+    fig.savefig(out / "qelm_accuracy_vs_p.png", dpi=200)
     plt.close(fig)
 
 
@@ -194,7 +280,22 @@ def main() -> None:
     runs = load(args.folder)
     plot_accuracy(runs, out)
     plot_purification_parity(runs, out)
-    (out / "summary.json").write_text(json.dumps(summary(runs), indent=1))
+    result = summary(runs)
+    qelm = load_qelm(args.folder)
+    if qelm:
+        plot_qelm(qelm, out)
+        for N, rs in qelm.items():
+            block = {"p": [r["p"] for r in rs[0]["rows"]], "n_circuits": len(rs)}
+            for name in [*QELM_CURVES, "bayes_M"]:
+                for q in ("acc", "acc_pure", "acc_mixed"):
+                    if q in rs[0]["rows"][0][name]:
+                        _, m, e = curve(rs, lambda r, k=name, q=q: r[k][q])
+                        block[f"{name}_{q}"] = {
+                            "mean": m.round(4).tolist(),
+                            "err": e.round(4).tolist(),
+                        }
+            result.setdefault(f"N{N}", {})["qelm"] = block
+    (out / "summary.json").write_text(json.dumps(result, indent=1))
 
 
 if __name__ == "__main__":

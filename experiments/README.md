@@ -48,6 +48,7 @@ commands and every option of the launchers.
 | [`learnability/`](learnability/README.md) | Barratt et al. (2022), Fig. 2 | benchmark of charge learning |
 | [`charge_sharpening/`](charge_sharpening/README.md) | Agrawal et al. (2024), Fig. 7 | benchmark of purification |
 | [`haar_readouts/`](haar_readouts/README.md) | sector of a purifying reference qubit, many decoders | purification decoding (task 1B) |
+| [`dehghani_decoder/`](dehghani_decoder/README.md) | Dehghani et al. (2023): purified reference qubit of a fixed Clifford circuit, ridge vs MLP vs Bayes on `M`, `M` + final readout, `M` + `<P_k>` + `<P_i P_j>` | why a linear readout of `M` fails (parities), purification decoding (task 1B) |
 | [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
 | [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
 | [`diagnostics/`](diagnostics/README.md) | chaos and locality of every reservoir | why a reservoir shows the MIPT or not |
@@ -1330,6 +1331,30 @@ chosen `alpha`, spectrum of `X^T X` and its effective rank, axes circuit,
 circuits, `PER_P*` per `p` and for every `p`) and `resolved_config.json`.
 The notebook `notebooks/results/09_per_p_convergence.ipynb` runs the same
 sweeps and draws the figures.
+
+## Run the Dehghani decoder experiment (issue #287)
+
+The protocol of Dehghani et al., Nat. Commun. 14, 2918 (2023), on a fixed
+periodic Clifford brickwork, simulated with stim
+(`QELM.evaluation.dehghani_decoder`). Results:
+[`dehghani_decoder/README.md`](dehghani_decoder/README.md).
+
+```bash
+# Cases 1 and 2: the record M, and M plus a final readout of every site.
+uv run python experiments/dehghani_decoder/dehghani_decoder.py \
+    --N 6 8 10 12 --seeds 6 --n-traj 30000 --jobs 4 --out outputs/dehghani_decoder
+# Case 3: M plus the QELM features <P_k>, <P_i P_j> of the final state.
+uv run python experiments/dehghani_decoder/dehghani_decoder.py --case qelm \
+    --N 6 8 10 --seeds 6 --n-traj 15000 --jobs 4 --out outputs/dehghani_decoder
+uv run python experiments/dehghani_decoder/plot_dehghani_decoder.py \
+    outputs/dehghani_decoder
+```
+
+Each `(N, seed)` writes `N<N>_seed<seed>.json` (or `qelm_N<N>_seed<seed>.json`),
+one row per `p`. A rerun skips the files already there. The plot script
+writes the figures and `summary.json` (mean and standard error over the
+circuits) into the same folder. Set `OMP_NUM_THREADS=1` when `--jobs` uses
+every core.
 
 ## Check the chaos and the locality of the reservoirs (issue #243)
 
