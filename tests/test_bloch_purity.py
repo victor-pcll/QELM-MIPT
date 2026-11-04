@@ -1,0 +1,248 @@
+"""Tests of the tomography and purity task (experiments/bloch_purity, #277)."""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+from types import ModuleType
+
+import numpy as np
+import pytest
+
+from QELM import load_config
+from QELM.physics.operators import PAULIS
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+FOLDER = REPO_ROOT / "experiments" / "bloch_purity"
+SCRIPT = FOLDER / "bloch_purity.py"
+BASH_SCRIPT = FOLDER / "bloch_purity.sh"
+PLOT_SCRIPT = FOLDER / "plot_bloch_purity.py"
+N = 4
+P_VALUES = "[0.0,0.3,1.0]"
+PER_P = 60
+
+
+def _load(path: Path) -> ModuleType:
+    """Import a script of experiments/bloch_purity, which is not a package."""
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+BP = _load(SCRIPT)
+
+
+def _cfg(*extra: str):  # type: ignore[no-untyped-def]
+    return load_config(
+        [
+            f"N={N}",
+            f"bloch_task.p_values={P_VALUES}",
+            f"bloch_task.samples_per_p={PER_P}",
+            "bloch_task.depth_rule=N",
+            *extra,
+        ],
+        config_name="bloch_purity",
+    )
+
+
+def _random_state(n: int, rng: np.random.Generator) -> np.ndarray:
+    psi = rng.normal(size=2**n) + 1j * rng.normal(size=2**n)
+    return psi / np.linalg.norm(psi)
+
+
+# ---- Targets ----------------------------------------------------------------
+
+
+def test_reference_rho_against_partial_trace() -> None:
+    rng = np.random.default_rng(0)
+    psi = _random_state(4, rng)
+    rho_full = np.outer(psi, psi.conj()).reshape(2, 8, 2, 8)
+    rho_R = np.einsum("aibi->ab", rho_full)
+    np.testing.assert_allclose(BP.reference_rho(psi), rho_R, atol=1e-12)
+
+
+def test_bloch_vector_against_paulis() -> None:
+    rng = np.random.default_rng(1)
+    psi = _random_state(4, rng)
+    rho = BP.reference_rho(psi)
+    expected = [np.trace(rho @ PAULIS[c]).real for c in ("X", "Y", "Z")]
+    np.testing.assert_allclose(BP.bloch_vector(rho), expected, atol=1e-12)
+    # Purity (1 + |r|^2) / 2 = Tr(rho^2).
+    np.testing.assert_allclose(
+        BP.purity_from_bloch(BP.bloch_vector(rho)),
+        np.trace(rho @ rho).real,
+        atol=1e-12,
+    )
+
+
+def test_bloch_of_known_states() -> None:
+    plus_i = np.array([1.0, 1j]) / np.sqrt(2.0)
+    # R in |+i>, one system qubit in |0>: r = (0, 1, 0), purity 1.
+    psi = np.kron(plus_i, [1.0, 0.0])
+    np.testing.assert_allclose(
+        BP.bloch_vector(BP.reference_rho(psi)), [0, 1, 0], atol=1e-12
+    )
+    bell = np.array([1.0, 0, 0, 1.0]) / np.sqrt(2.0)
+    r = BP.bloch_vector(BP.reference_rho(bell))
+    np.testing.assert_allclose(r, 0.0, atol=1e-12)
+    assert BP.purity_from_bloch(r) == pytest.approx(0.5)
+
+
+def test_purity_clip() -> None:
+    r = np.array([[2.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+    np.testing.assert_allclose(BP.purity_from_bloch(r, clip=True), [1.0, 0.5])
+    np.testing.assert_allclose(BP.purity_from_bloch(r), [2.5, 0.5])
+
+
+def test_entropy_bits() -> None:
+    np.testing.assert_allclose(
+        BP._entropy_bits(np.array([[0, 0, 0], [0, 0, 1.0], [0, 0.6, 0]])),
+        [1.0, 0.0, -(0.8 * np.log2(0.8) + 0.2 * np.log2(0.2))],
+        atol=1e-12,
+    )
+
+
+# ---- Scores -----------------------------------------------------------------
+
+
+def test_r2_vector() -> None:
+    y = np.array([[1.0, 0.0], [-1.0, 2.0], [0.0, 1.0]])
+    assert BP.r2_vector(y, y) == pytest.approx(1.0)
+    assert BP.r2_vector(y, np.broadcast_to(y.mean(axis=0), y.shape)) == pytest.approx(
+        0.0
+    )
+    assert np.isnan(BP.r2_vector(np.zeros((5, 3)), np.zeros((5, 3))))
+    # One column: the usual R2.
+    from sklearn.metrics import r2_score
+
+    pred = y[:, 0] + 0.3
+    assert BP.r2_vector(y[:, 0], pred) == pytest.approx(r2_score(y[:, 0], pred))
+
+
+def test_linear_target_gives_r2_one() -> None:
+    rng = np.random.default_rng(3)
+    X = rng.choice([-1.0, 0.0, 1.0], size=(400, 12))
+    W = rng.normal(size=(12, 3))
+    Y = X @ W
+    pred = BP.fit_ridge(X[:300], Y[:300], X[300:])
+    assert pred.shape == (100, 3)
+    assert BP.r2_vector(Y[300:], pred) > 0.999
+    # Constant features: the mean target.
+    flat = BP.fit_ridge(np.zeros((10, 3)), Y[:10], np.zeros((4, 3)))
+    np.testing.assert_allclose(flat, np.broadcast_to(Y[:10].mean(axis=0), (4, 3)))
+
+
+def test_score_level_bayes_and_chance() -> None:
+    rng = np.random.default_rng(4)
+    X = rng.normal(size=(200, 5))
+    bloch = np.tanh(X[:, :3] * 0.3)
+    purity = BP.purity_from_bloch(bloch)
+    tr, te = np.arange(140), np.arange(140, 200)
+    scores = BP.score_level({"M": X}, bloch, purity, tr, te)
+    assert scores["r2_bloch_bayes"] == pytest.approx(1.0)
+    assert scores["r2_purity_bayes"] == pytest.approx(1.0)
+    assert abs(scores["r2_bloch_chance"]) < 0.1
+    assert scores["r2_bloch_M"] > 0.9
+    assert scores["mse_bloch_bayes"] == 0.0
+
+
+# ---- Experiment -------------------------------------------------------------
+
+
+def test_trajectory_at_p0_keeps_the_bell_pair() -> None:
+    cfg = _cfg()
+    from omegaconf import OmegaConf
+
+    from QELM.models.circuits.haar import HaarBrickworkCircuit
+
+    block = OmegaConf.to_container(cfg.haar_circuit, resolve=True)
+    assert isinstance(block, dict)
+    params = {str(k): v for k, v in block.items()}
+    params["depth"] = 3
+    circuit = HaarBrickworkCircuit(params, np.random.default_rng(0))
+    psi0 = BP.NL.initial_state(cfg, "bell")
+    M, r, psi = BP.trajectory(psi0, circuit, 0.0, np.random.default_rng(1))
+    np.testing.assert_array_equal(M, 0.0)
+    np.testing.assert_allclose(r, 0.0, atol=1e-12)
+    assert np.linalg.norm(psi) == pytest.approx(1.0)
+
+
+def test_run_shapes_and_physics() -> None:
+    out = BP.run(_cfg())
+    L = 3 * PER_P
+    assert out["M"].shape == (L, N, N)
+    assert out["bloch"].shape == (L, 3)
+    assert np.all(np.linalg.norm(out["bloch"], axis=1) <= 1.0 + 1e-9)
+    m = out["metrics"]
+    # p = 0: R maximally mixed, R2 undefined; p = 1: R purified by round 1.
+    assert m["purity_mean_p0"] == pytest.approx(0.5)
+    assert np.isnan(m["r2_bloch_M_p0"])
+    assert m["purity_mean_p1"] == pytest.approx(1.0)
+    assert m["S_R_mean_p1"] == pytest.approx(0.0, abs=1e-6)
+    assert m["r2_bloch_bayes_p0.3"] == pytest.approx(1.0)
+    assert m["n_features_M"] == 2 * N * N
+    assert m["n_features_state"] == 3 * N + 3 * N * (N - 1) // 2
+    for key in ("r2_x_state_p0.3", "r2_purity_M_state_p0.3", "mae_purity_M_p0.3"):
+        assert key in m
+
+
+def test_run_is_reproducible() -> None:
+    a = BP.run(_cfg("seed=7"))
+    b = BP.run(_cfg("seed=7"))
+    np.testing.assert_array_equal(a["M"], b["M"])
+    np.testing.assert_array_equal(a["bloch"], b["bloch"])
+    assert json.dumps(a["metrics"]) == json.dumps(b["metrics"])
+    c = BP.run(_cfg("seed=8"))
+    assert not np.array_equal(a["bloch"], c["bloch"])
+
+
+def test_run_rejects_bad_inputs() -> None:
+    with pytest.raises(ValueError, match="Nr=1"):
+        BP.run(_cfg("Nr=0"))
+    with pytest.raises(ValueError, match="distinct"):
+        BP.run(_cfg("bloch_task.p_values=[0.1,0.1]"))
+    with pytest.raises(ValueError, match=">= 10"):
+        BP.run(_cfg("bloch_task.samples_per_p=5"))
+
+
+def test_sweep_and_figures(tmp_path: Path) -> None:
+    env = {
+        **os.environ,
+        "OUT_DIR": str(tmp_path / "sweep"),
+        "N_VALUES": "4",
+        "SEEDS": "1 2",
+        "PER_P": "40",
+        "P_VALUES": "0 0.3 1",
+        "DEPTH": "N",
+        "SAVE_ARRAYS": "false",
+    }
+    subprocess.run(["bash", str(BASH_SCRIPT)], check=True, env=env, cwd=REPO_ROOT)
+    sweep = tmp_path / "sweep"
+    assert (sweep / "N4_seed1" / "metrics.json").exists()
+    assert not (sweep / "N4_seed1" / "bloch_purity.npz").exists()
+    stamp = (sweep / "N4_seed1" / "metrics.json").stat().st_mtime_ns
+    subprocess.run(
+        ["bash", str(BASH_SCRIPT)],
+        check=True,
+        env={**env, "SKIP_DONE": "1"},
+        cwd=REPO_ROOT,
+    )
+    assert (sweep / "N4_seed1" / "metrics.json").stat().st_mtime_ns == stamp
+    fig = tmp_path / "fig"
+    subprocess.run(
+        [sys.executable, str(PLOT_SCRIPT), str(sweep), "--out", str(fig)], check=True
+    )
+    for name in ("bloch_vector_N4.png", "purity_N4.png", "summary.json"):
+        assert (fig / name).exists()
+    summary = json.loads((fig / "summary.json").read_text())["N4"]
+    assert summary["n_circuits"] == 2
+    assert summary["p"] == [0.0, 0.3, 1.0]
+    # NaN (p = 0) is written as null.
+    assert summary["r2_bloch_M"][0] is None
+    assert summary["r2_bloch_bayes"][1] == pytest.approx(1.0)

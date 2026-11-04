@@ -48,6 +48,7 @@ commands and every option of the launchers.
 | [`charge_sharpening/`](charge_sharpening/README.md) | Agrawal et al. (2024), Fig. 7 | benchmark of purification |
 | [`haar_readouts/`](haar_readouts/README.md) | sector of a purifying reference qubit, many decoders | purification decoding (task 1B) |
 | [`nonlinear_M/`](nonlinear_M/README.md) | local label of a reference qubit from non-linear maps of `M` (XOR, `\|M\|`, pairs), Haar U(4) | why the linear QELM-M fails (#269) |
+| [`bloch_purity/`](bloch_purity/README.md) | Bloch vector and purity of a reference qubit from `M` and the state, Haar U(4) | tomography and purity of the local encoding (#277) |
 | [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
 | [`diagnostics/`](diagnostics/README.md) | chaos and locality of every reservoir | why a reservoir shows the MIPT or not |
 | [`double_descent/`](double_descent/README.md) | MNIST with a QELM readout | statistics of the readout |
@@ -1375,6 +1376,41 @@ subset of the reservoirs and `--parts spectra growth otoc reference
 velocities scrambling` a subset of the diagnostics (each part of each family
 has its own random generator, so a part run alone gives the same figure as in
 the full run).
+
+## Run the tomography and purity of the reference qubit (issue #277)
+
+The task of `nonlinear_M/` (reference qubit `R` in a Bell pair with the
+middle site, Haar U(4) gates, one fixed circuit per seed), with two
+continuous targets instead of the Z label: the Bloch vector
+`(<X_R>, <Y_R>, <Z_R>)` of `R` given the record, and its purity
+`Tr(rho_R^2)`. One run, from the repository root:
+
+```bash
+uv run python experiments/bloch_purity/bloch_purity.py N=8 seed=42
+```
+
+The sweep of the figures (`N = 8`, `T = 2N`, 8000 trajectories per `p`,
+10 circuits), then the two figures:
+
+```bash
+MAX_JOBS=4 ./experiments/bloch_purity/bloch_purity.sh
+uv run python experiments/bloch_purity/plot_bloch_purity.py \
+    outputs/bloch_purity/<date_time> --out outputs/bloch_purity/<date_time>/figures
+```
+
+On the cluster, larger sizes and more circuits:
+
+```bash
+OUT_ROOT=/scratch/qelm N_VALUES="8 10 12" SEEDS="$(seq 42 61)" \
+    SAVE_ARRAYS=false MAX_JOBS=16 ./experiments/bloch_purity/bloch_purity.sh
+```
+
+Options of the launcher (`PER_P`, `DEPTH`, `P_VALUES`, `ENCODING`, `FIXED`,
+`SAVE_ARRAYS`, `MAX_JOBS`, `SKIP_DONE`) are listed at the top of
+`bloch_purity.sh`. Each run writes `metrics.json` (and `bloch_purity.npz`) to
+`<OUT_DIR>/N<N>_seed<seed>/`; the plot script writes `bloch_vector_N<N>.png`,
+`purity_N<N>.png` and `summary.json`. Results:
+[`bloch_purity/README.md`](bloch_purity/README.md).
 
 ## Write your own
 
