@@ -46,6 +46,7 @@ def test_conf_tree_mirrors_the_package() -> None:
             "QELM_M_ratio.yaml",
             "double_descent.yaml",
             "QELM_S.yaml",
+            "QELM_R.yaml",
             "purification_gullans_huse.yaml",
             "haar_readouts.yaml",
             "per_p_convergence.yaml",
