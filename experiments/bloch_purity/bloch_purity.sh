@@ -20,6 +20,9 @@
 #     PER_P=8000                 trajectories per p (default 8000)
 #     DEPTH="2N"                 bloch_task.depth_rule (default 2N)
 #     P_VALUES="0.1 0.2"         overrides bloch_task.p_values
+#     LABELS=exact               bloch_task.labels: both (default), exact, shots
+#     M_FEATURES=raw_abs         bloch_task.m_features: raw (default, vec(M)) or
+#                                raw_abs ([vec(M), vec(|M|)])
 #     ENCODING=ghz               bloch_task.encoding: bell (default), charge, ghz, w
 #     FIXED=false                new gates per trajectory (the null control;
 #                                default true, one fixed circuit per seed)
@@ -49,6 +52,8 @@ PER_P="${PER_P:-8000}"
 DEPTH="${DEPTH:-2N}"
 FIXED="${FIXED:-true}"
 ENCODING="${ENCODING:-bell}"
+LABELS="${LABELS:-both}"
+M_FEATURES="${M_FEATURES:-raw}"
 SAVE_ARRAYS="${SAVE_ARRAYS:-true}"
 MAX_JOBS="${MAX_JOBS:-1}"
 SKIP_DONE="${SKIP_DONE:-0}"
@@ -95,6 +100,8 @@ run_one() {
     "bloch_task.depth_rule=$DEPTH" \
     "haar_circuit.fixed_instance=$FIXED" \
     "bloch_task.encoding=$ENCODING" \
+    "bloch_task.labels=$LABELS" \
+    "bloch_task.m_features=$M_FEATURES" \
     "bloch_task.save_arrays=$SAVE_ARRAYS" \
     ${P_LIST:+"bloch_task.p_values=$P_LIST"} \
     "hydra.run.dir=$RUN_DIR"
@@ -106,7 +113,7 @@ run_one() {
   fi
 }
 export -f run_one
-export OUT_DIR PER_P DEPTH FIXED ENCODING SAVE_ARRAYS P_LIST FAILED_LOG SKIP_DONE
+export OUT_DIR PER_P DEPTH FIXED ENCODING LABELS M_FEATURES SAVE_ARRAYS P_LIST FAILED_LOG SKIP_DONE
 
 QUEUE_STATUS=0
 printf '%s\0' "${RUNS[@]}" \

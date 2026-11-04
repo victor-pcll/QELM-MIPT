@@ -33,5 +33,14 @@ bloch_task:
   samples_per_p: 8000
   # Rounds T: an integer, or a multiple of N ("N", "2N").
   depth_rule: 2N
+  # Labels of the Bloch vector: exact (the exact r(M), Bayes R2 = 1), shots
+  # (one Pauli measurement of R per trajectory along a random axis, the
+  # experimental label; Bayes R2 ~ E[r_a^2]) or both. The purity is always
+  # scored on its exact value.
+  labels: both
+  # Features of the QELM on M: raw (vec(M), +-1 and 0) or raw_abs
+  # ([vec(M), vec(|M|)], the one-hot record, which also sees where the chain
+  # was measured and so can read the purity).
+  m_features: raw
   # Save the records, Bloch vectors and purities (.npz).
   save_arrays: true

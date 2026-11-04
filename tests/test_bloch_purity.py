@@ -186,7 +186,7 @@ def test_run_shapes_and_physics() -> None:
     assert m["purity_mean_p1"] == pytest.approx(1.0)
     assert m["S_R_mean_p1"] == pytest.approx(0.0, abs=1e-6)
     assert m["r2_bloch_bayes_p0.3"] == pytest.approx(1.0)
-    assert m["n_features_M"] == 2 * N * N
+    assert m["n_features_M"] == N * N
     assert m["n_features_state"] == 3 * N + 3 * N * (N - 1) // 2
     for key in ("r2_x_state_p0.3", "r2_purity_M_state_p0.3", "mae_purity_M_p0.3"):
         assert key in m
@@ -207,6 +207,8 @@ def test_run_rejects_bad_inputs() -> None:
         BP.run(_cfg("Nr=0"))
     with pytest.raises(ValueError, match="distinct"):
         BP.run(_cfg("bloch_task.p_values=[0.1,0.1]"))
+    with pytest.raises(ValueError, match="m_features"):
+        BP.run(_cfg("bloch_task.m_features=xor_full"))
     with pytest.raises(ValueError, match=">= 10"):
         BP.run(_cfg("bloch_task.samples_per_p=5"))
 
@@ -246,3 +248,84 @@ def test_sweep_and_figures(tmp_path: Path) -> None:
     # NaN (p = 0) is written as null.
     assert summary["r2_bloch_M"][0] is None
     assert summary["r2_bloch_bayes"][1] == pytest.approx(1.0)
+
+
+# ---- Single-shot labels -----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("state", "axis"),
+    [
+        (np.array([1.0, 1.0]) / np.sqrt(2.0), 0),
+        (np.array([1.0, 1j]) / np.sqrt(2.0), 1),
+        (np.array([1.0, 0.0]), 2),
+    ],
+)
+def test_measure_reference_eigenstates(state: np.ndarray, axis: int) -> None:
+    # R in the +1 eigenstate of P_axis, one system qubit in |0>: s = +1 always.
+    rng = np.random.default_rng(5)
+    psi = np.kron(state, [1.0, 0.0]).astype(complex)
+    for _ in range(20):
+        out, s = BP.measure_reference(psi, axis, rng)
+        assert s == 1.0
+        assert np.linalg.norm(out) == pytest.approx(1.0)
+        # The chain is untouched.
+        np.testing.assert_allclose(
+            np.abs(out.reshape(2, 2)).sum(axis=0), [1.0, 0.0], atol=1e-12
+        )
+    _, s = BP.measure_reference(np.kron(state.conj(), [1.0, 0.0]), axis, rng)
+    if axis == 1:
+        # |-i>: the -1 eigenstate of Y.
+        assert s == -1.0
+
+
+def test_measure_reference_born_rule() -> None:
+    rng = np.random.default_rng(6)
+    psi = _random_state(3, rng)
+    r = BP.bloch_vector(BP.reference_rho(psi))
+    for axis in range(3):
+        shots = [BP.measure_reference(psi, axis, rng)[1] for _ in range(4000)]
+        # E[s] = r_a, standard error 1 / sqrt(4000) ~ 0.016.
+        assert np.mean(shots) == pytest.approx(r[axis], abs=0.06)
+
+
+def test_score_shots_bayes_ceiling() -> None:
+    rng = np.random.default_rng(7)
+    L = 3000
+    bloch = rng.normal(size=(L, 3))
+    bloch /= np.linalg.norm(bloch, axis=1, keepdims=True)
+    axis = rng.integers(3, size=L)
+    r_a = bloch[np.arange(L), axis]
+    shot = np.where(rng.random(L) < (1.0 + r_a) / 2.0, 1.0, -1.0)
+    X = bloch.copy()
+    tr, te = np.arange(2000), np.arange(2000, L)
+    scores = BP.score_shots({"M": X}, bloch, axis, shot, tr, te)
+    # Pure states along random directions: E[r_a^2] = 1/3.
+    assert scores["bayes_shots_ceiling"] == pytest.approx(1.0 / 3.0, abs=0.03)
+    assert scores["r2_shots_bayes"] == pytest.approx(1.0 / 3.0, abs=0.06)
+    # A ridge on features that contain r reaches the Bayes ceiling.
+    assert scores["r2_shots_M"] == pytest.approx(scores["r2_shots_bayes"], abs=0.02)
+    assert abs(scores["r2_shots_chance"]) < 0.02
+
+
+def test_labels_modes() -> None:
+    both = BP.run(_cfg("seed=3", "bloch_task.labels=both"))
+    exact = BP.run(_cfg("seed=3", "bloch_task.labels=exact"))
+    shots = BP.run(_cfg("seed=3", "bloch_task.labels=shots"))
+    # The shots have their own generator: the exact scores do not move.
+    for key, value in exact["metrics"].items():
+        np.testing.assert_equal(both["metrics"][key], value)
+    np.testing.assert_array_equal(both["M"], shots["M"])
+    assert "r2_shots_M_p0.3" in both["metrics"]
+    assert "r2_shots_M_p0.3" not in exact["metrics"]
+    assert "r2_bloch_M_p0.3" not in shots["metrics"]
+    assert np.all(exact["axis"] == -1)
+    assert set(np.unique(shots["axis"])) == {0, 1, 2}
+    assert set(np.unique(shots["shot"])) <= {-1.0, 1.0}
+    with pytest.raises(ValueError, match="labels"):
+        BP.run(_cfg("bloch_task.labels=bogus"))
+
+
+def test_m_features_raw_abs() -> None:
+    out = BP.run(_cfg("bloch_task.m_features=raw_abs", "bloch_task.labels=exact"))
+    assert out["metrics"]["n_features_M"] == 2 * N * N

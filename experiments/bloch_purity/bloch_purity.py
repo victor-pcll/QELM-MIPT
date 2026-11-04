@@ -24,11 +24,11 @@ of one ``p`` and scored on the rest, are ridges (``RidgeCV``, alpha by
 leave-one-out over :data:`ALPHAS`, one alpha per target). None of them
 simulates the circuit:
 
-- ``M``, the **QELM on M**: the ridge on ``[vec(M), vec(|M|)]`` (mode
-  ``raw_abs`` of :data:`QELM.features.MODES`), the one-hot record
-  ``{unmeasured, +1, -1}`` of each site and round. ``vec(M)`` alone cannot
-  read the purity: it is even in the outcomes, set by *where* the chain was
-  measured, which only ``|M|`` sees;
+- ``M``, the **QELM on M**: the ridge on ``vec(M)``, the raw record
+  (+-1, and 0 for an unmeasured qubit). It cannot read the purity, which is
+  even in the outcomes: ``[vec(M), vec(|M|)]`` (mode ``raw_abs`` of
+  :data:`QELM.features.MODES`) can, through where the chain was measured,
+  and is left as an option (``bloch_task.m_features``);
 - ``state``, the **QELM on the state**: the ridge on the QELM features of
   the final chain state, ``<P_k>`` and ``<P_i P_j>`` (``P`` in ``X, Y, Z``),
   before ``R`` is measured;
@@ -58,12 +58,29 @@ Scores, per ``p`` (key suffix ``_p<p>``):
 - ``purity_mean``, ``purity_std``, ``S_R_mean``: the exact purity and the
   entropy of ``R`` (bits), the purification curve.
 
+Single-shot labels (``bloch_task.labels``: ``exact``, ``shots`` or
+``both``, the default). The exact ``r(M)`` is never available in an
+experiment: each trajectory gives one copy of ``R``. With ``shots``, ``R``
+is measured at the end of each trajectory along a random axis ``a`` in
+``X, Y, Z`` (drawn uniformly, :func:`measure_reference`), giving ``s = +-1``
+with ``E[s | M, a] = r_a(M)``, as in classical shadows. Each readout is a
+ridge per axis fitted on ``s``; the state readouts now read the chain
+*after* that measurement (as in the Z task of #269, where the outcome is
+imprinted on the chain). Score: ``r2_shots_<readout>``, the ``R2`` of the
+prediction against ``s`` over the test trajectories of all three axes. The
+Bayes decoder predicts ``r_a(M)``; its ``R2`` is ``~ E[r_a^2]``, below 1
+because ``s`` is a single shot (``bayes_shots_ceiling``, about 1/3 when
+``R`` is pure along a random direction). The purity has no single-shot
+label (it needs two copies), so it stays on the exact target. The shots use
+their own generator: the exact scores do not change with ``labels``.
+
 Run from the repository root:
 
     uv run python experiments/bloch_purity/bloch_purity.py N=8 seed=42
 
 Everything is written to the Hydra run directory: ``metrics.json``,
-``bloch_purity.npz`` (``M``, ``bloch``, ``purity``, ``p``, unless
+``bloch_purity.npz`` (``M``, ``bloch``, ``purity``, ``p``, ``axis``,
+``shot``, unless
 ``bloch_task.save_arrays=false``) and the config.
 """
 
@@ -97,6 +114,15 @@ ALPHAS = np.logspace(-3, 4, 15)
 # Readouts fitted by a ridge, in the order of the figures.
 READOUTS = ("M", "state", "M_state")
 COMPONENTS = ("x", "y", "z")
+LABELS = ("exact", "shots", "both")
+# Rotations that map the eigenbasis of X, Y, Z onto that of Z: a Z
+# measurement after U_a is a measurement of P_a.
+_H = np.array([[1.0, 1.0], [1.0, -1.0]], dtype=complex) / np.sqrt(2.0)
+BASIS_ROTATIONS = (
+    _H,
+    _H @ np.diag([1.0, -1j]),
+    np.eye(2, dtype=complex),
+)
 
 
 def _nonlinear_module() -> ModuleType:
@@ -166,6 +192,22 @@ def trajectory(
     return M, bloch_vector(reference_rho(psi)), psi
 
 
+def measure_reference(
+    psi: np.ndarray, axis: int, rng: np.random.Generator
+) -> tuple[np.ndarray, float]:
+    """Measure ``R`` (qubit 0) along ``X``, ``Y`` or ``Z`` (``axis`` 0, 1, 2).
+
+    Returns:
+        ``(psi, s)``: the state after the measurement (``R`` left in the
+        rotated frame, which does not change the chain) and the eigenvalue
+        ``s = +-1`` of the measured Pauli.
+    """
+    rotated = (BASIS_ROTATIONS[axis] @ psi.reshape(2, -1)).reshape(-1)
+    n = int(np.log2(psi.size))
+    out, s = measure_projective_psi(rotated, 0, n, rng)
+    return out, float(s)
+
+
 def r2_vector(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """``R2`` of a vector target: ``1 - SSE / SST`` summed over the columns.
 
@@ -228,6 +270,41 @@ def score_level(
     return out
 
 
+def score_shots(
+    features: dict[str, np.ndarray],
+    bloch: np.ndarray,
+    axis: np.ndarray,
+    shot: np.ndarray,
+    train: np.ndarray,
+    test: np.ndarray,
+) -> dict[str, float]:
+    """``R2`` of every readout against the single-shot labels ``shot``.
+
+    One ridge per axis, fitted on the training trajectories measured along
+    that axis; the score pools the test trajectories of the three axes.
+    """
+    preds: dict[str, np.ndarray] = {
+        name: np.zeros(test.size) for name in [*features, "bayes", "chance"]
+    }
+    for a in range(3):
+        tr = train[axis[train] == a]
+        sel = axis[test] == a
+        te = test[sel]
+        if te.size == 0:
+            continue
+        mean = float(shot[tr].mean()) if tr.size else 0.0
+        for name, X in features.items():
+            if tr.size < 2:
+                preds[name][sel] = mean
+            else:
+                preds[name][sel] = fit_ridge(X[tr], shot[tr], X[te])
+        preds["bayes"][sel] = bloch[te, a]
+        preds["chance"][sel] = mean
+    out = {f"r2_shots_{n}": r2_vector(shot[test], v) for n, v in preds.items()}
+    out["bayes_shots_ceiling"] = float(np.mean(bloch[test, axis[test]] ** 2))
+    return out
+
+
 def run(cfg: DictConfig) -> dict[str, Any]:
     """Simulate the trajectories of every ``p``, fit and score the readouts.
 
@@ -236,11 +313,13 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             or Hydra).
 
     Returns:
-        ``M``, ``bloch``, ``purity``, ``p``, ``metrics`` and ``timing``.
+        ``M``, ``bloch``, ``purity``, ``p``, ``axis`` and ``shot`` (``-1``
+        and 0 without shots), ``metrics`` and ``timing``.
 
     Raises:
         ValueError: If ``Nr`` is not 1, a probability is outside ``[0, 1]``
-            or repeated, or ``samples_per_p`` is too small.
+            or repeated, ``samples_per_p`` is too small, or ``labels`` or
+            ``m_features`` is unknown.
     """
     set_seed(cfg)
     N, Nr, _ = check_qubit_counts(cfg)
@@ -255,6 +334,16 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     per_p = int(task.samples_per_p)
     if per_p < 10:
         raise ValueError(f"bloch_task.samples_per_p must be >= 10, got {per_p}.")
+    labels = str(task.get("labels", "both"))
+    if labels not in LABELS:
+        raise ValueError(f"bloch_task.labels must be one of {LABELS}, got {labels!r}.")
+    want_exact = labels in ("exact", "both")
+    want_shots = labels in ("shots", "both")
+    m_features = str(task.get("m_features", "raw"))
+    if m_features not in ("raw", "raw_abs"):
+        raise ValueError(
+            f"bloch_task.m_features must be raw or raw_abs, got {m_features!r}."
+        )
     T = NL.depth_from_rule(task.depth_rule, N)
     train_fraction = float(cfg.samples.train_fraction)
 
@@ -275,16 +364,24 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     bloch = np.zeros((L, 3))
     n_quantum = 3 * N + 3 * N * (N - 1) // 2
     Q = np.zeros((L, n_quantum))
+    Q_shot = np.zeros((L, n_quantum)) if want_shots else np.zeros((L, 0))
+    axis = np.full(L, -1, dtype=int)
+    shot = np.zeros(L)
+    shot_rng = np.random.default_rng([seed, RNG_TAG, 3])
     start = time.perf_counter()
     for i in tqdm(range(L)):
         if not fixed and i > 0:
             circuit.redraw(gate_rng)
         M[i], bloch[i], psi = trajectory(psi0, circuit, float(p[i]), rng)
         Q[i] = NL.quantum_features(psi, N)
+        if want_shots:
+            axis[i] = int(shot_rng.integers(3))
+            psi, shot[i] = measure_reference(psi, int(axis[i]), shot_rng)
+            Q_shot[i] = NL.quantum_features(psi, N)
     elapsed = time.perf_counter() - start
     purity = purity_from_bloch(bloch)
 
-    vec_M = extract_M_features(M, "raw_abs")
+    vec_M = extract_M_features(M, m_features)
     features = {"M": vec_M, "state": Q, "M_state": np.hstack([vec_M, Q])}
     metrics: dict[str, float] = {
         "N": float(N),
@@ -304,13 +401,25 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         metrics[f"purity_mean_{key}"] = float(purity[idx].mean())
         metrics[f"purity_std_{key}"] = float(purity[idx].std())
         metrics[f"S_R_mean_{key}"] = float(np.mean(_entropy_bits(bloch[idx])))
-        for name, value in score_level(features, bloch, purity, tr, te).items():
+        scores: dict[str, float] = {}
+        if want_exact:
+            scores.update(score_level(features, bloch, purity, tr, te))
+        if want_shots:
+            after = {
+                "M": vec_M,
+                "state": Q_shot,
+                "M_state": np.hstack([vec_M, Q_shot]),
+            }
+            scores.update(score_shots(after, bloch, axis, shot, tr, te))
+        for name, value in scores.items():
             metrics[f"{name}_{key}"] = value
     return {
         "M": M,
         "bloch": bloch,
         "purity": purity,
         "p": p,
+        "axis": axis,
+        "shot": shot,
         "metrics": metrics,
         "timing": {"time_simulation_s": elapsed},
     }
@@ -341,12 +450,16 @@ def main(cfg: DictConfig) -> None:
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2))
     save_config(cfg, out_dir)
     print(f"N: {cfg.N}  T: {int(metrics['T'])}  seed: {cfg.seed}")
-    print(f"{'p':>6} {'purity':>7}   R2 Bloch (M, state, M+state)   R2 purity")
-    for level in cfg.bloch_task.p_values:
-        key = f"p{float(level):g}"
-        b = " ".join(f"{metrics[f'r2_bloch_{n}_{key}']:7.3f}" for n in READOUTS)
-        q = " ".join(f"{metrics[f'r2_purity_{n}_{key}']:7.3f}" for n in READOUTS)
-        print(f"{float(level):6.3f} {metrics[f'purity_mean_{key}']:7.3f}   {b}   {q}")
+    for score in ("r2_bloch", "r2_purity", "r2_shots"):
+        if f"{score}_bayes_p{float(cfg.bloch_task.p_values[0]):g}" not in metrics:
+            continue
+        print(f"{'p':>6} {'purity':>7}   {score} (M, state, M+state, Bayes)")
+        for level in cfg.bloch_task.p_values:
+            key = f"p{float(level):g}"
+            cols = " ".join(
+                f"{metrics[f'{score}_{n}_{key}']:7.3f}" for n in (*READOUTS, "bayes")
+            )
+            print(f"{float(level):6.3f} {metrics[f'purity_mean_{key}']:7.3f}   {cols}")
     print(f"Saved to {out_dir}")
 
 

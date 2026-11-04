@@ -6,10 +6,14 @@ Reads the ``N<N>_seed<seed>/metrics.json`` of one or more sweeps of
 the circuits (mean and standard error) and draws, for each ``N``:
 
 - ``bloch_vector_N<N>.png``: the ``R2`` of the Bloch vector
-  ``(<X_R>, <Y_R>, <Z_R>)`` against ``p``;
+  ``(<X_R>, <Y_R>, <Z_R>)`` against ``p``, against the exact ``r(M)``
+  (top) and, when the runs have them (``bloch_task.labels``: ``shots`` or
+  ``both``), against single-shot Pauli measurements of ``R`` (bottom), where
+  the Bayes decoder has a ceiling below 1;
 - ``purity_N<N>.png``: the ``R2`` of ``Tr(rho_R^2)`` against ``p``, with the
   exact mean purity (the purification curve) on a second axis (top), and
-  the mean absolute error of the predicted purity (bottom). Where ``R`` is
+  the mean absolute error of the predicted purity (bottom), defined at every
+  ``p``, with a horizontal line at the top of each QELM curve. Where ``R`` is
   pure on almost every trajectory (``std Tr(rho_R^2) <``
   :data:`PURITY_STD_MIN`, ``p >~ 0.6`` at ``N = 8``) the ``R2`` divides by a
   vanishing variance and is not drawn; the error stays defined.
@@ -53,6 +57,7 @@ SCORES = (
     "r2_z",
     "r2_purity",
     "r2_purity_from_bloch",
+    "r2_shots",
     "mse_bloch",
     "mae_purity",
 )
@@ -129,7 +134,7 @@ def summarize(runs: dict[int, list[dict[str, float]]]) -> dict[str, Any]:
             "fixed_instance": bool(group[0].get("fixed_instance", 1.0)),
             "p": ps.tolist(),
         }
-        for extra in ("purity_mean", "purity_std", "S_R_mean"):
+        for extra in ("purity_mean", "purity_std", "S_R_mean", "bayes_shots_ceiling"):
             s = stat(group, extra, ps)
             entry[extra] = _clean(s[0])
             entry[f"{extra}_sem"] = _clean(s[1])
@@ -178,14 +183,63 @@ def _draw_curves(
     ax.set_xlim(0, ps.max())
 
 
+def _mark_maxima(ax: Any, entry: dict[str, Any], score: str) -> None:
+    """A horizontal line at the top of each QELM curve (the top of the bell),
+    labelled with its value and the ``p`` where it is reached."""
+    ps = np.asarray(entry["p"])
+    for name, _, color in CURVES:
+        if name in ("bayes", "chance"):
+            continue
+        mean = _array(entry, f"{score}_{name}")
+        if not np.any(np.isfinite(mean)):
+            continue
+        k = int(np.nanargmax(mean))
+        ax.axhline(mean[k], color=color, ls=":", lw=1)
+        ax.annotate(
+            f"max {mean[k]:.3f} at p = {ps[k]:g}",
+            xy=(ps.max(), mean[k]),
+            xytext=(-4, 2),
+            textcoords="offset points",
+            ha="right",
+            va="bottom",
+            fontsize=7,
+            color=color,
+        )
+
+
+def _has(entry: dict[str, Any], key: str) -> bool:
+    return key in entry and np.any(np.isfinite(_array(entry, key)))
+
+
 def plot_bloch(entry: dict[str, Any], N: int, out: Path) -> Path:
-    """``R2`` of the Bloch vector of ``R`` against ``p``."""
-    fig, ax = plt.subplots(figsize=(7, 6))
-    _draw_curves(ax, entry, "r2_bloch")
-    ax.set_ylim(-0.1, 1.05)
-    ax.set_ylabel("test R2 of the Bloch vector (<X_R>, <Y_R>, <Z_R>)")
-    ax.legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=2)
-    ax.set_title(_title(entry, N, "Tomography of the reference qubit"), fontsize=10)
+    """``R2`` of the Bloch vector of ``R`` against ``p``: exact targets, and
+    single-shot labels when the runs have them."""
+    shots = _has(entry, "r2_shots_bayes")
+    exact = _has(entry, "r2_bloch_bayes")
+    panels = [k for k, ok in (("r2_bloch", exact), ("r2_shots", shots)) if ok]
+    if not panels:
+        raise ValueError("The runs hold neither exact nor single-shot scores.")
+    fig, axes = plt.subplots(
+        len(panels), 1, figsize=(7, 5 + 4 * (len(panels) - 1)), sharex=True
+    )
+    axes = np.atleast_1d(axes)
+    for ax, score in zip(axes, panels, strict=True):
+        _draw_curves(ax, entry, score)
+        if score == "r2_bloch":
+            ax.set_ylim(-0.1, 1.05)
+            ax.set_ylabel("test R2 against the exact r(M)")
+            ax.set_title("exact targets (<X_R>, <Y_R>, <Z_R>) given M", fontsize=9)
+        else:
+            ax.set_ylabel("test R2 against one shot of R along X, Y or Z")
+            ax.set_title(
+                "single-shot labels: R measured once along a random axis; "
+                "Bayes R2 ~ E[r_a^2] < 1",
+                fontsize=9,
+            )
+        if ax is not axes[-1]:
+            ax.set_xlabel("")
+    axes[-1].legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.15), ncol=2)
+    fig.suptitle(_title(entry, N, "Tomography of the reference qubit"), fontsize=10)
     fig.tight_layout()
     path = out / f"bloch_vector_N{N}.png"
     fig.savefig(path, dpi=150, bbox_inches="tight")
@@ -217,6 +271,7 @@ def plot_purity(entry: dict[str, Any], N: int, out: Path) -> Path:
     twin.set_ylabel("E[Tr(rho_R^2)]", color="#2ca02c")
     twin.tick_params(axis="y", colors="#2ca02c")
     _draw_curves(ax_err, entry, "mae_purity")
+    _mark_maxima(ax_err, entry, "mae_purity")
     ax_err.set_ylim(bottom=-0.005)
     ax_err.set_ylabel("test mean |Tr(rho^2)_pred - Tr(rho^2)|")
     handles, labels = ax.get_legend_handles_labels()
@@ -251,7 +306,9 @@ def main(argv: list[str] | None = None) -> list[Path]:
     paths: list[Path] = []
     for N in sorted(runs):
         entry = summary[f"N{N}"]
-        paths += [plot_bloch(entry, N, out), plot_purity(entry, N, out)]
+        paths.append(plot_bloch(entry, N, out))
+        if _has(entry, "r2_purity_bayes"):
+            paths.append(plot_purity(entry, N, out))
     for path in paths:
         print(f"Saved {path}")
     return paths
