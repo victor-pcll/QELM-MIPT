@@ -260,9 +260,7 @@ def plot_purity(entry: dict[str, Any], N: int, out: Path) -> Path:
     )
     spread = _array(entry, "purity_std")
     # No Bayes line (R2 = 1) on top, so that the scale shows the QELMs.
-    _draw_curves(
-        ax, entry, "r2_purity", mask=spread >= PURITY_STD_MIN, skip=("bayes",)
-    )
+    _draw_curves(ax, entry, "r2_purity", mask=spread >= PURITY_STD_MIN, skip=("bayes",))
     ax.set_xlabel("")
     ax.set_ylabel("test R2 of the purity Tr(rho_R^2)")
     _draw_curves(ax_err, entry, "mae_purity")
