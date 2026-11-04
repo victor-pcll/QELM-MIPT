@@ -49,6 +49,7 @@ commands and every option of the launchers.
 | [`charge_sharpening/`](charge_sharpening/README.md) | Agrawal et al. (2024), Fig. 7 | benchmark of purification |
 | [`haar_readouts/`](haar_readouts/README.md) | sector of a purifying reference qubit, many decoders | purification decoding (task 1B) |
 | [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
+| [`clifford_state_readout/`](clifford_state_readout/README.md) | `S_R` and purity of the reference qubit from the final Clifford state, ridge / quadratic / MLP | can a readout of the state probe purification (#292) |
 | [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
 | [`diagnostics/`](diagnostics/README.md) | chaos and locality of every reservoir | why a reservoir shows the MIPT or not |
 | [`double_descent/`](double_descent/README.md) | MNIST with a QELM readout | statistics of the readout |
@@ -1414,6 +1415,41 @@ subset of the reservoirs and `--parts spectra growth otoc reference
 velocities scrambling` a subset of the diagnostics (each part of each family
 has its own random generator, so a part run alone gives the same figure as in
 the full run).
+
+## Learn S_R of the reference qubit from the final Clifford state (issue #292)
+
+`experiments/clifford_state_readout/clifford_state_readout.py` (config
+`conf/clifford_state_readout.yaml`) simulates, at one size `N` and for every
+`p` of `task.p_values`, `task.samples_per_p` trajectories of the Clifford
+brickwork of `QELM.models.circuits.stabilizer` (reference qubit `R` in a Bell
+pair with the middle site, `task.scramble_steps` unmeasured steps, then
+`task.steps = 2N` measured steps), and fits readouts of the final state of the
+system to the entropy `S_R` of `R` (0 or 1 bit; the purity is `1 - S_R / 2`).
+Physics, readouts and results: [`clifford_state_readout/README.md`](clifford_state_readout/README.md).
+
+```bash
+uv run python experiments/clifford_state_readout/clifford_state_readout.py N=8
+MAX_JOBS=4 ./experiments/clifford_state_readout/clifford_state_readout.sh
+SCRAMBLE=2N MAX_JOBS=4 ./experiments/clifford_state_readout/clifford_state_readout.sh
+uv run python experiments/clifford_state_readout/plot_clifford_state_readout.py \
+  outputs/clifford_state_readout/<date_time>
+```
+
+Options of the launcher (environment variables): `OUT_ROOT`, `OUT_DIR`,
+`N_VALUES` (default `6 8 10 12 16 20`), `SEEDS` (`42 43 44`), `PER_P`
+(`2000`), `SCRAMBLE` (`0`, or `2N` for the scrambling of Gullans & Huse),
+`READOUTS` (Hydra list, default every readout), `SAVE_ARRAYS` (`false`),
+`SKIP_DONE` (`true`), `MAX_JOBS` (`1`). A run at `N = 20` takes about 4 GB
+of memory (the pooled quadratic ridge): keep `MAX_JOBS <= 2` for it on a
+16 GB machine.
+
+Each run writes `N<N>_seed<seed>/metrics.json` (per `p`: the oracle
+`<S_R>`, the `R2` and mean absolute error of each readout trained at that
+`p`, and of each readout trained on all `p` at once with its mean
+prediction), its log and its config. The plot script writes
+`order_parameter.png`, `r2_per_p.png`, `r2_pooled.png`, their data and
+`summary.json` (averages over seeds and crossings of consecutive sizes) in
+the sweep folder.
 
 ## Write your own
 
