@@ -42,5 +42,8 @@ bloch_task:
   # ([vec(M), vec(|M|)], the one-hot record, which also sees where the chain
   # was measured and so can read the purity).
   m_features: raw
+  # Nonlinear diagnostics of the QELM on M: a ridge on [vec(M), vec(|M|)]
+  # (M_abs) and a small MLP on the same features (M_mlp). Slower (the MLP).
+  nonlinear_readouts: false
   # Save the records, Bloch vectors and purities (.npz).
   save_arrays: true

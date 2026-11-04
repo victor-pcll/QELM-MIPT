@@ -329,3 +329,120 @@ def test_labels_modes() -> None:
 def test_m_features_raw_abs() -> None:
     out = BP.run(_cfg("bloch_task.m_features=raw_abs", "bloch_task.labels=exact"))
     assert out["metrics"]["n_features_M"] == 2 * N * N
+
+
+# ---- Nonlinear readouts (issue #282) ----------------------------------------
+
+
+def test_fit_mlp_reads_a_nonlinear_target() -> None:
+    rng = np.random.default_rng(0)
+    X = rng.choice([-1.0, 0.0, 1.0], size=(3000, 4))
+    y = X[:, 0] * X[:, 1]  # invisible to a linear readout
+    tr, te = slice(0, 2400), slice(2400, None)
+    ridge = BP.fit_ridge(X[tr], y[tr], X[te])
+    mlp = BP.fit_mlp(X[tr], y[tr], X[te])
+    assert BP.r2_vector(y[te], ridge) < 0.05
+    assert BP.r2_vector(y[te], mlp) > 0.9
+    # Constant features: the mean target, as the ridge.
+    flat = BP.fit_mlp(np.zeros((10, 3)), np.arange(10.0), np.zeros((2, 3)))
+    np.testing.assert_allclose(flat, 4.5)
+
+
+def test_fit_readout_dispatch() -> None:
+    rng = np.random.default_rng(1)
+    X = rng.normal(size=(200, 3))
+    y = X @ np.array([1.0, -2.0, 0.5])
+    np.testing.assert_allclose(
+        BP.fit_readout("M_abs", X, y, X[:5]), BP.fit_ridge(X, y, X[:5])
+    )
+    np.testing.assert_allclose(
+        BP.fit_readout("M_mlp", X, y, X[:5]), BP.fit_mlp(X, y, X[:5])
+    )
+
+
+def test_nonlinear_readouts_option() -> None:
+    base = BP.run(_cfg())["metrics"]
+    out = BP.run(_cfg("bloch_task.nonlinear_readouts=true"))["metrics"]
+    for name in BP.NONLINEAR_READOUTS:
+        assert f"r2_bloch_{name}_p0.3" in out
+        assert f"r2_shots_{name}_p0.3" in out
+        assert f"mae_purity_{name}_p0.3" in out
+        assert f"r2_bloch_{name}_p0.3" not in base
+    # The other scores do not change.
+    for key, value in base.items():
+        if key.startswith(("r2_", "mae_", "mse_", "purity_")):
+            np.testing.assert_allclose(out[key], value, equal_nan=True)
+    # With raw M, the ridge on [M, |M|] is the raw_abs readout of #280.
+    raw_abs = BP.run(_cfg("bloch_task.m_features=raw_abs"))["metrics"]
+    np.testing.assert_allclose(out["r2_bloch_M_abs_p0.3"], raw_abs["r2_bloch_M_p0.3"])
+
+
+# ---- Finite-size figure (issue #282) ----------------------------------------
+
+FSS_SCRIPT = FOLDER / "plot_bloch_fss.py"
+FSS = _load(FSS_SCRIPT)
+
+
+def test_extremum_of_a_parabola() -> None:
+    ps = np.linspace(0.0, 1.0, 21)
+    x0, y0 = FSS.extremum(ps, (ps - 0.23) ** 2 + 0.1, "min")
+    assert x0 == pytest.approx(0.23)
+    assert y0 == pytest.approx(0.1)
+    x1, y1 = FSS.extremum(ps, -((ps - 0.31) ** 2), "max")
+    assert x1 == pytest.approx(0.31)
+    assert y1 == pytest.approx(0.0, abs=1e-12)
+    # Extremum at the edge of the range: the grid point itself.
+    x2, _ = FSS.extremum(ps, ps, "min")
+    assert x2 == pytest.approx(FSS.EXTREMUM_RANGE[0])
+
+
+def test_crossings_of_two_lines() -> None:
+    ps = np.linspace(0.0, 0.5, 11)
+    assert FSS.crossings(ps, ps, 0.2 + 0 * ps) == [pytest.approx(0.2)]
+    assert FSS.crossings(ps, ps, ps + 1.0) == []
+    # A crossing outside CROSSING_RANGE is left out.
+    assert FSS.crossings(ps, ps, 0.02 + 0 * ps) == []
+
+
+def test_fss_sweep_and_figures(tmp_path: Path) -> None:
+    sweep = tmp_path / "sweep"
+    env = {
+        **os.environ,
+        "OUT_DIR": str(sweep),
+        "N_VALUES": "3 4",
+        "SEEDS": "1 2",
+        "PER_P": "60",
+        "P_VALUES": "0.1 0.3 1",
+        "DEPTH": "N",
+        "NONLINEAR": "true",
+        "SAVE_ARRAYS": "false",
+        "MAX_JOBS": "2",
+    }
+    subprocess.run(["bash", str(BASH_SCRIPT)], check=True, env=env, cwd=REPO_ROOT)
+    metrics = json.loads((sweep / "N4_seed1" / "metrics.json").read_text())
+    assert "r2_bloch_M_mlp_p0.3" in metrics
+    fig = tmp_path / "fig"
+    subprocess.run(
+        [
+            sys.executable,
+            str(FSS_SCRIPT),
+            str(sweep),
+            "--out",
+            str(fig),
+            "--n-boot",
+            "20",
+        ],
+        check=True,
+    )
+    for name in ("bloch_fss.png", "bloch_nonlinear.png", "fss_summary.json"):
+        assert (fig / name).exists()
+    summary = json.loads((fig / "fss_summary.json").read_text())
+    assert summary["sizes"] == [3, 4]
+    assert set(summary["extrema"]) == set(FSS.EXTREMA)
+    assert "N3_N4" in summary["crossings"]["r2_bloch"]
+    # The per-N figures also draw the nonlinear curves.
+    subprocess.run(
+        [sys.executable, str(PLOT_SCRIPT), str(sweep), "--out", str(fig)], check=True
+    )
+    per_n = json.loads((fig / "summary.json").read_text())["N4"]
+    assert any(v is not None for v in per_n["r2_bloch_M_mlp"])

@@ -19,7 +19,9 @@ the circuits (mean and standard error) and draws, for each ``N``:
   vanishing variance and is not drawn; the error stays defined.
 
 Curves: QELM on M, QELM on the state, QELM on M and the state, Bayes optimal
-on M (the exact target, ``R2 = 1``) and chance (``R2 = 0``). Also writes
+on M (the exact target, ``R2 = 1``) and chance (``R2 = 0``), plus the
+nonlinear diagnostics (ridge and MLP on ``[M, |M|]``) when the runs have
+them (``bloch_task.nonlinear_readouts=true``). Also writes
 ``summary.json``, the averaged curves:
 
     uv run python experiments/bloch_purity/plot_bloch_purity.py \\
@@ -46,6 +48,8 @@ CURVES: tuple[tuple[str, str, str], ...] = (
     ("M", "QELM on M", "#d62728"),
     ("state", "QELM on the state: <P_k>, <P_i P_j>", "#1f77b4"),
     ("M_state", "QELM on M and the state", "#fa5703"),
+    ("M_abs", "ridge on [M, |M|] (diagnostic)", "#2ca02c"),
+    ("M_mlp", "MLP on [M, |M|] (diagnostic)", "#9467bd"),
     ("bayes", "Bayes optimal on M (knows the circuit)", "black"),
     ("chance", "chance (mean of the training targets)", "grey"),
 )
@@ -178,6 +182,8 @@ def _draw_curves(
             continue
         mean = _array(entry, f"{score}_{name}")
         sem = _array(entry, f"{score}_{name}_sem")
+        if not np.any(np.isfinite(mean)):
+            continue
         if mask is not None:
             mean, sem = np.where(mask, mean, np.nan), np.where(mask, sem, np.nan)
         style = "--" if name == "chance" else "-"

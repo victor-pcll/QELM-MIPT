@@ -34,6 +34,15 @@ simulates the circuit:
   before ``R`` is measured;
 - ``M_state``, the **QELM on M and the state**: both side by side.
 
+With ``bloch_task.nonlinear_readouts=true``, two diagnostics of the
+linear readout of M are added (:data:`NONLINEAR_READOUTS`):
+
+- ``M_abs``: the ridge on ``[vec(M), vec(|M|)]``, whatever ``m_features``;
+- ``M_mlp``: a small MLP (:func:`fit_mlp`) on the same features.
+
+If the gap between the QELM on M and the Bayes decoder came from the
+linearity of the readout, they would close it.
+
 The state features carry no coherence between the two branches of ``R``
 (``<P>`` of the chain alone), so the QELM on the state is expected near
 ``R2 = 0`` for the Bloch vector, unlike the Z task of #269 where ``R`` was
@@ -98,6 +107,7 @@ import numpy as np
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 from sklearn.linear_model import RidgeCV
+from sklearn.neural_network import MLPRegressor
 from tqdm import tqdm
 
 from QELM import check_qubit_counts, set_seed
@@ -113,6 +123,12 @@ RNG_TAG = 277
 ALPHAS = np.logspace(-3, 4, 15)
 # Readouts fitted by a ridge, in the order of the figures.
 READOUTS = ("M", "state", "M_state")
+# Nonlinear diagnostics of the QELM on M (bloch_task.nonlinear_readouts): a
+# ridge on [vec(M), vec(|M|)] and a small MLP on the same features.
+NONLINEAR_READOUTS = ("M_abs", "M_mlp")
+# Hidden layers and weight decay of the MLP readout.
+MLP_HIDDEN = (128, 64)
+MLP_ALPHA = 1e-3
 COMPONENTS = ("x", "y", "z")
 LABELS = ("exact", "shots", "both")
 # Rotations that map the eigenbasis of X, Y, Z onto that of Z: a Z
@@ -234,6 +250,40 @@ def fit_ridge(X_tr: np.ndarray, Y_tr: np.ndarray, X_te: np.ndarray) -> np.ndarra
     return np.asarray(model.predict(X_te)).reshape(X_te.shape[0], *Y_tr.shape[1:])
 
 
+def fit_mlp(
+    X_tr: np.ndarray, Y_tr: np.ndarray, X_te: np.ndarray, seed: int = RNG_TAG
+) -> np.ndarray:
+    """Small MLP (:data:`MLP_HIDDEN`, ReLU, Adam, early stopping on 10 % of
+    the training set, from 100 training points): the nonlinear diagnostic
+    of the readout.
+
+    Constant features give the mean target, as :func:`fit_ridge`.
+    """
+    Y_tr = np.asarray(Y_tr, dtype=float)
+    if X_tr.shape[1] == 0 or np.ptp(X_tr, axis=0).max() < 1e-12:
+        return np.broadcast_to(Y_tr.mean(axis=0), (X_te.shape[0], *Y_tr.shape[1:]))
+    model = MLPRegressor(
+        hidden_layer_sizes=MLP_HIDDEN,
+        alpha=MLP_ALPHA,
+        # Early stopping needs a validation set of a few points.
+        early_stopping=X_tr.shape[0] >= 100,
+        max_iter=300,
+        n_iter_no_change=15,
+        random_state=seed,
+    ).fit(X_tr, Y_tr)
+    return np.asarray(model.predict(X_te)).reshape(X_te.shape[0], *Y_tr.shape[1:])
+
+
+def fit_readout(
+    name: str, X_tr: np.ndarray, Y_tr: np.ndarray, X_te: np.ndarray
+) -> np.ndarray:
+    """:func:`fit_mlp` for the readouts whose name ends in ``_mlp``,
+    :func:`fit_ridge` otherwise."""
+    if name.endswith("_mlp"):
+        return fit_mlp(X_tr, Y_tr, X_te)
+    return fit_ridge(X_tr, Y_tr, X_te)
+
+
 def score_level(
     features: dict[str, np.ndarray],
     bloch: np.ndarray,
@@ -245,8 +295,8 @@ def score_level(
     out: dict[str, float] = {}
     predictions: dict[str, tuple[np.ndarray, np.ndarray]] = {
         name: (
-            fit_ridge(X[train], bloch[train], X[test]),
-            fit_ridge(X[train], purity[train], X[test]),
+            fit_readout(name, X[train], bloch[train], X[test]),
+            fit_readout(name, X[train], purity[train], X[test]),
         )
         for name, X in features.items()
     }
@@ -297,7 +347,7 @@ def score_shots(
             if tr.size < 2:
                 preds[name][sel] = mean
             else:
-                preds[name][sel] = fit_ridge(X[tr], shot[tr], X[te])
+                preds[name][sel] = fit_readout(name, X[tr], shot[tr], X[te])
         preds["bayes"][sel] = bloch[te, a]
         preds["chance"][sel] = mean
     out = {f"r2_shots_{n}": r2_vector(shot[test], v) for n, v in preds.items()}
@@ -344,6 +394,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         raise ValueError(
             f"bloch_task.m_features must be raw or raw_abs, got {m_features!r}."
         )
+    nonlinear = bool(task.get("nonlinear_readouts", False))
     T = NL.depth_from_rule(task.depth_rule, N)
     train_fraction = float(cfg.samples.train_fraction)
 
@@ -383,6 +434,11 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     vec_M = extract_M_features(M, m_features)
     features = {"M": vec_M, "state": Q, "M_state": np.hstack([vec_M, Q])}
+    nonlinear_features: dict[str, np.ndarray] = {}
+    if nonlinear:
+        M_abs = extract_M_features(M, "raw_abs")
+        nonlinear_features = {"M_abs": M_abs, "M_mlp": M_abs}
+    features.update(nonlinear_features)
     metrics: dict[str, float] = {
         "N": float(N),
         "T": float(T),
@@ -409,6 +465,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
                 "M": vec_M,
                 "state": Q_shot,
                 "M_state": np.hstack([vec_M, Q_shot]),
+                **nonlinear_features,
             }
             scores.update(score_shots(after, bloch, axis, shot, tr, te))
         for name, value in scores.items():
@@ -453,11 +510,15 @@ def main(cfg: DictConfig) -> None:
     for score in ("r2_bloch", "r2_purity", "r2_shots"):
         if f"{score}_bayes_p{float(cfg.bloch_task.p_values[0]):g}" not in metrics:
             continue
-        print(f"{'p':>6} {'purity':>7}   {score} (M, state, M+state, Bayes)")
+        extra = ", [M,|M|], MLP" if cfg.bloch_task.get("nonlinear_readouts") else ""
+        print(f"{'p':>6} {'purity':>7}   {score} (M, state, M+state{extra}, Bayes)")
         for level in cfg.bloch_task.p_values:
             key = f"p{float(level):g}"
+            names = (*READOUTS, *NONLINEAR_READOUTS, "bayes")
             cols = " ".join(
-                f"{metrics[f'{score}_{n}_{key}']:7.3f}" for n in (*READOUTS, "bayes")
+                f"{metrics[f'{score}_{n}_{key}']:7.3f}"
+                for n in names
+                if f"{score}_{n}_{key}" in metrics
             )
             print(f"{float(level):6.3f} {metrics[f'purity_mean_{key}']:7.3f}   {cols}")
     print(f"Saved to {out_dir}")
