@@ -149,6 +149,11 @@ def test_fit_predict_readouts() -> None:
         exp.fit_predict("n_meas", X[tr], y[tr], X[te], 3, 0)
     with pytest.raises(ValueError, match="Unknown readout"):
         exp.fit_predict("knn", X[tr], y[tr], X[te], 3, 0)
+    # A rare class: the MLP falls back on the training mean.
+    y_rare = np.zeros(300)
+    y_rare[:3] = 1.0
+    rare = exp.fit_predict("mlp", X[tr], y_rare, X[te], 3, 0)
+    np.testing.assert_allclose(rare, 0.01)
     # One class only: the constant.
     const = exp.fit_predict("linear", X[tr], np.ones(300), X[te], 3, 0)
     np.testing.assert_array_equal(const, 1.0)

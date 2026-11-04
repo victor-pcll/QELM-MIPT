@@ -44,7 +44,8 @@ outcomes. The readouts that read the signs (``linear``) can only lose;
 ``abs`` and ``mlp`` read the outcome-independent part of the state.
 - ``mlp``: a small neural network (one hidden layer of 32 units, L2
   penalty, early stopping) on the squares, a classifier whose output is
-  its probability that ``S_R = 1``;
+  its probability that ``S_R = 1`` (the training mean when a class of
+  ``S_R`` has fewer than ``MLP_MIN_CLASS`` training samples);
 - ``chance``: the mean of the training targets;
 - ``n_meas``: ridge on the number of measurements of the trajectory and its
   square, a control that reads the record, not the state: within one ``p``
@@ -110,6 +111,8 @@ from QELM.utils import save_config
 READOUTS = ("chance", "n_meas", "linear", "abs", "quadratic", "mlp")
 PAULIS = "XYZ"
 RIDGE_ALPHAS = np.logspace(-4, 4, 17)
+# Fewest samples of each class of S_R for the MLP to be fitted.
+MLP_MIN_CLASS = 20
 
 
 @cache
@@ -345,7 +348,11 @@ def fit_predict(
         return np.full(len(X_test), float(y_train[0]))
     f = transforms[readout]
     if readout == "mlp":
-        # S_R is 0 or 1: the network outputs P(S_R = 1 | features).
+        # S_R is 0 or 1: the network outputs P(S_R = 1 | features). Its
+        # early stopping holds out a stratified 10 %, which needs a few
+        # samples of each class: below MLP_MIN_CLASS, the training mean.
+        if min(np.sum(y_train == 0), np.sum(y_train == 1)) < MLP_MIN_CLASS:
+            return np.full(len(X_test), float(np.mean(y_train)))
         mlp = _mlp(seed)
         mlp.fit(f(X_train).astype(float), y_train.astype(int))
         return np.asarray(mlp.predict_proba(f(X_test).astype(float))[:, 1], float)
