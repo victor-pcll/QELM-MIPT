@@ -19,13 +19,19 @@ would cross near ``p_c``. To test this, ``fss_summary.json`` holds, for each
 ``N``, the position of the minimum of (a) and of the peak of (c) (a parabola
 through the three points around the extremum of the averaged curve), and,
 for each pair of sizes, the ``p`` where the curves cross (a sign change of
-the difference of the averaged curves, linearly interpolated). The same is done for the spread
-``purity_std`` (its maximum) and the purification curve ``purity_mean``
-(its crossings), the physical quantities behind panel (c): a readout that
-reads nothing of the purity has an error equal to the mean absolute
-deviation of the purity. Every value comes with a bootstrap over the
-circuits (``--n-boot`` resamplings of the seeds of each ``N``, median and
-16-84 % interval).
+the difference of the averaged curves, linearly interpolated). The same is
+done for the spread ``purity_std`` (its maximum) and the purification curve
+``purity_mean`` (its crossings), the physical quantities behind panel (c): a
+readout that reads nothing of the purity has an error equal to the mean
+absolute deviation of the purity. Every value comes with a bootstrap over
+the circuits (``--n-boot`` resamplings of the seeds of each ``N``, median
+and 16-84 % interval).
+
+When the runs have the variance probe (``var_purity_*``),
+``purity_variance.png`` draws the variance over the trajectories of the
+purity of ``R``, exact (the oracle) and predicted by the QELM, and its peak
+(position and height per ``N``) is in ``fss_summary.json``: the decoded
+analogue of the charge sharpening of #137.
 
 When the runs have the nonlinear diagnostics
 (``bloch_task.nonlinear_readouts=true``), ``bloch_nonlinear.png`` compares,
@@ -72,12 +78,31 @@ EXTREMA = {
     "r2_bloch": "min",
     "mae_purity": "max",
     "purity_std": "max",
+    "var_oracle": "max",
+    "var_qelm_M": "max",
+    "var_qelm_M_abs": "max",
 }
-# Metrics whose crossings between sizes are looked for (``purity_mean`` is
+# Series analysed: name -> (metric, readout) of :func:`curves`. The variance
+# probe (runs with ``var_purity_*``): the oracle variance over the
+# trajectories of the exact purity, the variance of the purity predicted by
+# the QELM on M (from its Bloch vector, the ridge on the purity itself being
+# constant on the raw record) and by the ridge on [M, |M|] (direct), and
+# their fractions of the oracle variance.
+SERIES: dict[str, tuple[str, str]] = {
+    "r2_bloch": ("r2_bloch", "M"),
+    "mae_purity": ("mae_purity", "M"),
+    "purity_std": ("purity_std", ""),
+    "r2_shots_ratio": ("r2_shots_ratio", "M"),
+    "purity_mean": ("purity_mean", ""),
+    "var_oracle": ("var_purity", "bayes"),
+    "var_qelm_M": ("var_purity_from_bloch", "M"),
+    "var_qelm_M_abs": ("var_purity", "M_abs"),
+    "var_fraction_M": ("var_fraction_from_bloch", "M"),
+    "var_fraction_M_abs": ("var_fraction", "M_abs"),
+}
+# Series whose crossings between sizes are looked for (``purity_mean`` is
 # the purification order parameter: it has no extremum).
-CROSSED = (*EXTREMA, "r2_shots_ratio", "purity_mean")
-# Metrics of the run itself, with no readout.
-NO_READOUT = ("purity_mean", "purity_std")
+CROSSED = tuple(SERIES)
 
 
 def _plot_module() -> ModuleType:
@@ -96,7 +121,9 @@ PB = _plot_module()
 def curves(runs: list[dict[str, float]], metric: str, readout: str) -> np.ndarray:
     """Per-run curve of a metric, shape ``(n_runs, n_p)``.
 
-    ``r2_shots_ratio`` is ``r2_shots_<readout> / r2_shots_bayes``;
+    ``r2_shots_ratio`` is ``r2_shots_<readout> / r2_shots_bayes``,
+    ``var_fraction[_from_bloch]`` is ``var_purity[_from_bloch]_<readout> /
+    var_purity_bayes``;
     ``purity_mean`` and ``purity_std`` take no readout.
     """
     ps = PB.p_values(runs[0])
@@ -110,6 +137,10 @@ def curves(runs: list[dict[str, float]], metric: str, readout: str) -> np.ndarra
     if metric == "r2_shots_ratio":
         with np.errstate(divide="ignore", invalid="ignore"):
             return get(f"r2_shots_{readout}") / get("r2_shots_bayes")
+    if metric.startswith("var_fraction"):
+        suffix = metric[len("var_fraction") :]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            return get(f"var_purity{suffix}_{readout}") / get("var_purity_bayes")
     if not readout:
         return get(metric)
     return get(f"{metric}_{readout}")
@@ -186,8 +217,9 @@ def analyse(
     ps = {N: PB.p_values(runs[N][0]) for N in sizes}
     out: dict[str, Any] = {"sizes": sizes, "extrema": {}, "crossings": {}}
     for metric in CROSSED:
-        readout = "" if metric in NO_READOUT else "M"
-        data = {N: curves(runs[N], metric, readout) for N in sizes}
+        data = {N: curves(runs[N], *SERIES[metric]) for N in sizes}
+        if not any(np.any(np.isfinite(d)) for d in data.values()):
+            continue
         boots = {
             N: [
                 _nanmean(data[N][rng.integers(len(runs[N]), size=len(runs[N]))])
@@ -281,6 +313,79 @@ def plot_fss(runs: dict[int, list[dict[str, float]]], out: Path) -> Path:
     return path
 
 
+# Panels of purity_variance.png: ((series, line style), ...), y label.
+VARIANCE_PANELS: tuple[tuple[tuple[tuple[str, str], ...], str], ...] = (
+    ((("var_oracle", "-"),), "oracle Var[Tr(rho_R^2)] over trajectories"),
+    (
+        (("var_qelm_M", "-"), ("var_qelm_M_abs", "--")),
+        "Var of the predicted purity",
+    ),
+    (
+        (("var_fraction_M", "-"), ("var_fraction_M_abs", "--")),
+        "predicted / oracle variance",
+    ),
+)
+
+
+def _peak_label(summary: dict[str, Any], key: str, N: int) -> str:
+    entry = summary.get("extrema", {}).get(key, {}).get(f"N{N}")
+    if not entry:
+        return ""
+    return f" (peak p = {entry['p']:.3f}, {entry['value']:.4f})"
+
+
+def plot_variance(
+    runs: dict[int, list[dict[str, float]]], summary: dict[str, Any], out: Path
+) -> Path | None:
+    """Variance probe: oracle variance of the purity of ``R`` over the
+    trajectories, variance of the QELM outputs and their ratio, one curve
+    per ``N``; ``None`` if the runs have no ``var_purity_*``."""
+    sizes = sorted(runs)
+    if not any(k.startswith("var_purity_bayes") for k in runs[sizes[0]][0]):
+        return None
+    colors = plt.get_cmap("viridis")(np.linspace(0.0, 0.85, len(sizes)))
+    fig, axes = plt.subplots(1, 3, figsize=(17, 5), sharex=True)
+    for ax, (series, ylabel) in zip(axes, VARIANCE_PANELS, strict=True):
+        for N, color in zip(sizes, colors, strict=True):
+            ps = PB.p_values(runs[N][0])
+            for key, style in series:
+                data = curves(runs[N], *SERIES[key])
+                mean = _nanmean(data)
+                if not np.any(np.isfinite(mean)):
+                    continue
+                n = np.maximum(np.sum(np.isfinite(data), axis=0), 1)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", RuntimeWarning)
+                    sem = np.nanstd(data, axis=0) / np.sqrt(n)
+                label = f"N = {N}"
+                if len(series) > 1:
+                    label += ", QELM on M" if key.endswith("_M") else ", [M, |M|]"
+                label += _peak_label(summary, key, N)
+                ax.plot(ps, mean, style, marker="o", ms=3, color=color, label=label)
+                ax.fill_between(
+                    ps, mean - sem, mean + sem, color=color, alpha=0.15, lw=0
+                )
+        ax.axvspan(0.17, 0.25, color="grey", alpha=0.12, lw=0)
+        ax.set_xlabel("measurement probability p")
+        ax.set_ylabel(ylabel)
+        ax.set_xlim(0, 1)
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize=7)
+    n_c = min(len(runs[N]) for N in sizes)
+    fig.suptitle(
+        "Variance probe: spread over the trajectories of the purity of R, exact "
+        f"(oracle) and predicted (T = 2N, {n_c} fixed circuits per N)\n"
+        "solid: QELM on M (purity from its Bloch vector); dashed: ridge on "
+        "[M, |M|] (purity directly)",
+        fontsize=10,
+    )
+    fig.tight_layout()
+    path = out / "purity_variance.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
 NONLINEAR_CURVES = (
     ("M", "ridge on M (QELM)", "#d62728"),
     ("M_abs", "ridge on [M, |M|]", "#2ca02c"),
@@ -358,9 +463,9 @@ def main(argv: list[str] | None = None) -> list[Path]:
     summary = analyse(runs, n_boot=args.n_boot)
     (out / "fss_summary.json").write_text(json.dumps(summary, indent=2))
     paths = [plot_fss(runs, out)]
-    nonlinear = plot_nonlinear(runs, out)
-    if nonlinear is not None:
-        paths.append(nonlinear)
+    for extra in (plot_nonlinear(runs, out), plot_variance(runs, summary, out)):
+        if extra is not None:
+            paths.append(extra)
     for path in paths:
         print(f"Saved {path}")
     return paths

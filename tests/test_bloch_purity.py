@@ -434,12 +434,18 @@ def test_fss_sweep_and_figures(tmp_path: Path) -> None:
         ],
         check=True,
     )
-    for name in ("bloch_fss.png", "bloch_nonlinear.png", "fss_summary.json"):
+    for name in (
+        "bloch_fss.png",
+        "bloch_nonlinear.png",
+        "purity_variance.png",
+        "fss_summary.json",
+    ):
         assert (fig / name).exists()
     summary = json.loads((fig / "fss_summary.json").read_text())
     assert summary["sizes"] == [3, 4]
     assert set(summary["extrema"]) == set(FSS.EXTREMA)
     assert "N3_N4" in summary["crossings"]["r2_bloch"]
+    assert set(summary["extrema"]["var_oracle"]) == {"N3", "N4"}
     # The per-N figures also draw the nonlinear curves.
     subprocess.run(
         [sys.executable, str(PLOT_SCRIPT), str(sweep), "--out", str(fig)], check=True
@@ -476,3 +482,35 @@ def test_readout_learning_curve(tmp_path: Path) -> None:
     assert entry["ridge_M"][2] is None  # 500 > 90 training trajectories
     assert all(v is not None for v in entry["mlp"][:2])
     assert (tmp_path / f"learning_curve_N{N}.png").exists()
+
+
+def test_variance_probe_and_abs_option() -> None:
+    out = BP.run(_cfg("bloch_task.nonlinear_readouts=abs"))
+    m = out["metrics"]
+    assert "r2_bloch_M_abs_p0.3" in m
+    assert "r2_bloch_M_mlp_p0.3" not in m
+    # Chance predicts a constant: no variance. The oracle variance is that
+    # of the exact purity on the test trajectories, at most its total one.
+    assert m["var_purity_chance_p0.3"] == pytest.approx(0.0, abs=1e-15)
+    assert m["var_purity_bayes_p0.3"] == pytest.approx(
+        m["var_purity_from_bloch_bayes_p0.3"]
+    )
+    assert 0.0 < m["var_purity_bayes_p0.3"] < 0.125
+    with pytest.raises(ValueError, match="nonlinear_readouts"):
+        BP.run(_cfg("bloch_task.nonlinear_readouts=mlp"))
+
+
+def test_variance_fraction_curve() -> None:
+    runs = [
+        {
+            "purity_mean_p0.1": 0.6,
+            "var_purity_bayes_p0.1": 0.02,
+            "var_purity_M_abs_p0.1": 0.005,
+            "var_purity_from_bloch_M_p0.1": 0.01,
+        },
+    ]
+    frac = FSS.curves(runs, "var_fraction", "M_abs")
+    np.testing.assert_allclose(frac, [[0.25]])
+    np.testing.assert_allclose(
+        FSS.curves(runs, "var_fraction_from_bloch", "M"), [[0.5]]
+    )
