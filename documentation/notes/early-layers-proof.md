@@ -2,7 +2,7 @@
 
 **Hypothesis.** To guess the label of the reference qubit from the measurement record `M`, the linear readout (ridge on `vec(M)`) only uses the first rounds (`t = 1, 2, 3`), before Haar scrambling hides the initial state, and ignores the late ones (`t = 15, 16` at `N = 8`, `T = 2N`).
 
-**Short answer.** For Haar U(4) gates the hypothesis holds in the sense that matters, and that part is a theorem: no decoder of the late rounds alone, linear or not, can beat chance by more than `D_k / 2`, where `D_k` is a trace distance that never grows with `k` and that we compute exactly. For the ten circuits studied, it is below `10^-3` at `k = 15` for every `p >= 0.2`. The covariance of each late entry of `M` with the label is bounded by `p D_k`, so the late rounds carry at most a `10^-5` to `10^-10` share of the linear model's signal. But the literal claim, that the trained ridge puts **small weights** on the late rounds, is false: their weight norm is 15 to 50 % of that of round 1. These weights fit sampling noise. Blanking them changes nothing, but they are not small. Also, the late rounds do help the **optimal** decoder, together with the early ones (`p = 0.2`: Bayes goes from 0.60 with 3 rounds to 0.69 with 16). Only the linear readout cannot use that help. With charge-conserving U(1) gates, the hypothesis fails, and that is also a theorem.
+**Short answer.** For Haar U(4) gates the hypothesis holds in the sense that matters, and that part is a theorem: no decoder of the late rounds alone, linear or not, can beat chance by more than `D_k / 2`, where `D_k` is a trace distance that never grows with `k` and that we compute exactly. For the ten circuits studied, it is below `10^-3` at `k = 15` for every `p >= 0.2`. The covariance of each late entry of `M` with the label is bounded by `p D_k`, so the last two rounds carry a proven share of at most `2·10^-3` of the trained ridge's signal at `p = 0.2`, and `3·10^-5` at `p = 0.4`. The measured shares are `10^-5` or smaller. But the literal claim, that the trained ridge puts **small weights** on the late rounds, is false: their weight norm is 14 to 44 % of that of round 1. These weights fit sampling noise. Blanking them changes nothing, but they are not small. Also, the late rounds do help the **optimal** decoder, together with the early ones (`p = 0.2`: Bayes goes from 0.60 with 3 rounds to 0.69 with 16). Only the linear readout cannot use that help. With charge-conserving U(1) gates, the hypothesis fails, and that is also a theorem.
 
 Code: `src/QELM/evaluation/early_layers.py` (tested in `tests/test_early_layers.py`), experiment and figures in [`experiments/early_layers/`](../../experiments/early_layers/README.md).
 
@@ -29,8 +29,8 @@ Code: `src/QELM/evaluation/early_layers.py` (tested in `tests/test_early_layers.
 
 | p | 0.05 | 0.1 | 0.15 | 0.2 | 0.3 | 0.4 | 0.6 | 1.0 |
 |---|---|---|---|---|---|---|---|---|
-| `D_15` | 0.21 | 2.8e-2 | 4.1e-3 | 8.8e-4 | 1.0e-4 | 2.0e-5 | 9.6e-7 | 2.2e-8 |
-| `D_4` | 0.87 | 0.72 | 0.58 | 0.45 | 0.27 | 0.16 | 0.07 | 0.02 |
+| `D_15` | 0.21 | 2.8e-2 | 4.2e-3 | 9.4e-4 | 1.1e-4 | 1.9e-5 | 8.6e-7 | 2.1e-8 |
+| `D_4` | 0.88 | 0.73 | 0.58 | 0.46 | 0.27 | 0.17 | 0.07 | 0.03 |
 
 So for `p >= 0.2`, no function of rounds 15 and 16 beats `0.5005`, and the ridge retrained on rounds `k .. 16` is at chance from `k = 3` or `4` on (figure `windows_*`). At `p = 0.05` the bound is weak (`D_15 = 0.21`): at small `p` the theorem does not exclude a role for the late rounds.
 
@@ -48,13 +48,13 @@ We call `share_t = w_t . c_t / Cov(s, Y)` the share of round `t` in the signal o
 
 | p | 0.05 | 0.1 | 0.2 | 0.4 | 1.0 |
 |---|---|---|---|---|---|
-| share of rounds 1-3 | 0.80 | 0.90 | 0.95 | 0.99 | 1.00 |
-| share of rounds 15-16 | 2e-3 | -1e-4 | 4e-6 | 2e-7 | -1e-10 |
-| proven bound on the latter | 0.85 | 0.09 | 2e-3 | 3e-5 | 3e-8 |
+| share of rounds 1-3 | 0.81 | 0.91 | 0.96 | 0.99 | 1.00 |
+| share of rounds 15-16 | 2e-3 | -2e-4 | -8e-6 | 3e-7 | -4e-11 |
+| proven bound on the latter | 0.77 | 0.09 | 2e-3 | 3e-5 | 2e-8 |
 
 The bound uses the measured `||w_t||_1` and the exact `D_t`. It is a theorem about the trained model, not an estimate.
 
-**What this does not say: the weights themselves.** The population ridge is `w = (Sigma + alpha)^-1 c`. Through the covariance `Sigma` of the record, a late entry can receive weight without carrying any signal, for example to cancel noise that it shares with early entries. Theorem 1 does not bound `||w_t||`. In practice the weight norm of the late rounds is **15 to 50 % of that of round 1** (figure `weights_*`, left). These are weights fitted to the sampling noise of a finite training set. Their share of the signal is zero up to `10^-4`, and blanking rounds `> 3` (replacing them by their training mean) never lowers the test accuracy: it raises it by 0.003 to 0.023 depending on `p` (Bell, `p = 1`: 0.656 instead of 0.643). The weight figure alone would therefore *not* support the hypothesis. The right quantities are the signal share, which is bounded, and the ablation, which is measured.
+**What this does not say: the weights themselves.** The population ridge is `w = (Sigma + alpha)^-1 c`. Through the covariance `Sigma` of the record, a late entry can receive weight without carrying any signal, for example to cancel noise that it shares with early entries. Theorem 1 does not bound `||w_t||`. In practice the weight norm of the last round is **14 to 44 % of that of round 1** for Bell (7 to 26 % for GHZ) (figure `weights_*`, left). These are weights fitted to the sampling noise of a finite training set. Their share of the signal is zero up to `10^-4`, and blanking rounds `> 3` (replacing them by their training mean) never lowers the test accuracy: it raises it by 0 to 0.02 depending on `p` (Bell, `p = 1`: 0.669 instead of 0.657). The weight figure alone would therefore *not* support the hypothesis. The right quantities are the signal share, which is bounded, and the ablation, which is measured.
 
 ## 2. What the late rounds add to the optimal decoder (proven, estimated by sampling)
 
@@ -67,7 +67,7 @@ So the rounds after `k` add at most `E[H_k - |r_k|] / 2`.
 
 *Proof.* Given the prefix `m`, the chain carries the unnormalized branches `|A><A|` (for `Y = +1`) and `|B><B|` (for `Y = -1`). Everything that follows is a POVM on the chain, so its success is at most `(1 + || |A><A| - |B><B| ||_1) / 2` (Helstrom with priors `|A|^2`, `|B|^2`). This rank-2 operator has eigenvalues `(|A|^2 - |B|^2)/2 ± sqrt(1/4 - |<A|B>|^2)`, so its trace norm is `H`. Averaging over `m` gives the bound. The optimal decision from the prefix alone is `sign(r_k)`. ∎
 
-The expectations are sample means over the trajectories, so this bound comes with a statistical error. At `p = 1` every site is measured in round 1, and `E[H_1] = E|r_1|`: **after round 1 nothing can be added**, by any decoder. At `p = 0.4`, rounds 4 to 16 can add at most 0.21. At `p = 0.2`, the Bayes decoder does use the late rounds: it goes from 0.60 (3 rounds) to 0.69 (16 rounds). The late rounds are useless alone (Theorem 1) but informative *together with* the early ones. That joint information lives in correlations between rounds that the ridge cannot represent (#278 found that the products `m_a m_b` do not capture it either). This is one more piece of the gap between the linear QELM and Bayes.
+The expectations are sample means over the trajectories, so this bound comes with a statistical error. At `p = 1` every site is measured in round 1, and `E[H_1] = E|r_1|`: **after round 1 nothing can be added**, by any decoder. At `p = 0.4`, rounds 4 to 16 can add at most 0.21 (in fact they add 0.07). At `p = 0.2`, the Bayes decoder does use the late rounds: it goes from 0.60 (3 rounds) to 0.69 (16 rounds). The late rounds are useless alone (Theorem 1) but informative *together with* the early ones. That joint information lives in correlations between rounds that the ridge cannot represent (#278 found that the products `m_a m_b` do not capture it either). This is one more piece of the gap between the linear QELM and Bayes.
 
 ## 3. Haar average: exponential decay (proven, average over circuits)
 
@@ -96,7 +96,7 @@ hence
 
 The first inequality on `D_t` is `||Delta||_1 <= 2^{N/2} ||Delta||_2` plus Jensen. ∎
 
-This bound is rigorous but loose by the factor `2^{N/2}`: at `N = 8` it falls below 1 at `t = 16` only for `p > 0.24`. The exact chain is tight: it reproduces the RMS of `c_{t,i}` of the ten circuits round by round (figure `bounds_*`, right, dashed lines).
+This bound is rigorous but loose by the factor `2^{N/2}`: at `N = 8` it falls below 1 at `t = 16` only for `p > 0.24`. The exact chain, on the other hand, matches the data: it reproduces the RMS of `c_{t,i}` over the ten circuits round by round (figure `bounds_*`, right, dashed lines).
 
 ## 4. With a conserved charge the hypothesis fails (proven)
 
@@ -106,7 +106,7 @@ This bound is rigorous but loose by the factor `2^{N/2}`: at `N = 8` it falls be
 
 *Proof.* `Q` commutes with the gates, and `D_p` leaves `Tr(Q .)` unchanged because `Q` is diagonal. Moreover `sum_i Z_i = N - 2Q` and `Tr(Delta) = 0`. Finally, `|Tr(Q Delta)| <= ||Q||_inf ||Delta||_1 = 2 N D`. ∎
 
-For the Bell and charge encodings `|dQ| = 1`. Every round, the 16th as much as the 1st, then carries the same total linear signal `p`, and Theorem 1 gives no decay. Figures `*_u1_*` show what the ridge does with it. The early-layers property is therefore not a general property of monitored circuits. It is a consequence of the absence of a conservation law in the Haar U(4) dynamics.
+For the Bell and charge encodings `|dQ| = 1`. Every round, the 16th as much as the 1st, then carries the same total linear signal `p`, and Theorem 1 gives no decay. When `|a>` and `|b>` lie in two different charge sectors (Bell: `Q = 0` against `Q = 1`), the statement is even stronger: the gates and `D_p` both preserve the sectors, so `rho_t^+` and `rho_t^-` keep orthogonal supports and **`D_t = 1` for every `t`**. That is what the exact computation gives for the U(1) circuits. At `N = 8`, the ridge retrained on rounds 15 and 16 alone then reaches 0.54 (`p = 0.05`) to 0.72 (`p = 0.6`), and 1.00 at `p = 1`. The last two rounds carry 9 to 12 % of the model's signal, as expected for a signal spread evenly over 16 rounds. Figures `*_u1_*` show what the ridge does with it. The early-layers property is therefore not a general property of monitored circuits. It is a consequence of the absence of a conservation law in the Haar U(4) dynamics.
 
 ## What is proven and what is only numerical
 
@@ -116,8 +116,8 @@ For the Bell and charge encodings `|dQ| = 1`. Every round, the 16th as much as t
 | `D_k` of the ten circuits (table above) | exact computation, no sampling |
 | `\|E[m_{t,i} Y]\| <= p D_t`; signal share of late rounds `<= p D_t \|\|w_t\|\|_1 / Cov` (Cor. 1) | proven for any linear readout |
 | What late rounds add to Bayes `<= E[H_k - \|r_k\|] / 2` (Th. 2) | proven; the expectation is a sample mean |
-| Haar average: decay at least like `g(p)^{t/2}` (Th. 3) | proven, loose; the exact chain is tight |
-| U(1) gates: every round keeps signal `p`, `D_t >= 1/(2N)` (Prop. 4) | proven |
-| The trained ridge has small weights on late rounds | **false**: 15 to 50 % of round 1, fitted to noise |
-| Blanking rounds `> 3` never lowers the ridge's accuracy (it gains 0.003 to 0.023); the ridge retrained on rounds 1..3 is as good as the full one | numerical (10 circuits, 4000 trajectories per `p`) |
-| Small `p` (`<= 0.1`): rounds 4 to 10 still carry 10 to 20 % of the signal | numerical; Theorem 1 is weak there |
+| Haar average: decay at least like `g(p)^{t/2}` (Th. 3) | proven, loose; the exact chain matches the ten circuits |
+| U(1) gates: every round keeps signal `p`, `D_t >= 1/(2N)`, and `D_t = 1` for two charge sectors (Prop. 4) | proven |
+| The trained ridge has small weights on late rounds | **false**: 14 to 44 % of round 1 (Bell), fitted to noise |
+| Blanking rounds `> 3` never lowers the ridge's accuracy (it gains 0 to 0.02); the ridge retrained on rounds 1..3 is as good as the full one | numerical (10 circuits, 4000 trajectories per `p`) |
+| Small `p` (`<= 0.1`): rounds 4 to 10 still carry 10 to 19 % of the signal | numerical; Theorem 1 is weak there |
