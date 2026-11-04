@@ -48,6 +48,7 @@ commands and every option of the launchers.
 | [`charge_sharpening/`](charge_sharpening/README.md) | Agrawal et al. (2024), Fig. 7 | benchmark of purification |
 | [`haar_readouts/`](haar_readouts/README.md) | sector of a purifying reference qubit, many decoders | purification decoding (task 1B) |
 | [`nonlinear_M/`](nonlinear_M/README.md) | local label of a reference qubit from non-linear maps of `M` (XOR, `\|M\|`, pairs), Haar U(4) | why the linear QELM-M fails (#269) |
+| [`early_layers/`](early_layers/README.md) | which rounds of `M` the linear QELM-M reads: weights, signal share, windows, ablation, exact bounds, Haar U(4) and U(1) | the early-layers hypothesis, with proofs (#288) |
 | [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
 | [`diagnostics/`](diagnostics/README.md) | chaos and locality of every reservoir | why a reservoir shows the MIPT or not |
 | [`double_descent/`](double_descent/README.md) | MNIST with a QELM readout | statistics of the readout |
@@ -1375,6 +1376,26 @@ subset of the reservoirs and `--parts spectra growth otoc reference
 velocities scrambling` a subset of the diagnostics (each part of each family
 has its own random generator, so a part run alone gives the same figure as in
 the full run).
+
+## Run the early-layers study of the linear QELM on M (issue #288)
+
+Which rounds of the record does the ridge on `vec(M)` read? One fixed circuit
+per seed (Haar U(4), or U(1) as a control), the reference qubit of
+`nonlinear_M`, `T = 2N`. Per `p`: the weights and the signal share of each
+round, windows and ablations of `M`, and the exact bounds of
+[`documentation/notes/early-layers-proof.md`](../documentation/notes/early-layers-proof.md).
+
+```bash
+uv run python experiments/early_layers/early_layers.py N=8 seed=42 early_task.encoding=ghz
+MAX_JOBS=4 ./experiments/early_layers/early_layers.sh      # 5 configurations x 10 seeds
+uv run python experiments/early_layers/plot_early_layers.py outputs/early_layers/<date_time> \
+    --out experiments/early_layers/figures
+```
+
+Launcher options: `N_VALUES`, `SEEDS`, `CONFIGS` (`gates:encoding` pairs),
+`PER_P`, `DEPTH`, `P_VALUES`, `MAX_JOBS`, `SKIP_DONE`, `OUT_DIR`, `OUT_ROOT`.
+At `N = 8` and `T = 16` a run of 8 values of `p` and 4000 trajectories per `p`
+takes 5 to 15 minutes on one core.
 
 ## Write your own
 

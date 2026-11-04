@@ -1,0 +1,41 @@
+# Early-layers hypothesis of the linear QELM on M (issue #288). Primary config
+# of experiments/early_layers/early_layers.py: the main config, the circuit and
+# the blocks below.
+#
+#   uv run python experiments/early_layers/early_layers.py N=8 seed=42
+defaults:
+  - config
+  - override models: haar_circuit
+  - _self_
+
+# One ancilla: the reference qubit R (qubit 0), never acted on.
+Nr: 1
+N: 8
+
+ancilla_bell_pair:
+  N: ${N}
+  site: null # null: the middle of the chain, N // 2
+
+# Brickwork on the open chain, one fixed circuit per run (set by the seed).
+# The block is read for the U(1) gates too (early_task.gates=u1).
+haar_circuit:
+  fixed_instance: true
+
+early_task:
+  # Initial state of R and the chain (encodings of nonlinear_M): bell, charge,
+  # ghz or w.
+  encoding: bell
+  # Gates of the brickwork: haar (U(4), no conserved charge) or u1 (charge
+  # conserving, the control where the late rounds keep the label).
+  gates: haar
+  # Measurement probabilities. p = 0 is left out: the record is empty.
+  p_values: [0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.6, 1.0]
+  samples_per_p: 4000
+  # Rounds T: an integer, or a multiple of N ("N", "2N"). T = 2N at N = 8 gives
+  # the rounds t = 15, 16 of the question.
+  depth_rule: 2N
+  # Haar average of the Pauli mass and of the linear signal (exact Markov
+  # chain on 3**N configurations; Haar gates only).
+  haar_average: true
+  # Save the records, labels and Bloch components (.npz).
+  save_arrays: false

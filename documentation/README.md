@@ -9,3 +9,7 @@ Notes for this repository. Scientific parameters stay in Hydra YAML under `conf/
 - [Checkpoints and local data](checkpoints.md) — `outputs/`, `data/`, and `wandb/`
 - [Code quality](code-quality.md) — Ruff, Mypy, pytest, and the seed from config
 - [Contributing](contributing.md) — issues, draft pull requests, and who marks a pull request ready
+
+Scientific notes:
+
+- [The early-layers hypothesis of the linear QELM on M](notes/early-layers-proof.md) — what is proven about which rounds of the record the linear readout uses (#288)
