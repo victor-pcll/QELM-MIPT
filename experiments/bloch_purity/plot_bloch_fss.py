@@ -19,9 +19,13 @@ would cross near ``p_c``. To test this, ``fss_summary.json`` holds, for each
 ``N``, the position of the minimum of (a) and of the peak of (c) (a parabola
 through the three points around the extremum of the averaged curve), and,
 for each pair of sizes, the ``p`` where the curves cross (a sign change of
-the difference of the averaged curves, linearly interpolated). Every value
-comes with a bootstrap over the circuits (``--n-boot`` resamplings of the
-seeds of each ``N``, median and 16-84 % interval).
+the difference of the averaged curves, linearly interpolated). The same is done for the spread
+``purity_std`` (its maximum) and the purification curve ``purity_mean``
+(its crossings), the physical quantities behind panel (c): a readout that
+reads nothing of the purity has an error equal to the mean absolute
+deviation of the purity. Every value comes with a bootstrap over the
+circuits (``--n-boot`` resamplings of the seeds of each ``N``, median and
+16-84 % interval).
 
 When the runs have the nonlinear diagnostics
 (``bloch_task.nonlinear_readouts=true``), ``bloch_nonlinear.png`` compares,
@@ -63,7 +67,17 @@ PANELS: tuple[tuple[str, str, str], ...] = (
     ("purity_mean", "", "exact purity Tr(rho_R^2)"),
 )
 # Extremum looked for in each metric: min or max.
-EXTREMA = {"r2_bloch": "min", "r2_shots_ratio": "min", "mae_purity": "max"}
+# (The ratio of panel (b) rises with p and has no extremum.)
+EXTREMA = {
+    "r2_bloch": "min",
+    "mae_purity": "max",
+    "purity_std": "max",
+}
+# Metrics whose crossings between sizes are looked for (``purity_mean`` is
+# the purification order parameter: it has no extremum).
+CROSSED = (*EXTREMA, "r2_shots_ratio", "purity_mean")
+# Metrics of the run itself, with no readout.
+NO_READOUT = ("purity_mean", "purity_std")
 
 
 def _plot_module() -> ModuleType:
@@ -171,8 +185,9 @@ def analyse(
     sizes = sorted(runs)
     ps = {N: PB.p_values(runs[N][0]) for N in sizes}
     out: dict[str, Any] = {"sizes": sizes, "extrema": {}, "crossings": {}}
-    for metric, kind in EXTREMA.items():
-        data = {N: curves(runs[N], metric, "M") for N in sizes}
+    for metric in CROSSED:
+        readout = "" if metric in NO_READOUT else "M"
+        data = {N: curves(runs[N], metric, readout) for N in sizes}
         boots = {
             N: [
                 _nanmean(data[N][rng.integers(len(runs[N]), size=len(runs[N]))])
@@ -180,18 +195,20 @@ def analyse(
             ]
             for N in sizes
         }
-        ext: dict[str, Any] = {}
-        for N in sizes:
-            x0, y0 = extremum(ps[N], _nanmean(data[N]), kind)
-            samples = [extremum(ps[N], b, kind) for b in boots[N]]
-            ext[f"N{N}"] = {
-                "kind": kind,
-                "p": x0,
-                "value": y0,
-                "p_boot": _interval([s[0] for s in samples]),
-                "value_boot": _interval([s[1] for s in samples]),
-            }
-        out["extrema"][metric] = ext
+        if metric in EXTREMA:
+            kind = EXTREMA[metric]
+            ext: dict[str, Any] = {}
+            for N in sizes:
+                x0, y0 = extremum(ps[N], _nanmean(data[N]), kind)
+                samples = [extremum(ps[N], b, kind) for b in boots[N]]
+                ext[f"N{N}"] = {
+                    "kind": kind,
+                    "p": x0,
+                    "value": y0,
+                    "p_boot": _interval([s[0] for s in samples]),
+                    "value_boot": _interval([s[1] for s in samples]),
+                }
+            out["extrema"][metric] = ext
         cross: dict[str, Any] = {}
         for i, N1 in enumerate(sizes):
             for N2 in sizes[i + 1 :]:

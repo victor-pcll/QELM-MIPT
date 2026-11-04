@@ -26,7 +26,7 @@
 #     NONLINEAR=true             bloch_task.nonlinear_readouts: adds the ridge and
 #                                the MLP on [vec(M), vec(|M|)] (diagnostics of
 #                                the linear readout; the MLP adds about 1 min
-#                                per run at N = 8)
+#                                per run at N = 8); abs adds the ridge only
 #     ENCODING=ghz               bloch_task.encoding: bell (default), charge, ghz, w
 #     FIXED=false                new gates per trajectory (the null control;
 #                                default true, one fixed circuit per seed)

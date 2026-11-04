@@ -35,7 +35,8 @@ simulates the circuit:
 - ``M_state``, the **QELM on M and the state**: both side by side.
 
 With ``bloch_task.nonlinear_readouts=true``, two diagnostics of the
-linear readout of M are added (:data:`NONLINEAR_READOUTS`):
+linear readout of M are added (:data:`NONLINEAR_READOUTS`; ``abs`` adds the
+first one only, without the cost of the MLP):
 
 - ``M_abs``: the ridge on ``[vec(M), vec(|M|)]``, whatever ``m_features``;
 - ``M_mlp``: a small MLP (:func:`fit_mlp`) on the same features.
@@ -64,6 +65,10 @@ Scores, per ``p`` (key suffix ``_p<p>``):
 - ``r2_purity_<readout>``: ``R2`` of a ridge fitted on the purity directly;
   ``r2_purity_from_bloch_<readout>``: ``R2`` of ``(1 + |r_pred|^2) / 2``,
   ``|r_pred|`` clipped to 1;
+- ``var_purity_<readout>``, ``var_purity_from_bloch_<readout>``: the
+  variance over the test trajectories of these two predicted purities, the
+  variance probe of #282 (for ``bayes``, the oracle variance of the exact
+  purity);
 - ``purity_mean``, ``purity_std``, ``S_R_mean``: the exact purity and the
   entropy of ``R`` (bits), the purification curve.
 
@@ -318,6 +323,13 @@ def score_level(
             np.mean(np.sum((bloch[test] - r_pred) ** 2, axis=1))
         )
         out[f"mae_purity_{name}"] = float(np.mean(np.abs(purity[test] - P_pred)))
+        # Variance probe (#282): spread over the test trajectories of the
+        # predicted purity, direct and from the predicted Bloch vector. For
+        # bayes it is the oracle variance of the exact purity.
+        out[f"var_purity_{name}"] = float(np.var(P_pred))
+        out[f"var_purity_from_bloch_{name}"] = float(
+            np.var(purity_from_bloch(r_pred, clip=True))
+        )
     return out
 
 
@@ -395,7 +407,12 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         raise ValueError(
             f"bloch_task.m_features must be raw or raw_abs, got {m_features!r}."
         )
-    nonlinear = bool(task.get("nonlinear_readouts", False))
+    nonlinear = task.get("nonlinear_readouts", False)
+    if nonlinear not in (True, False, "abs"):
+        raise ValueError(
+            "bloch_task.nonlinear_readouts must be true, false or abs, "
+            f"got {nonlinear!r}."
+        )
     T = NL.depth_from_rule(task.depth_rule, N)
     train_fraction = float(cfg.samples.train_fraction)
 
@@ -438,7 +455,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     nonlinear_features: dict[str, np.ndarray] = {}
     if nonlinear:
         M_abs = extract_M_features(M, "raw_abs")
-        nonlinear_features = {"M_abs": M_abs, "M_mlp": M_abs}
+        nonlinear_features = {"M_abs": M_abs}
+        if nonlinear is True:
+            nonlinear_features["M_mlp"] = M_abs
     features.update(nonlinear_features)
     metrics: dict[str, float] = {
         "N": float(N),
