@@ -128,10 +128,12 @@ Produced by `experiments/bloch_purity/plot_bloch_purity.py` (#277).
 ![R2 and error of the purity against p](figures/purity_N8.png)
 
 **Figure 2. Purity of the reference qubit.** Top: test `R2` of a ridge
-fitted on `Tr(rho_R^2)` against `p`, same runs and colors as Figure 1; green
-dots, right axis: exact mean purity, the purification curve. Points where the
-purity varies by less than 0.01 over the trajectories (`p >= 0.7`) are not
-drawn. Bottom: mean absolute error of the predicted purity, defined at every
-`p`; Bayes is 0, and the three QELM curves lie on chance. The dotted
-horizontal line marks the top of the bell (0.113 at `p = 0.175`). Produced
-by `experiments/bloch_purity/plot_bloch_purity.py` (#277).
+fitted on `Tr(rho_R^2)` against `p`, same runs and colors as Figure 1; the
+Bayes line (`R2 = 1`) is left out so that the scale shows the QELMs, all
+below 0.011 (at `p = 0.05`) and within 0.002 of chance from `p = 0.2` on.
+Points where the purity varies by less than 0.01 over the trajectories
+(`p >= 0.7`) are not drawn. Bottom: mean absolute error of the predicted
+purity, defined at every `p`; Bayes is 0, and the three QELM curves lie on
+chance. The dotted horizontal line marks the top of the bell (0.113 at
+`p = 0.175`). Produced by `experiments/bloch_purity/plot_bloch_purity.py`
+(#277).

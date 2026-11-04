@@ -10,8 +10,8 @@ the circuits (mean and standard error) and draws, for each ``N``:
   (top) and, when the runs have them (``bloch_task.labels``: ``shots`` or
   ``both``), against single-shot Pauli measurements of ``R`` (bottom), where
   the Bayes decoder has a ceiling below 1;
-- ``purity_N<N>.png``: the ``R2`` of ``Tr(rho_R^2)`` against ``p``, with the
-  exact mean purity (the purification curve) on a second axis (top), and
+- ``purity_N<N>.png``: the ``R2`` of ``Tr(rho_R^2)`` against ``p``, without
+  the Bayes line (``R2 = 1``) so that the scale shows the QELMs (top), and
   the mean absolute error of the predicted purity (bottom), defined at every
   ``p``, with a horizontal line at the top of each QELM curve. Where ``R`` is
   pure on almost every trajectory (``std Tr(rho_R^2) <``
@@ -166,10 +166,16 @@ def _title(entry: dict[str, Any], N: int, what: str) -> str:
 
 
 def _draw_curves(
-    ax: Any, entry: dict[str, Any], score: str, mask: np.ndarray | None = None
+    ax: Any,
+    entry: dict[str, Any],
+    score: str,
+    mask: np.ndarray | None = None,
+    skip: tuple[str, ...] = (),
 ) -> None:
     ps = np.asarray(entry["p"])
     for name, legend, color in CURVES:
+        if name in skip:
+            continue
         mean = _array(entry, f"{score}_{name}")
         sem = _array(entry, f"{score}_{name}_sem")
         if mask is not None:
@@ -253,32 +259,17 @@ def plot_purity(entry: dict[str, Any], N: int, out: Path) -> Path:
         2, 1, figsize=(7, 9), sharex=True, gridspec_kw={"height_ratios": [3, 2]}
     )
     spread = _array(entry, "purity_std")
-    _draw_curves(ax, entry, "r2_purity", mask=spread >= PURITY_STD_MIN)
-    ax.set_ylim(-0.1, 1.05)
+    # No Bayes line (R2 = 1) on top, so that the scale shows the QELMs.
+    _draw_curves(
+        ax, entry, "r2_purity", mask=spread >= PURITY_STD_MIN, skip=("bayes",)
+    )
     ax.set_xlabel("")
     ax.set_ylabel("test R2 of the purity Tr(rho_R^2)")
-    ps = np.asarray(entry["p"])
-    twin = ax.twinx()
-    twin.plot(
-        ps,
-        _array(entry, "purity_mean"),
-        ":",
-        color="#2ca02c",
-        lw=1.5,
-        label="exact mean purity E[Tr(rho_R^2)] (right axis)",
-    )
-    twin.set_ylim(0.45, 1.02)
-    twin.set_ylabel("E[Tr(rho_R^2)]", color="#2ca02c")
-    twin.tick_params(axis="y", colors="#2ca02c")
     _draw_curves(ax_err, entry, "mae_purity")
     _mark_maxima(ax_err, entry, "mae_purity")
     ax_err.set_ylim(bottom=-0.005)
     ax_err.set_ylabel("test mean |Tr(rho^2)_pred - Tr(rho^2)|")
-    handles, labels = ax.get_legend_handles_labels()
-    h2, l2 = twin.get_legend_handles_labels()
     ax_err.legend(
-        handles + h2,
-        labels + l2,
         fontsize=8,
         loc="upper center",
         bbox_to_anchor=(0.5, -0.18),
