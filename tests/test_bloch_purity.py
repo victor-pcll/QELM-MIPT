@@ -514,3 +514,10 @@ def test_variance_fraction_curve() -> None:
     np.testing.assert_allclose(
         FSS.curves(runs, "var_fraction_from_bloch", "M"), [[0.5]]
     )
+
+
+def test_fwhm_of_a_triangle() -> None:
+    ps = np.linspace(0.0, 1.0, 101)
+    y = np.maximum(0.0, 1.0 - np.abs(ps - 0.4) / 0.2)
+    assert FSS.fwhm(ps, y) == pytest.approx(0.2)
+    assert np.isnan(FSS.fwhm(ps, ps))  # no fall on the right

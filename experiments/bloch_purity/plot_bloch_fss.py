@@ -79,15 +79,19 @@ EXTREMA = {
     "mae_purity": "max",
     "purity_std": "max",
     "var_oracle": "max",
-    "var_qelm_M": "max",
     "var_qelm_M_abs": "max",
 }
+# Below this oracle variance of the purity (R pure on almost every
+# trajectory, p >~ 0.6), the fraction of the variance is not defined.
+VAR_MIN = 1e-4
 # Series analysed: name -> (metric, readout) of :func:`curves`. The variance
 # probe (runs with ``var_purity_*``): the oracle variance over the
 # trajectories of the exact purity, the variance of the purity predicted by
 # the QELM on M (from its Bloch vector, the ridge on the purity itself being
 # constant on the raw record) and by the ridge on [M, |M|] (direct), and
-# their fractions of the oracle variance.
+# their fractions of the oracle variance. The purity from the Bloch vector of
+# the QELM on M varies also where the exact purity does not (p >~ 0.5): its
+# variance is mostly the error of the readout, not a decoded signal.
 SERIES: dict[str, tuple[str, str]] = {
     "r2_bloch": ("r2_bloch", "M"),
     "mae_purity": ("mae_purity", "M"),
@@ -139,8 +143,9 @@ def curves(runs: list[dict[str, float]], metric: str, readout: str) -> np.ndarra
             return get(f"r2_shots_{readout}") / get("r2_shots_bayes")
     if metric.startswith("var_fraction"):
         suffix = metric[len("var_fraction") :]
-        with np.errstate(divide="ignore", invalid="ignore"):
-            return get(f"var_purity{suffix}_{readout}") / get("var_purity_bayes")
+        oracle = get("var_purity_bayes")
+        oracle = np.where(oracle >= VAR_MIN, oracle, np.nan)
+        return np.asarray(get(f"var_purity{suffix}_{readout}") / oracle)
     if not readout:
         return get(metric)
     return get(f"{metric}_{readout}")
@@ -170,6 +175,26 @@ def extremum(ps: np.ndarray, y: np.ndarray, kind: str) -> tuple[float, float]:
         return float(ps[k]), float(y[k])
     x0 = float(np.clip(-b / (2 * a), x3[0], x3[-1]))
     return x0, float(a * x0**2 + b * x0 + c)
+
+
+def fwhm(ps: np.ndarray, y: np.ndarray) -> float:
+    """Full width at half maximum of a peak of ``y`` (the maximum over the
+    grid; ``y`` linearly interpolated). NaN if the curve does not fall below
+    half of its maximum on both sides."""
+    ok = np.isfinite(y)
+    ps, y = ps[ok], y[ok]
+    if y.size < 3:
+        return float("nan")
+    k = int(np.argmax(y))
+    half = y[k] / 2.0
+    left = np.flatnonzero(y[:k] < half)
+    right = np.flatnonzero(y[k:] < half)
+    if left.size == 0 or right.size == 0:
+        return float("nan")
+    i, j = int(left[-1]), k + int(right[0])
+    x_lo = ps[i] + (half - y[i]) * (ps[i + 1] - ps[i]) / (y[i + 1] - y[i])
+    x_hi = ps[j - 1] + (half - y[j - 1]) * (ps[j] - ps[j - 1]) / (y[j] - y[j - 1])
+    return float(x_hi - x_lo)
 
 
 def crossings(ps: np.ndarray, y1: np.ndarray, y2: np.ndarray) -> list[float]:
@@ -240,6 +265,11 @@ def analyse(
                     "p_boot": _interval([s[0] for s in samples]),
                     "value_boot": _interval([s[1] for s in samples]),
                 }
+                if kind == "max":
+                    ext[f"N{N}"]["fwhm"] = fwhm(ps[N], _nanmean(data[N]))
+                    ext[f"N{N}"]["fwhm_boot"] = _interval(
+                        [fwhm(ps[N], b) for b in boots[N]]
+                    )
             out["extrema"][metric] = ext
         cross: dict[str, Any] = {}
         for i, N1 in enumerate(sizes):
@@ -321,8 +351,8 @@ VARIANCE_PANELS: tuple[tuple[tuple[tuple[str, str], ...], str], ...] = (
         "Var of the predicted purity",
     ),
     (
-        (("var_fraction_M", "-"), ("var_fraction_M_abs", "--")),
-        "predicted / oracle variance",
+        (("var_fraction_M_abs", "--"),),
+        "predicted / oracle variance, ridge on [M, |M|]",
     ),
 )
 
@@ -369,6 +399,8 @@ def plot_variance(
         ax.set_xlabel("measurement probability p")
         ax.set_ylabel(ylabel)
         ax.set_xlim(0, 1)
+        if series[0][0].startswith("var_fraction"):
+            ax.set_ylim(0, 1)
         ax.grid(alpha=0.3)
         ax.legend(fontsize=7)
     n_c = min(len(runs[N]) for N in sizes)

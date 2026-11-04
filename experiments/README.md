@@ -48,7 +48,7 @@ commands and every option of the launchers.
 | [`charge_sharpening/`](charge_sharpening/README.md) | Agrawal et al. (2024), Fig. 7 | benchmark of purification |
 | [`haar_readouts/`](haar_readouts/README.md) | sector of a purifying reference qubit, many decoders | purification decoding (task 1B) |
 | [`nonlinear_M/`](nonlinear_M/README.md) | local label of a reference qubit from non-linear maps of `M` (XOR, `\|M\|`, pairs), Haar U(4) | why the linear QELM-M fails (#269) |
-| [`bloch_purity/`](bloch_purity/README.md) | Bloch vector and purity of a reference qubit from `M` and the state, Haar U(4) | tomography and purity of the local encoding (#277) |
+| [`bloch_purity/`](bloch_purity/README.md) | Bloch vector and purity of a reference qubit from `M` and the state, Haar U(4) | tomography and purity of the local encoding (#277), size dependence, nonlinear readouts and variance probe (#282) |
 | [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
 | [`diagnostics/`](diagnostics/README.md) | chaos and locality of every reservoir | why a reservoir shows the MIPT or not |
 | [`double_descent/`](double_descent/README.md) | MNIST with a QELM readout | statistics of the readout |
@@ -1411,6 +1411,20 @@ Options of the launcher (`PER_P`, `DEPTH`, `P_VALUES`, `ENCODING`, `FIXED`,
 `<OUT_DIR>/N<N>_seed<seed>/`; the plot script writes `bloch_vector_N<N>.png`,
 `purity_N<N>.png` and `summary.json`. Results:
 [`bloch_purity/README.md`](bloch_purity/README.md).
+
+Finite-size comparison, nonlinear readouts and variance probe (#282):
+
+```bash
+N_VALUES="10 8 6" NONLINEAR=abs SAVE_ARRAYS=false MAX_JOBS=4 \
+    ./experiments/bloch_purity/bloch_purity.sh
+uv run python experiments/bloch_purity/plot_bloch_fss.py \
+    outputs/bloch_purity/<date_time> --out outputs/bloch_purity/<date_time>/figures
+```
+
+`plot_bloch_fss.py` writes `bloch_fss.png`, `purity_variance.png`,
+`bloch_nonlinear.png` (runs with `NONLINEAR=true`) and `fss_summary.json`;
+`readout_learning_curve.py` draws the learning curves of the readouts from
+one `bloch_purity.npz`.
 
 ## Write your own
 
