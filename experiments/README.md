@@ -48,6 +48,7 @@ commands and every option of the launchers.
 | [`charge_sharpening/`](charge_sharpening/README.md) | Agrawal et al. (2024), Fig. 7 | benchmark of purification |
 | [`haar_readouts/`](haar_readouts/README.md) | sector of a purifying reference qubit, many decoders | purification decoding (task 1B) |
 | [`nonlinear_M/`](nonlinear_M/README.md) | local label of a reference qubit from non-linear maps of `M` (XOR, `\|M\|`, pairs), Haar U(4) | why the linear QELM-M fails (#269) |
+| [`characteristic_p/`](characteristic_p/README.md) | crossing of the QELM with Bayes on `M` and minimum of the QELM, against `p N T`, four encodings | where the state readout hands over to the record (#285) |
 | [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
 | [`diagnostics/`](diagnostics/README.md) | chaos and locality of every reservoir | why a reservoir shows the MIPT or not |
 | [`double_descent/`](double_descent/README.md) | MNIST with a QELM readout | statistics of the readout |
@@ -1291,6 +1292,37 @@ uv run python experiments/haar_readouts/plot_haar_readouts.py \
 `benchmark_<circuit>_<gates>_<readout>.png` then draws, for one gate draw and
 the `ridge` (with the quadratic ridge) or the `logistic` readout, every
 benchmark set on the same panels, with the purification curve.
+
+## Run the characteristic p of the QELM against `N T` (issue #285)
+
+[`characteristic_p/`](characteristic_p/README.md) runs
+`experiments/nonlinear_M/nonlinear_M.py` (fixed Haar U(4) circuits, one per
+seed) over encodings, sizes `N` and depths `T`, with a `p` grid dense in the
+expected number of measurements `p N T`, then locates `p_cross` (the QELM on
+`<P_k>`, `<P_i P_j>` and `M` meets the Bayes decoder of `M`) and `p_min` (the
+minimum of that QELM):
+
+```bash
+# N = 8, T = 8, 10 circuits, 8000 trajectories per p, the four encodings
+OUT_DIR=outputs/characteristic_p/N8T8 SIZES="8:8" SEEDS="$(seq -s ' ' 42 51)" \
+  PER_P=8000 MAX_JOBS=4 ./experiments/characteristic_p/characteristic_p.sh
+
+# the N T scan
+OUT_DIR=outputs/characteristic_p/scan SIZES="4:2,4,8,16 6:3,6,12 8:4,8,16 10:5" \
+  SEEDS="$(seq -s ' ' 42 51)" PER_P=2000 MAX_JOBS=4 \
+  ./experiments/characteristic_p/characteristic_p.sh
+
+# figures and summary.json (several sweep folders are merged)
+uv run python experiments/characteristic_p/characteristic_p.py plot \
+  outputs/characteristic_p/scan --out outputs/characteristic_p/figures
+```
+
+Options of the launcher (environment variables): `ENCODINGS` (default
+`"ghz w bell charge"`), `SIZES` (`N:T1,T2,...` pairs), `SEEDS`, `PER_P`,
+`MAX_JOBS`, `SKIP_DONE=1`, `OUT_ROOT` / `OUT_DIR`. Each run writes
+`<OUT_DIR>/<encoding>/N<N>_T<T>/seed<seed>/metrics.json`; a failed run leaves
+its log next to it and is listed in `failed_runs.txt`. The `p` grid of a run
+is `python experiments/characteristic_p/characteristic_p.py grid N T`.
 
 ## Check the chaos and the locality of the reservoirs (issue #243)
 
