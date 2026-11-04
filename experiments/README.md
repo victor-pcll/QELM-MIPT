@@ -49,6 +49,7 @@ commands and every option of the launchers.
 | [`charge_sharpening/`](charge_sharpening/README.md) | Agrawal et al. (2024), Fig. 7 | benchmark of purification |
 | [`haar_readouts/`](haar_readouts/README.md) | sector of a purifying reference qubit, many decoders | purification decoding (task 1B) |
 | [`dehghani_decoder/`](dehghani_decoder/README.md) | Dehghani et al. (2023): purified reference qubit of a fixed Clifford circuit, ridge vs MLP vs Bayes on `M`, `M` + final readout, `M` + `<P_k>` + `<P_i P_j>` | why a linear readout of `M` fails (parities), purification decoding (task 1B) |
+| [`cnn_decoder/`](cnn_decoder/README.md) | CNN decoder of the record `M` on the fixed Clifford circuits of `dehghani_decoder/`, against the ridge, the MLP and Bayes, N = 6 to 16, and against the training-set size | does a nonlinear, light-cone-local readout recover the Bayes learnability transition? |
 | [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
 | [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
 | [`diagnostics/`](diagnostics/README.md) | chaos and locality of every reservoir | why a reservoir shows the MIPT or not |
@@ -1355,6 +1356,34 @@ one row per `p`. A rerun skips the files already there. The plot script
 writes the figures and `summary.json` (mean and standard error over the
 circuits) into the same folder. Set `OMP_NUM_THREADS=1` when `--jobs` uses
 every core.
+
+## Run the CNN decoder experiment (issue #293)
+
+A convolutional decoder of the record `M` (`QELM.evaluation.cnn_decoder`,
+JAX on CPU) on the protocol of the Dehghani decoder experiment, scored on the
+same split as its ridge and MLP. Results:
+[`cnn_decoder/README.md`](cnn_decoder/README.md).
+
+```bash
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 XLA_FLAGS=--xla_cpu_multi_thread_eigen=false
+# Accuracy against p: CNN, ridge, MLP, Bayes.
+uv run python experiments/cnn_decoder/cnn_decoder.py sweep \
+    --N 6 8 12 --seeds 6 --n-traj 60000 --jobs 4 --out outputs/cnn_decoder
+uv run python experiments/cnn_decoder/cnn_decoder.py sweep \
+    --N 16 --seeds 4 --n-traj 60000 --jobs 4 --out outputs/cnn_decoder
+# CNN accuracy against the training-set size, same test set.
+uv run python experiments/cnn_decoder/cnn_decoder.py scaling --N 8 12 \
+    --seeds 1 --first-seed 43 --p 0.16 0.4 --n-traj 300000 --jobs 4 \
+    --out outputs/cnn_decoder
+uv run python experiments/cnn_decoder/plot_cnn_decoder.py outputs/cnn_decoder
+```
+
+Each job writes `sweep_N<N>_seed<s>_p<p>.json` or
+`scaling_N<N>_seed<s>_p<p>.json`; a rerun skips the files already there. The
+circuit of `(N, seed)` is the one of the Dehghani decoder experiment. The
+environment variables keep each worker on one thread, so that `--jobs`
+workers share the cores without oversubscription. The `sweep` above takes
+about 4 hours on 4 cores (N = 16 dominates), the `scaling` about 1 hour.
 
 ## Check the chaos and the locality of the reservoirs (issue #243)
 
