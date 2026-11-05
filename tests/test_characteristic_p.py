@@ -160,6 +160,9 @@ def test_plot_writes_the_figures(tmp_path: Path) -> None:
     assert names == {
         "accuracy_vs_pNT_N4_T4.png",
         "accuracy_vs_pNT_N8_T8.png",
+        "p_cross_scaling.png",
+        "p_min_scaling.png",
+        "scaling_exponents.png",
         "p_star_vs_NT.png",
     }
     assert all(p.stat().st_size > 0 for p in paths)
@@ -225,9 +228,73 @@ def test_power_law_fit_recovers_exponents() -> None:
     assert fit["b"] == pytest.approx(-1.1)
     assert fit["rms_log"] == pytest.approx(0.0, abs=1e-12)
     assert fit["n_points"] == 9
+    # Exact data: zero standard errors on the exponents.
+    assert fit["a_err"] == pytest.approx(0.0, abs=1e-10)
+    assert fit["b_err"] == pytest.approx(0.0, abs=1e-10)
     # No estimate defined: no fit.
     assert fits["ghz"]["p_min"] is None
     # Rarely defined estimates are left out of the fit.
     for entry in summary["ghz"].values():
         entry["p_cross_defined_fraction"] = 0.5
     assert cp.power_law_fit(summary)["ghz"]["p_cross"] is None
+
+
+def test_power_law_fit_errors_match_scatter() -> None:
+    # Noisy data: the standard errors are those of ordinary least squares.
+    rng = np.random.default_rng(3)
+    summary: dict = {"ghz": {}}
+    rows, y = [], []
+    for N in (4, 6, 8, 10):
+        for T in (2, 4, 8, 16):
+            v = 2.0 * N**-0.3 * T**-1.1 * np.exp(0.05 * rng.standard_normal())
+            summary["ghz"][f"N{N}_T{T}"] = {
+                "N": N,
+                "T": T,
+                "NT": N * T,
+                "p_cross": v,
+                "p_cross_defined_fraction": 1.0,
+                "p_min": None,
+                "p_min_defined_fraction": 0.0,
+            }
+            rows.append([1.0, np.log(N), np.log(T)])
+            y.append(np.log(v))
+    X, Y = np.asarray(rows), np.asarray(y)
+    coef = np.linalg.lstsq(X, Y, rcond=None)[0]
+    res = Y - X @ coef
+    cov = res @ res / (len(Y) - 3) * np.linalg.inv(X.T @ X)
+    fit = cp.power_law_fit(summary)["ghz"]["p_cross"]
+    assert fit["a_err"] == pytest.approx(np.sqrt(cov[1, 1]))
+    assert fit["b_err"] == pytest.approx(np.sqrt(cov[2, 2]))
+    assert 0.0 < fit["b_err"] < 0.1
+
+
+def test_scaling_cli_from_saved_summary(tmp_path: Path) -> None:
+    summary: dict = {}
+    for enc in ("ghz", "charge"):
+        summary[enc] = {}
+        for N, T in ((4, 2), (4, 8), (6, 3), (6, 12), (8, 4), (8, 16)):
+            pc = 2.0 * N**-0.4 * T**-1.1
+            summary[enc][f"N{N}_T{T}"] = {
+                "N": N,
+                "T": T,
+                "NT": N * T,
+                "p_cross": pc,
+                "p_cross_err": 0.01 * pc,
+                "p_cross_defined_fraction": 1.0,
+                "p_min": None if N == 4 else 1.5 * pc,
+                "p_min_err": None if N == 4 else 0.5 * pc,
+                "p_min_defined_fraction": 0.0 if N == 4 else 0.95,
+            }
+    path = tmp_path / "summary.json"
+    path.write_text(json.dumps(summary))
+    paths = cp.main(["scaling", str(path), "--out", str(tmp_path / "fig")])
+    assert [p.name for p in paths] == [
+        "p_cross_scaling.png",
+        "p_min_scaling.png",
+        "scaling_exponents.png",
+    ]
+    assert all(p.stat().st_size > 0 for p in paths)
+    fits = json.loads((tmp_path / "fig" / "fits.json").read_text())
+    assert fits["charge"]["p_cross"]["a"] == pytest.approx(-0.4)
+    assert fits["charge"]["p_cross"]["b"] == pytest.approx(-1.1)
+    assert fits["ghz"]["p_min"]["n_points"] == 4

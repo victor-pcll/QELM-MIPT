@@ -1356,6 +1356,12 @@ OUT_DIR=outputs/characteristic_p/scan SIZES="4:2,4,8,16 6:3,6,12 8:4,8,16 10:5" 
 # figures and summary.json (several sweep folders are merged)
 uv run python experiments/characteristic_p/characteristic_p.py plot \
   outputs/characteristic_p/scan --out outputs/characteristic_p/figures
+
+# only the scaling figures (p* N T, p* T against N and T, exponents),
+# from a saved summary.json, without simulation
+uv run python experiments/characteristic_p/characteristic_p.py scaling \
+  experiments/characteristic_p/figures/scan_summary.json \
+  --out experiments/characteristic_p/figures
 ```
 
 Options of the launcher (environment variables): `ENCODINGS` (default
