@@ -25,9 +25,14 @@ early_task:
   # Initial state of R and the chain (encodings of nonlinear_M): bell, charge,
   # ghz or w.
   encoding: bell
-  # Gates of the brickwork: haar (U(4), no conserved charge) or u1 (charge
-  # conserving, the control where the late rounds keep the label).
+  # Gates: haar (U(4), no conserved charge), u1 (charge), z2 (parity prod Z),
+  # dipole (charge and dipole sum i n_i, four-site gates) or diagonal (every
+  # Z_i, H = sum h_i Z_i).
   gates: haar
+  # null: the encoding above. A bit string of length N (e.g. "01100110"): the
+  # Bell encoding of the middle site on that background instead of |0...0>
+  # (a single excitation on |0...0> cannot move under the dipole gates).
+  background: null
   # Measurement probabilities. p = 0 is left out: the record is empty.
   p_values: [0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.6, 1.0]
   samples_per_p: 4000

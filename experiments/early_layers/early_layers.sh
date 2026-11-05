@@ -18,6 +18,9 @@
 #     SEEDS="$(seq 42 61)"       seeds, one circuit each (default 42..51)
 #     CONFIGS="haar:bell u1:bell" gates:encoding pairs (default
 #                                "haar:bell haar:ghz haar:charge u1:bell u1:charge")
+#                                gates: haar, u1, z2, dipole, diagonal
+#     BACKGROUND=01100110        early_task.background: the Bell encoding on that
+#                                background (default: none, |0...0>)
 #     PER_P=8000                 trajectories per p (default 4000)
 #     DEPTH="2N"                 early_task.depth_rule (default 2N)
 #     P_VALUES="0.1 0.2"         overrides early_task.p_values
@@ -45,6 +48,7 @@ read -r -a N_VALUES <<< "${N_VALUES:-8}"
 read -r -a SEEDS <<< "${SEEDS:-$(seq -s ' ' 42 51)}"
 read -r -a CONFIGS <<< "${CONFIGS:-haar:bell haar:ghz haar:charge u1:bell u1:charge}"
 PER_P="${PER_P:-4000}"
+BACKGROUND="${BACKGROUND:-}"
 DEPTH="${DEPTH:-2N}"
 MAX_JOBS="${MAX_JOBS:-1}"
 SKIP_DONE="${SKIP_DONE:-0}"
@@ -96,6 +100,7 @@ run_one() {
     "early_task.samples_per_p=$PER_P" \
     "early_task.depth_rule=$DEPTH" \
     ${P_LIST:+"early_task.p_values=$P_LIST"} \
+    ${BACKGROUND:+"early_task.background=\"$BACKGROUND\""} \
     "hydra.run.dir=$RUN_DIR" > "$RUN_DIR.log" 2>&1
   status=$?
   if (( status != 0 )); then
@@ -105,7 +110,7 @@ run_one() {
   fi
 }
 export -f run_one
-export OUT_DIR PER_P DEPTH P_LIST FAILED_LOG SKIP_DONE
+export OUT_DIR PER_P DEPTH P_LIST BACKGROUND FAILED_LOG SKIP_DONE
 
 QUEUE_STATUS=0
 printf '%s\0' "${RUNS[@]}" \

@@ -61,7 +61,7 @@ CURVES = (
     "haar_D_bound",
     "haar_c_rms",
 )
-SCALARS = ("accuracy", "bayes_accuracy")
+SCALARS = ("accuracy", "train_accuracy", "bayes_accuracy")
 # Rounds counted as "early" and "late" in early_share_vs_p.png.
 EARLY_ROUNDS = 3
 LATE_ROUNDS = 2

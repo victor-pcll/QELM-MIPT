@@ -37,13 +37,24 @@ The tools of this module, each the computable side of one statement of
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 
-from QELM.models.circuits.base import apply_two_qubit_gate
+from QELM.models.circuits.symmetric import apply_gate
 
-# A layer of the circuit: pairs of qubits and their 4 x 4 gates.
-Layer = Sequence[tuple[int, int, np.ndarray]]
+# A layer of the circuit: its gates, each ``(i, j, gate)`` (two-qubit
+# brickworks) or ``((q_0, ..., q_k), gate)`` (DipoleCircuit).
+Layer = Sequence[tuple[Any, ...]]
+
+
+def _gate_qubits(item: tuple[Any, ...]) -> tuple[tuple[int, ...], np.ndarray]:
+    """Qubits and unitary of one gate of a layer, in either format."""
+    *qubits, gate = item
+    if len(qubits) == 1 and isinstance(qubits[0], tuple):
+        return tuple(int(q) for q in qubits[0]), gate
+    return tuple(int(q) for q in qubits), gate
+
 
 # Pauli types on one site in the Haar chain.
 TYPE_I, TYPE_Z, TYPE_XY = 0, 1, 2
@@ -131,8 +142,9 @@ def averaged_states(
             if t > 0:
                 for site in range(n):
                     rho = dephase(rho, site, p)
-            for i, j, gate in layer:
-                rho = apply_two_qubit_gate(rho, gate, i - offset, j - offset)
+            for item in layer:
+                qubits, gate = _gate_qubits(item)
+                rho = apply_gate(rho, gate, [q - offset for q in qubits])
             states[t] = rho
         out.append(states)
     return out[0], out[1]

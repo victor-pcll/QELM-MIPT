@@ -34,6 +34,7 @@ SCRIPT = FOLDER / "early_layers.py"
 BASH_SCRIPT = FOLDER / "early_layers.sh"
 PLOT_SCRIPT = FOLDER / "plot_early_layers.py"
 STORY_SCRIPT = FOLDER / "plot_story.py"
+SYM_SCRIPT = FOLDER / "plot_symmetries.py"
 N = 4
 P_VALUES = "[0.3,1.0]"
 PER_P = 60
@@ -321,3 +322,110 @@ def test_launcher_and_figures(tmp_path: Path) -> None:
     story.plot_depth(renamed, [0.4], tmp_path / "story")
     assert (tmp_path / "story" / "story_information.png").exists()
     assert (tmp_path / "story" / "story_depth.png").exists()
+    # The comparison of the symmetries (here Haar and U(1) only).
+    sym = _load(SYM_SCRIPT)
+    sym.plot_accuracy(summary, tmp_path / "sym")
+    sym.plot_rounds(summary, 0.4, tmp_path / "sym")
+    sym.plot_depth(summary, [0.4, 1.0], tmp_path / "sym")
+    for name in ("accuracy", "rounds", "depth"):
+        assert (tmp_path / "sym" / f"symmetries_{name}.png").exists()
+
+
+# --- symmetric circuits (Z2, dipole, diagonal) ------------------------------
+
+
+def _charges(n: int) -> dict[str, np.ndarray]:
+    """Diagonals of the charge, dipole, parity and of each Z_i on ``n`` qubits."""
+    bits = (np.arange(2**n)[:, None] >> (n - 1 - np.arange(n))[None, :]) & 1
+    return {
+        "Q": bits.sum(axis=1).astype(float),
+        "P": (bits * np.arange(n)).sum(axis=1).astype(float),
+        "parity": (-1.0) ** bits.sum(axis=1),
+        **{f"Z{i}": 1.0 - 2.0 * bits[:, i] for i in range(n)},
+    }
+
+
+@pytest.mark.parametrize(
+    ("draw", "n", "conserved", "broken"),
+    [
+        ("z2_gate", 2, ["parity"], ["Q"]),
+        ("diagonal_gate", 2, ["Q", "parity", "Z0", "Z1"], []),
+        ("dipole_gate", 4, ["Q", "P", "parity"], ["Z0"]),
+    ],
+)
+def test_symmetric_gates_conserve_their_charge(
+    draw: str, n: int, conserved: list[str], broken: list[str]
+) -> None:
+    import QELM.models.circuits.symmetric as sym
+
+    gate = getattr(sym, draw)(np.random.default_rng(0))
+    np.testing.assert_allclose(gate @ gate.conj().T, np.eye(2**n), atol=1e-12)
+    charges = _charges(n)
+    for name in conserved:
+        Q = np.diag(charges[name])
+        np.testing.assert_allclose(gate @ Q, Q @ gate, atol=1e-12)
+    for name in broken:
+        Q = np.diag(charges[name])
+        assert np.abs(gate @ Q - Q @ gate).max() > 1e-3
+
+
+def test_apply_gate_matches_the_two_qubit_routine() -> None:
+    from QELM.models.circuits.base import apply_two_qubit_gate
+    from QELM.models.circuits.haar import haar_gate
+    from QELM.models.circuits.symmetric import apply_gate
+
+    rng = np.random.default_rng(1)
+    psi = rng.normal(size=16) + 1j * rng.normal(size=16)
+    rho = np.outer(psi, psi.conj())
+    gate = haar_gate(rng)
+    np.testing.assert_allclose(
+        apply_gate(psi, gate, [3, 1]), apply_two_qubit_gate(psi, gate, 3, 1)
+    )
+    np.testing.assert_allclose(
+        apply_gate(rho, gate, [0, 2]), apply_two_qubit_gate(rho, gate, 0, 2)
+    )
+    with pytest.raises(ValueError, match="distinct"):
+        apply_gate(psi, gate, [1, 1])
+
+
+def test_dipole_circuit_layout_and_conservation() -> None:
+    from QELM.models.circuits.symmetric import DipoleCircuit
+
+    circuit = DipoleCircuit({"N": 8, "Nr": 1, "depth": 3}, np.random.default_rng(2))
+    assert circuit.blocks() == [
+        (1, 2, 3, 4),
+        (5, 6, 7, 8),
+        (2, 3, 4, 5),
+        (3, 4, 5, 6),
+        (4, 5, 6, 7),
+    ]
+    a = np.zeros(2**8, dtype=complex)
+    a[int("01100110", 2)] = 1.0
+    charges = _charges(8)
+    rho_p, _ = averaged_states(circuit.layers, a, a, 0.4)
+    for name in ("Q", "P"):
+        values = np.real(np.einsum("tii,i->t", rho_p, charges[name]))
+        np.testing.assert_allclose(values, values[0], atol=1e-10)
+    with pytest.raises(ValueError, match="N >= 4"):
+        DipoleCircuit({"N": 3, "depth": 1})
+
+
+def test_background_bell_state() -> None:
+    early = _load(SCRIPT)
+    psi = early.background_bell_state("0110", 2)
+    a, b = split_reference_state(psi)
+    assert np.argmax(np.abs(a)) == int("0110", 2)
+    assert np.argmax(np.abs(b)) == int("0100", 2)
+    with pytest.raises(ValueError, match="bit string"):
+        early.background_bell_state("01a0", 1)
+
+
+@pytest.mark.parametrize("gates", ["z2", "dipole", "diagonal"])
+def test_symmetric_runs_keep_the_label(gates: str) -> None:
+    m = _run(f"early_task.gates={gates}", 'early_task.background="0110"')["metrics"]
+    assert m["encoding"] == "bell_bg0110"
+    for entry in m["per_p"]:
+        # The two sectors stay orthogonal: D_k = 1 at every round.
+        np.testing.assert_allclose(entry["D"], 1.0, atol=1e-9)
+        assert "haar_mu" not in entry
+        assert 0.0 <= entry["train_accuracy"] <= 1.0

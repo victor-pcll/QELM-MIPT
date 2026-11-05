@@ -96,6 +96,45 @@ The "early-layers" hypothesis: to guess the label of a reference qubit from the 
 
 The other configurations have the same figures in `figures/` (`*_haar_ghz_N8`, `*_haar_charge_N8`, `*_u1_charge_N8`), and `figures/summary.json` holds every averaged curve.
 
+## Comparison of the symmetries: the inductive bias of the ridge
+
+The same study for five kinds of gates, each conserving a quantity diagonal in Z (so that the Z measurements keep it too):
+
+- Haar U(4): nothing conserved, the reference;
+- U(1): the charge `Q = sum n_i`;
+- dipole: `Q` and the polarization `P = sum i n_i`, with four-site gates `|0110> <-> |1001>` (`DipoleCircuit`);
+- Z2: the parity `prod Z_i`;
+- diagonal: every `Z_i`, as for `H = sum h_i Z_i`. Any diagonal gate gives the same record.
+
+The encoding is the Bell encoding of the middle site on the background `01100110`. On `|0...0>`, a single excitation cannot move under the dipole gates. The flip changes `Q`, `P`, the parity and `Z_mid` at once. N = 8, T = 16, 5 circuits, 8000 trajectories per `p` (`BACKGROUND=01100110 PER_P=8000 CONFIGS="haar:bell u1:bell z2:bell dipole:bell diagonal:bell"`), figures from `plot_symmetries.py`.
+
+| Gates (`p = 0.2`) | ridge test | ridge train - test | Bayes | share of rounds 1-3 | ridge on rounds 15-16 | `D_15` |
+|---|---|---|---|---|---|---|
+| Haar U(4) | 0.563 | 0.037 | 0.688 | 0.96 | 0.503 | 9e-4 |
+| Z2 | 0.539 | 0.051 | 0.725 | 0.95 | 0.496 | **1** |
+| U(1) | 0.779 | 0.012 | 0.900 | 0.32 | 0.595 | 1 |
+| dipole | 0.972 | 0.002 | 1.000 | 0.20 | 0.750 | 1 |
+| diagonal | 0.987 | 0.002 | 0.986 | 0.19 | 0.681 | 1 |
+
+- **What the ridge sees is the first moment `c_t = E[m_t Y]`, not the information `D_k`.** Every symmetric circuit keeps `D_k = 1`. The two sectors stay orthogonal, so the late rounds always hold the label for a decoder that knows the circuit, and Bayes goes to 1. The ridge only follows the information when the conserved quantity is linear in the `Z_i`:
+  - diagonal: the ridge equals Bayes at every `p`, because the middle site keeps its value;
+  - dipole and U(1): the signal is spread evenly over the rounds, about 1/T each.
+- **Z2 is the decisive case.** The parity is a product over all sites, so the linear signal of the late rounds decays exactly as for Haar. The ridge behaves exactly as with Haar: early rounds only, late rounds at chance, depth useless. Yet `D_k = 1`, and Bayes reaches 0.98 at `p = 0.6`. The early-layers behaviour is therefore a bias of the linear readout: it is blind to information that is not first order. It is not a loss of information in the circuit.
+- **Overfitting.** The train - test gap of the ridge is 0.03 to 0.05 for Haar and Z2, at every `p`. There the late weights fit noise (their norm stays at 20 to 30 % of round 1, with no signal). It is below 0.02, and zero from `p = 0.4` on, when the conserved quantity is linear: then every weight carries signal.
+- **Depth.** With U(1), dipole or diagonal gates, every extra round helps the ridge (U(1), `p = 0.2`: 0.66 at `k = 3`, 0.78 at `k = 16`). With Haar or Z2 it does not, and the ridge even loses about 0.01.
+
+![Accuracy and overfitting of the ridge against p, per symmetry](figures/symmetries/symmetries_accuracy.png)
+
+*(a) Test accuracy of the ridge on `vec(M)` (solid, error bars over 5 circuits) and of Bayes (dashed) against `p`. (b) Train minus test accuracy of the ridge. #288.*
+
+![Signal share, weight norm and D_k per round, per symmetry](figures/symmetries/symmetries_rounds.png)
+
+*`p = 0.2`. (a) Share of the ridge's signal per round, `w_t . c_t / Cov(s, Y)` (dotted: `1/T`). (b) Weight norm `||w_t||_2 / ||w_1||_2`. (c) Exact `D_k`, log scale. The four symmetric curves sit on top of each other at `D_k = 1`. #288.*
+
+![Accuracy against the depth, per symmetry](figures/symmetries/symmetries_depth.png)
+
+*Test accuracy of the ridge (solid) and of Bayes (dashed) trained on the first `k` rounds, which is a circuit of depth `k`, at `p = 0.2` and `p = 0.6`. #288.*
+
 ## Run it
 
 See [Run the early-layers study](../README.md#run-the-early-layers-study-of-the-linear-qelm-on-m-issue-288) in `experiments/README.md`.

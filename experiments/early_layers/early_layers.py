@@ -86,6 +86,11 @@ from QELM.evaluation.early_layers import (
 from QELM.evaluation.entropy_regression import stratified_split
 from QELM.models.circuits.base import BrickworkCircuit
 from QELM.models.circuits.haar import HaarBrickworkCircuit, U1BrickworkCircuit
+from QELM.models.circuits.symmetric import (
+    DiagonalBrickworkCircuit,
+    DipoleCircuit,
+    Z2BrickworkCircuit,
+)
 from QELM.training.measurements.projective import measure_projective_psi
 from QELM.utils import save_config
 
@@ -97,7 +102,7 @@ RNG_TAG = 288
 GATE_TAG = 269
 # Regularizations tried by the ridge.
 ALPHAS = np.logspace(-2, 4, 13)
-GATES = ("haar", "u1")
+GATES = ("haar", "u1", "z2", "dipole", "diagonal")
 
 
 def _nonlinear_module() -> ModuleType:
@@ -113,24 +118,60 @@ def _nonlinear_module() -> ModuleType:
 NL = _nonlinear_module()
 
 
-def make_circuit(
-    gates: str, params: dict[str, Any], rng: np.random.Generator
-) -> BrickworkCircuit:
-    """The fixed brickwork: Haar U(4) gates or charge-conserving U(1) gates.
+def make_circuit(gates: str, params: dict[str, Any], rng: np.random.Generator) -> Any:
+    """The fixed circuit of the run, by the symmetry of its gates.
+
+    - ``haar``: Haar U(4), no conserved quantity;
+    - ``u1``: the charge ``sum_i n_i`` (:class:`U1BrickworkCircuit`);
+    - ``z2``: the parity ``prod_i Z_i`` (:class:`Z2BrickworkCircuit`);
+    - ``dipole``: the charge and the dipole ``sum_i i n_i``, four-site gates
+      (:class:`DipoleCircuit`);
+    - ``diagonal``: every ``Z_i``, ``H = sum_i h_i Z_i``
+      (:class:`DiagonalBrickworkCircuit`).
 
     Raises:
         ValueError: If ``gates`` is not one of :data:`GATES`.
     """
-    if gates == "haar":
-        return HaarBrickworkCircuit(params, rng)
-    if gates == "u1":
-        return U1BrickworkCircuit(params, rng)
-    raise ValueError(f"early_task.gates must be one of {GATES}, got {gates!r}.")
+    classes = {
+        "haar": HaarBrickworkCircuit,
+        "u1": U1BrickworkCircuit,
+        "z2": Z2BrickworkCircuit,
+        "dipole": DipoleCircuit,
+        "diagonal": DiagonalBrickworkCircuit,
+    }
+    if gates not in classes:
+        raise ValueError(f"early_task.gates must be one of {GATES}, got {gates!r}.")
+    return classes[gates](params, rng)
+
+
+def background_bell_state(background: str, site: int) -> np.ndarray:
+    """``(|0>_R |s> + |1>_R |s with site flipped>) / sqrt 2`` for a bit string ``s``.
+
+    The Bell encoding on a background other than ``|0...0>``: with the
+    dipole-conserving gates a single excitation on ``|0...0>`` cannot move
+    (fracton), so the comparison of the symmetries uses a background with
+    mobile patterns, such as ``01100110``. ``R`` is the most significant
+    qubit, site 0 of the chain the next one.
+
+    Raises:
+        ValueError: If ``background`` is not a bit string or ``site`` is
+            outside it.
+    """
+    if not background or set(background) - {"0", "1"}:
+        raise ValueError(f"background must be a bit string, got {background!r}.")
+    N = len(background)
+    if not 0 <= site < N:
+        raise ValueError(f"site must be in [0, {N - 1}], got {site}.")
+    a = int(background, 2)
+    b = a ^ (1 << (N - 1 - site))
+    psi = np.zeros(2 ** (N + 1), dtype=complex)
+    psi[a] = psi[2**N + b] = 1.0 / np.sqrt(2.0)
+    return psi
 
 
 def trajectory(
     psi0: np.ndarray,
-    circuit: BrickworkCircuit,
+    circuit: Any,
     p: float,
     rng: np.random.Generator,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
@@ -227,6 +268,7 @@ def linear_analysis(
         chance = float(np.mean(Y[test] == (1.0 if Y[train].mean() >= 0 else -1.0)))
         out.update(
             accuracy=chance,
+            train_accuracy=chance,
             alpha=float("nan"),
             weight_l2=zeros,
             weight_l1=zeros,
@@ -243,6 +285,7 @@ def linear_analysis(
     per_round = np.sum(w * c, axis=1)
     signal = float(per_round.sum())
     out["accuracy"] = _accuracy(model, X[test], Y[test])
+    out["train_accuracy"] = _accuracy(model, X[train], Y[train])
     out["alpha"] = float(model.alpha_)
     out["weight_l2"] = np.linalg.norm(w, axis=1).tolist()
     out["weight_l1"] = np.abs(w).sum(axis=1).tolist()
@@ -338,7 +381,13 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     params = {str(k): v for k, v in block.items()}
     params["depth"] = T
     circuit = make_circuit(gates, params, gate_rng)
-    psi0 = NL.initial_state(cfg, encoding)
+    background = task.get("background", None)
+    if background is None:
+        psi0 = NL.initial_state(cfg, encoding)
+    else:
+        psi0 = background_bell_state(
+            str(background), int(cfg.ancilla_bell_pair.site or N // 2)
+        )
     a, b = split_reference_state(psi0)
     want_haar = gates == "haar" and bool(task.get("haar_average", True))
 
@@ -382,7 +431,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "T": T,
         "seed": seed,
         "gates": gates,
-        "encoding": encoding,
+        "encoding": encoding if background is None else f"bell_bg{background}",
         "samples_per_p": per_p,
         "per_p": per_level,
     }
