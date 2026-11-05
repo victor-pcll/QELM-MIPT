@@ -1,0 +1,39 @@
+# Learn the per-trajectory charge variance Var(Q) of a monitored U(1)
+# circuit from its final state (issue #299). Primary config of
+# experiments/charge_variance/charge_variance.py.
+#
+#   uv run python experiments/charge_variance/charge_variance.py N=8
+defaults:
+  - config
+  - _self_
+
+# Chain of N sites, no ancilla: the charge lives on the chain, which starts
+# in (|Q0> + |Q1>) / sqrt(2).
+N: 8
+Nr: 0
+
+task:
+  # Measurement probabilities per site and per round (after each layer).
+  p_values: [0.0, 0.02, 0.04, 0.06, 0.08, 0.10, 0.12, 0.14, 0.16, 0.20, 0.25, 0.30, 0.40]
+  # Time steps T (each an even then an odd layer): T = N as in Barratt 2022.
+  depth: ${N}
+  # The two charges, null for (N // 2, N // 2 - 1).
+  charges: null
+  boundary: open
+  measure_every: layer
+  # Trajectories per p, a new circuit for each.
+  samples_per_p: 2000
+  # Trajectories simulated at once; memory grows as batch * 2**N.
+  batch: 500
+  # Fraction of the trajectories of each p used for training.
+  train_fraction: 0.75
+  # Readouts (READOUTS in the script); direct is used on shots only.
+  readouts: [chance, n_meas, sep, linear_z, linear_zz, quadratic_z, plugin, direct]
+  # Finite-shot controls: features estimated from this many Z-basis
+  # bitstrings of each trajectory state ([] for exact features only).
+  n_shots: [100, 1000]
+  # Bootstrap resamples for the error bars of the order parameters.
+  n_boot: 200
+  # Write trajectories.npz (features and targets) next to metrics.json.
+  save_arrays: false
+  progress: false
