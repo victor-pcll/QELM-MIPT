@@ -33,6 +33,7 @@ FOLDER = REPO_ROOT / "experiments" / "early_layers"
 SCRIPT = FOLDER / "early_layers.py"
 BASH_SCRIPT = FOLDER / "early_layers.sh"
 PLOT_SCRIPT = FOLDER / "plot_early_layers.py"
+STORY_SCRIPT = FOLDER / "plot_story.py"
 N = 4
 P_VALUES = "[0.3,1.0]"
 PER_P = 60
@@ -313,3 +314,10 @@ def test_launcher_and_figures(tmp_path: Path) -> None:
     assert (fig / "early_share_vs_p.png").exists()
     summary = json.loads((fig / "summary.json").read_text())
     assert summary["haar_bell_N4"]["n_circuits"] == 2
+    # The two summary figures, Haar against U(1).
+    story = _load(STORY_SCRIPT)
+    renamed = {k.replace("N4", "N8"): v for k, v in summary.items()}
+    story.plot_information(renamed, [0.4, 1.0], tmp_path / "story")
+    story.plot_depth(renamed, [0.4], tmp_path / "story")
+    assert (tmp_path / "story" / "story_information.png").exists()
+    assert (tmp_path / "story" / "story_depth.png").exists()

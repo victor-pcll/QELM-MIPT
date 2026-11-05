@@ -55,6 +55,18 @@ The "early-layers" hypothesis: to guess the label of a reference qubit from the 
 
 ## Figures
 
+**Summary figures** (`plot_story.py`, Bell encoding, `p = 0.2` solid and `p = 0.6` dashed):
+
+![Where the information sits: Haar against U(1)](figures/story_information.png)
+
+*(a) Share of the ridge's signal carried by each round `t` (`w_t . c_t / Cov(s, Y)`, with `c` exact; the shares add up to 1; dotted line: the uniform share `1/T`). Haar U(4) (blue): rounds 1 to 3 carry 96 to 100 % of the signal and the rest is zero. U(1) (orange): about 6 % per round from round 4 on, spread over the whole circuit. (b) `D_k`, the largest advantage over chance of any decoder (Bayes included) of rounds `k..T` alone, computed exactly (log scale). Without a conservation law it decays exponentially; with the conserved charge it stays at 1. Mean over 10 circuits, N = 8, T = 16. #288.*
+
+![Does a deeper circuit help? Haar against U(1)](figures/story_depth.png)
+
+*Test accuracy against the number `k` of rounds used, which is a circuit of depth `k`: ridge on `vec(M)` (solid, with error bars) and Bayes (dashed). Haar U(4) (blue): the ridge is flat or even falls slightly after `k = 2` or `3` (0.574 at `k = 3`, 0.552 at `k = 16`, `p = 0.2`), so a deeper circuit does not help it. U(1) (orange): the ridge gains at every round (`p = 0.2`: 0.59, then 0.66, then 0.78 at `k = 1, 3, 16`) and so does Bayes (up to 0.99). Mean over 10 circuits, N = 8. #288.*
+
+**Detailed figures:**
+
 ![Signal share of the early and late rounds](figures/early_share_vs_p.png)
 
 *Left: the share of the ridge's signal `Cov(s, Y)` carried by rounds 1 to 3, against `p`, for each configuration (mean and standard error over 10 circuits). Right: the share of rounds 15 and 16 (symlog scale), with the proven bound `p sum_t D_t ||w_t||_1 / Cov(s, Y)` (dotted). Haar gates: the early rounds carry nearly all the signal and the late share sits at zero, below a bound that falls as `D_t`. U(1) gates: the signal is spread over every round. `plot_early_layers.py`, #288.*
