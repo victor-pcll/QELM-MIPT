@@ -48,14 +48,19 @@ démontrer dans un sens comme dans l'autre.
    Mais c'est le **charge sharpening**, pas la MIPT d'intrication. Et les features
    exactes d'une trajectoire supposent un simulateur qui connaît le circuit,
    c'est-à-dire le décodeur de Bayes lui-même.
-4. **Ce qui reste ouvert, et le calcul qui le tranche.** En Clifford, le ridge
-   récupère une part `g ≈ 0.3–0.4` de l'avantage de Bayes près de `p_c`, et cette
-   part **ne diminue pas** de `N = 6` à 12 (figure 1d). Si `g` reste fini quand `N`
-   grandit, le QELM *hérite* de la transition, affaiblie par un facteur lisse, sans
-   la *voir* par lui-même. Les données actuelles (6 circuits par taille) ne
-   résolvent même pas le croisement de l'oracle sur ce jeu de données. Le calcul
-   proposé à la section 6 (Clifford, `N = 16` à 48, 50 circuits) tranche la
-   question.
+4. **Le calcul 6.A (Clifford, `N = 12` à 32, section 7) ferme presque le cas
+   ouvert.**
+   - **Régime brouillé.** L'oracle croise à `p_c` (0,160 ; 0,168 ; 0,159, tous
+     résolus). Le ridge sur `M` y est exactement au hasard : `g = 0` à ±0,02 près
+     et `w₁ = 0`. Après le brouillage, chaque label est une parité de poids ≥ 2.
+   - **Régime `T = 2N`.** La part `g(p = 0.16)` **baisse** avec `N` : 0,39 ; 0,38 ;
+     0,29 ; 0,27 (±0,03), et elle suit `w₁`. Les courbes brutes du ridge sont
+     rangées à l'envers de celles de l'oracle (elles baissent avec `N`) et ne
+     croisent pas.
+
+   Le QELM n'hérite donc pas de la transition. La seule part qu'il lit est celle
+   des purifications précoces par un seul résultat, et elle disparaît quand on
+   brouille ou quand `N` grandit.
 
 ## 1. Ce que « voir la transition » veut dire
 
@@ -113,8 +118,8 @@ paramètres libres réussit presque toujours. On ne s'en sert donc que pour comp
 | | Énoncé | Ce qui le soutient | Ce qui le tranche |
 | --- | --- | --- | --- |
 | **C1** | Haar : la précision du ridge sur `M` converge vers une courbe **indépendante de `N`**, donc sans croisement. | T4 : le signal vient d'un cône de lumière de 3 tours autour du site encodé, dont la loi ne dépend plus de `N` quand `N` dépasse le cône. M5. | Ridge sur les tours 1 à 3, `N = 6` à 14, à nombre de features fixe (calcul B). |
-| **C2** | Clifford : `g(p_c, N)` reste fini, si bien que la précision du QELM **hérite** du croisement de `f`, affaiblie par un facteur lisse. | M1, M2 (`g` croît légèrement de `N = 6` à 12). | Calcul A. |
-| **C2'** | L'hypothèse inverse de C2 : `g(p_c, N) → 0`, parce que les labels purifiés tard sont des parités de poids croissant (T5). Le QELM serait alors aveugle. | La part `w₁` des parités de poids ≤ 1 devrait baisser quand le temps de purification grandit ; Dehghani et al. trouvent un coût exponentiel en le temps de purification (#298). | Calcul A, avec `w₁` mesuré. |
+| **C2** | Clifford : `g(p_c, N)` reste fini, si bien que la précision du QELM **hérite** du croisement de `f`, affaiblie par un facteur lisse. | M1, M2 (`g` croît légèrement de `N = 6` à 12). | **Réfuté par le calcul A** (section 7) : `g = 0` en régime brouillé, et `g` baisse de 0,39 à 0,27 entre `N = 12` et 32 à `T = 2N`. |
+| **C2'** | L'hypothèse inverse de C2 : `g(p_c, N) → 0`, parce que les labels purifiés tard sont des parités de poids croissant (T5). Le QELM serait alors aveugle. | La part `w₁` des parités de poids ≤ 1 devrait baisser quand le temps de purification grandit ; Dehghani et al. trouvent un coût exponentiel en le temps de purification (#298). | **Soutenu par le calcul A** : `g` suit `w₁` dans les deux régimes, et `w₁ = 0` après brouillage. Que `g → 0` à `T = 2N` reste une extrapolation à partir de 4 tailles. |
 | **C3** | Le croisement brut du QELM complet (M2) est le crossover de brouillage de M7. Il dérive vers 0 comme `N^{−1.4}` environ, et pas vers `p_c`. | M2 (0,118 puis 0,097), M7 (sur Haar, pas sur Clifford). | Calcul A, cas 3. |
 | **C4** | « Aucune quantité linéaire en `ρ_M`, moyennée sur les trajectoires, ne voit la MIPT ; il faut au moins deux répliques. » | C'est l'énoncé usuel de la littérature (par exemple Skinner, Ruhman, Nahum, PRX 9, 031009 (2019) ; la revue de Fisher, Khemani, Nahum, Vijay, Annu. Rev. Condens. Matter Phys. 14 (2023)). **Ces références sont citées de mémoire et n'ont pas été relues pour cette note.** T2 et T2' en sont des cas particuliers démontrés ici. | Relire les sources. Ce n'est pas nécessaire pour le verdict, puisque T2 et T2' suffisent. |
 
@@ -128,7 +133,7 @@ C'est T3 (en Clifford) et la mesure M2 (en Haar et Clifford) qui l'excluent ici.
 | Cas | L'oracle résout-il la transition ? | Le QELM ? | Pourquoi | Statut |
 | --- | --- | --- | --- | --- |
 | Clifford, `S_R` depuis l'état final (#295) | Oui, `p* = 0.16` (M4) | **Non** : `R² = 0` en linéaire, et le croisement poolé de `|<P>|` est un rétrécissement | T3, figure 3 | Prouvé (linéaire), mesuré (`|<P>|`) |
-| Clifford, label de `R` depuis `M` (#289) | **Non résolu** avec 6 circuits (M3) | Pas de croisement résolu ; `g ≈ 0.3–0.4` stable | T5, T6, M1 | **Ouvert** (C2 / C2') |
+| Clifford, label de `R` depuis `M` (#289 ; calcul A) | Brouillé : **oui**, `p* = 0.16` ; `T = 2N` : croisements non résolus | **Non** : `g = 0` (brouillé) ; `g` baisse avec `N` et les courbes ne croisent pas (`T = 2N`) | T5, T6, section 7 | Mesuré jusqu'à `N = 32` |
 | Clifford, QELM complet (#289, cas 3) | Non résolu (M3) | Croisement brut non résolu, qui dérive vers le bas | M2, C3 | Ouvert, probablement un crossover |
 | Haar, label de `R` depuis `M` (#278, #291) | Non résolu à `N ≤ 10` | Non, courbes plates ou décroissantes en `N` | T4, M5, C1 | Prouvé en partie, mesuré |
 | Haar, Bloch et pureté de `R` (#280, #290) | Pureté exacte : croise, avec une dérive | Non : la pureté est paire en `M`, donc invisible au linéaire ; minimum de Bloch sans dérive | M6 | Mesuré |
@@ -252,7 +257,7 @@ hors `main`** (même source que la figure 5).
   le posterior** (T7). La transition vient alors des features, c'est-à-dire de la
   simulation exacte de la trajectoire, pas de la lecture.
 
-## 6. Calculs manquants (proposés, non lancés)
+## 6. Calculs manquants (A lancé, voir section 7 ; B et C proposés)
 
 **A. Le calcul qui tranche C2 / C2' (Clifford, grandes tailles).** C'est le seul
 cas ouvert, et stim le rend peu coûteux.
@@ -301,6 +306,87 @@ manifestement plat.
 `|<P>|`, d'autres MLP. M10 et #278 montrent qu'elles ne changent pas la
 conclusion, et le critère (e) dit pourquoi : elles ne changent `g` que là où le
 nombre d'échantillons le permet, c'est-à-dire aux petites tailles.
+
+## 7. Résultat du calcul 6.A (Clifford, `N = 12` à 32)
+
+**Protocole.** Celui du cas 1 de `dehghani_decoder` (#287). Un circuit de
+Clifford fixe par graine, la paire de Bell `R`–site du milieu, une mesure en Z
+avec la probabilité `p` après chaque demi-couche. Le décodeur est le ridge sur
+`vec(M)` seul : près de `p_c`, les features d'état sont au hasard dès `N = 8`
+(#287, cas 3), et elles coûteraient environ 100 fois plus cher. Il y a
+10 valeurs de `p` entre 0,06 et 0,26. Le script est
+`experiments/qelm_verdict/clifford_fss.py`, et les figures viennent de
+`plot_clifford_fss.py`.
+
+- **Brouillé** : `2N` pas sans mesure, puis `2N` pas mesurés. 20 circuits par
+  taille, 6000 trajectoires par `p`.
+- **`T = 2N`** : 27 circuits par taille, 10 000 trajectoires par `p`. Il en était
+  prévu 40 ; le run s'est arrêté avec le conteneur à 108 circuits sur 160, et ce
+  qui suit utilise les 27 premières graines de chaque taille.
+
+![Calcul 6.A](../../experiments/qelm_verdict/figures/clifford_fss.png)
+
+**Figure 7. Le QELM-M face à l'oracle jusqu'à `N = 32`.** En haut, le régime
+brouillé ; en bas, `T = 2N`. Couleurs : `N = 12, 16, 24, 32`. Barres : erreur
+standard sur les circuits. Pointillé vertical : `p_c = 0.16`. Colonnes de
+gauche à droite :
+1. la fraction purifiée `f`, quantité d'oracle (Bayes vaut `(1 + f)/2`) ;
+2. la précision du ridge sur toutes les trajectoires ;
+3. la part de Bayes `g = 2 acc_pur − 1` ;
+4. la part `w₁` des labels purifiés de poids ≤ 1, mesurée en rejouant 40
+   (brouillé) ou 60 (`T = 2N`) trajectoires purifiées par `p` et par circuit ;
+5. `g` contre `N` à `p = 0.12`, 0,16 et 0,20.
+
+Ce que la figure montre :
+- **en haut**, l'oracle croise net à `p_c` et le QELM est au hasard partout
+  (attention à l'échelle de la colonne 2 : tout est dans 0,500 ± 0,004) ;
+- **en bas**, l'oracle croise mal, vers 0,13–0,15, et la part du QELM baisse
+  avec `N` en suivant `w₁`.
+
+Produite par `experiments/qelm_verdict/plot_clifford_fss.py` (#303).
+
+| | `N = 12` | 16 | 24 | 32 |
+| --- | --- | --- | --- | --- |
+| brouillé : `f(0.16)` | 0,497 | 0,498 | 0,476 | 0,478 |
+| brouillé : `g(0.16)` | 0,009 | −0,010 | −0,014 | 0,007 |
+| `T = 2N` : `f(0.16)` | 0,717 | 0,725 | 0,755 | 0,780 |
+| `T = 2N` : `g(0.16)` | 0,385 | 0,380 | 0,287 | 0,270 |
+| `T = 2N` : `w₁(0.16)` | 0,399 | 0,379 | 0,307 | 0,291 |
+| `T = 2N` : ridge, toutes trajectoires, `p = 0.20` | 0,669 | 0,660 | 0,631 | 0,624 |
+
+Les erreurs standard sont de ±0,006 à ±0,008 sur `f`, de ±0,007 sur `g`
+(brouillé), et de ±0,03 sur `g` et `w₁` (`T = 2N`).
+
+**Critère de la section 1 appliqué.**
+- **Brouillé.**
+  - L'oracle passe (a), (b) et (c) : croisements de `f` à 0,160 ; 0,168 ;
+    0,159, tous résolus.
+  - Le QELM échoue à (e) de la façon la plus nette possible : `g = 0`, parce
+    que `w₁ = 0` sur chaque trajectoire purifiée rejouée (jusqu'à 40 par `p` et par circuit).
+  - Le test (a) trouve un croisement « résolu » de `g` entre 24 et 32 vers
+    0,12. Il vient de `p ≤ 0.1`, où `N = 32` n'a presque aucune trajectoire
+    purifiée, et il porte sur une quantité nulle : c'est du bruit.
+- **`T = 2N`.**
+  - L'oracle ne passe pas (a) : les croisements de `f` (0,151 ; 0,138 ;
+    0,089 et 0,127) ne sont pas résolus, comme dans #292 à cette profondeur.
+  - Le ridge ne croise pas : ses courbes baissent avec `N` au-dessus de
+    `p ≈ 0.12`, alors que `f` monte.
+  - `g(p_c)` baisse de 30 % entre `N = 16` et 24, puis reste stable à 24–32
+    dans les barres d'erreur.
+
+**Interprétation.** La part que lit le QELM-M est exactement celle des labels
+fixés par un seul résultat de mesure (T5, `g ≈ w₁` dans les deux régimes). Ces
+labels viennent des purifications précoces, quand `R` est encore proche de son
+partenaire. Un brouillage les supprime entièrement. Sans brouillage, leur part
+baisse avec `N`. Le QELM-M ne lit donc pas la transition de purification : il
+lit un effet de bord de l'état initial, qui n'a pas de limite d'échelle à `p_c`.
+
+**Ce qui reste.**
+- Les 13 graines manquantes de `T = 2N` resserreraient les barres sur `g` ; le
+  script reprend là où il s'est arrêté.
+- Il faudrait `N = 48` pour savoir si `g(p_c)` continue de baisser à `T = 2N`
+  (environ 30 min par circuit).
+- Le cas 3 (QELM complet) n'a pas été relancé à grand `N`.
 
 ## Réserves
 

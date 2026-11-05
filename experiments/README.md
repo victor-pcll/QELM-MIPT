@@ -1613,6 +1613,23 @@ It writes `fig1_meme_circuit.png`, `fig2_controles_u1.png`,
 `fig3_retrecissement.png`, `fig4_critere_fss.png` and `verdict_summary.json`
 to `experiments/qelm_verdict/figures/` (option `--out`), in a few seconds.
 
+The Clifford run to `N = 32` (calcul 6.A of the note) simulates; it resumes
+where it stopped (finished `(N, seed)` files are skipped):
+
+```bash
+uv run python experiments/qelm_verdict/clifford_fss.py --regime scrambled \
+    --N 12 16 24 32 --seeds 20 --n-traj 6000 --n-parity 40 --jobs 4 \
+    --out outputs/qelm_verdict/clifford_fss
+uv run python experiments/qelm_verdict/clifford_fss.py --regime T2N \
+    --N 12 16 24 32 --seeds 40 --n-traj 10000 --n-parity 60 --jobs 4 \
+    --out outputs/qelm_verdict/clifford_fss
+uv run python experiments/qelm_verdict/plot_clifford_fss.py \
+    outputs/qelm_verdict/clifford_fss --out experiments/qelm_verdict/figures
+```
+
+On 4 cores, the scrambled sweep takes about 1.6 h; a `T = 2N` circuit at
+`N = 32` takes about 17 min.
+
 ## Write your own
 
 1. Copy the test script and make the copy executable:

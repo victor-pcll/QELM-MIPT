@@ -98,6 +98,28 @@ quantity.** Filled markers: resolved crossing. Hollow markers: a crossing of
 the means that is not resolved. Bottom ticks: no crossing of the means.
 Produced by `plot_verdict.py` (#303).
 
+### Clifford run to `N = 32` (calcul 6.A)
+
+`clifford_fss.py` reruns case 1 of #287 (ridge on `M`, Bayes, purified
+fraction, weight-1 parities) for `N = 12, 16, 24, 32` in two regimes:
+scrambled (`2N` unmeasured steps, then `2N` measured; 20 circuits, 6000
+trajectories per `p`) and `T = 2N` (27 circuits, 10 000 trajectories per `p`).
+`plot_clifford_fss.py` draws `figures/clifford_fss.png` and writes
+`figures/clifford_fss_summary.json`.
+
+- **Scrambled.** The oracle `f` crosses at 0.160, 0.168, 0.159 (resolved). The
+  ridge is at chance: `g = 0 ± 0.02` and `w1 = 0`.
+- **`T = 2N`.** `g(p = 0.16)` = 0.385, 0.380, 0.287, 0.270 (±0.03) and tracks
+  `w1`. The ridge curves decrease with `N` and do not cross.
+
+![Clifford finite-size run](figures/clifford_fss.png)
+
+**Figure 5. The QELM-M against the oracle up to `N = 32`.** Top: scrambled;
+bottom: `T = 2N`. Columns: purified fraction `f`, ridge accuracy over all
+trajectories, Bayes share `g`, share `w1` of weight-1 parities, and `g` against
+`N` at `p = 0.12, 0.16, 0.20`. Error bars: standard error over circuits.
+Produced by `plot_clifford_fss.py` (#303).
+
 `fss_state_features.png` and `fss_ridge_bayes.png` (Figures 5 and 6 of the
 note) are copies of PNGs from a project-folder run of the code on the branch
 of #291 (N = 6, 8, 10). That code is not on `main`, and their data were not
