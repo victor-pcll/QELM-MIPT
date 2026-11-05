@@ -50,6 +50,7 @@ commands and every option of the launchers.
 | [`haar_readouts/`](haar_readouts/README.md) | sector of a purifying reference qubit, many decoders | purification decoding (task 1B) |
 | [`dehghani_decoder/`](dehghani_decoder/README.md) | Dehghani et al. (2023): purified reference qubit of a fixed Clifford circuit, ridge vs MLP vs Bayes on `M`, `M` + final readout, `M` + `<P_k>` + `<P_i P_j>` | why a linear readout of `M` fails (parities), purification decoding (task 1B) |
 | [`nonlinear_M/`](nonlinear_M/README.md) | local label of a reference qubit from non-linear maps of `M` (XOR, `\|M\|`, pairs), Haar U(4) | why the linear QELM-M fails (#269) |
+| [`early_layers/`](early_layers/README.md) | which rounds of `M` the linear QELM-M reads: weights, signal share, windows, ablation, exact bounds, Haar U(4) and U(1) | the early-layers hypothesis, with proofs (#288) |
 | [`bloch_purity/`](bloch_purity/README.md) | Bloch vector and purity of a reference qubit from `M` and the state, Haar U(4) | tomography and purity of the local encoding (#277), size dependence, nonlinear readouts and variance probe (#282) |
 | [`characteristic_p/`](characteristic_p/README.md) | crossing of the QELM with Bayes on `M` and minimum of the QELM, against `p N T`, four encodings | where the state readout hands over to the record (#285) |
 | [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
@@ -1510,6 +1511,26 @@ prediction), its log and its config. The plot script writes
 `order_parameter.png`, `r2_per_p.png`, `r2_pooled.png`, their data and
 `summary.json` (averages over seeds and crossings of consecutive sizes) in
 the sweep folder.
+
+## Run the early-layers study of the linear QELM on M (issue #288)
+
+Which rounds of the record does the ridge on `vec(M)` read? One fixed circuit
+per seed (Haar U(4), or U(1) as a control), the reference qubit of
+`nonlinear_M`, `T = 2N`. Per `p`: the weights and the signal share of each
+round, windows and ablations of `M`, and the exact bounds of
+[`documentation/notes/early-layers-proof.md`](../documentation/notes/early-layers-proof.md).
+
+```bash
+uv run python experiments/early_layers/early_layers.py N=8 seed=42 early_task.encoding=ghz
+MAX_JOBS=4 ./experiments/early_layers/early_layers.sh      # 5 configurations x 10 seeds
+uv run python experiments/early_layers/plot_early_layers.py outputs/early_layers/<date_time> \
+    --out experiments/early_layers/figures
+```
+
+Launcher options: `N_VALUES`, `SEEDS`, `CONFIGS` (`gates:encoding` pairs),
+`PER_P`, `DEPTH`, `P_VALUES`, `MAX_JOBS`, `SKIP_DONE`, `OUT_DIR`, `OUT_ROOT`.
+At `N = 8` and `T = 16` a run of 8 values of `p` and 4000 trajectories per `p`
+takes 5 to 15 minutes on one core.
 
 ## Run the tomography and purity of the reference qubit (issue #277)
 
