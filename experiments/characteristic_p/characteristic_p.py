@@ -35,7 +35,11 @@ Subcommands:
 the sweep (the QELM and Bayes curves against ``p N T`` with ``p_cross`` and
 ``p_min`` marked), ``p_star_vs_NT.png`` when the sweep holds several
 ``N T`` (``p_cross`` and ``p_min`` against ``N T``, and ``p* N T``), and
-``summary.json``.
+``summary.json``; with several ``N T``, also ``p_cross_scaling.png``,
+``p_min_scaling.png`` and ``scaling_exponents.png`` (``p* N T`` and
+``p* T`` against ``N`` and ``T``, and the fitted exponents) and
+``fits.json``. ``scaling SUMMARY --out DIR`` draws these three figures
+from a saved ``summary.json``, without simulation.
 """
 
 from __future__ import annotations
@@ -324,7 +328,8 @@ def power_law_fit(
     ``a = b``; ``a = b = -1`` is a constant ``p* N T``.
 
     Returns:
-        ``{encoding: {name: {A, a, b, rms_log, n_points} or None}}``.
+        ``{encoding: {name: {A, a, b, a_err, b_err, rms_log, n_points} or
+        None}}``; ``a_err``, ``b_err`` are the least-squares standard errors.
     """
     out: dict[str, Any] = {}
     for encoding, entries in summary.items():
@@ -350,10 +355,20 @@ def power_law_fit(
             y = np.log([e[name] for e in pts])
             coef = np.linalg.lstsq(A, y, rcond=None)[0]
             res = y - A @ coef
+            # Standard errors of the coefficients (residual variance with
+            # n - 3 degrees of freedom); undefined with exactly three points.
+            dof = len(pts) - 3
+            if dof > 0:
+                cov = float(res @ res) / dof * np.linalg.pinv(A.T @ A)
+                a_err, b_err = (float(np.sqrt(max(cov[i, i], 0.0))) for i in (1, 2))
+            else:
+                a_err = b_err = None
             out[encoding][name] = {
                 "A": float(np.exp(coef[0])),
                 "a": float(coef[1]),
                 "b": float(coef[2]),
+                "a_err": a_err,
+                "b_err": b_err,
                 "rms_log": float(np.sqrt(np.mean(res**2))),
                 "n_points": len(pts),
             }
@@ -459,6 +474,373 @@ def plot_p_star(
     return path
 
 
+# One color per N in the scaling figures.
+N_COLORS = {4: "#1f77b4", 6: "#2ca02c", 8: "#fa5703", 10: "#9467bd", 12: "#8c564b"}
+ESTIMATES = {
+    "p_cross": "p_cross (QELM = Bayes on M)",
+    "p_min": "p_min (QELM minimum)",
+}
+
+
+def _setup_log_axis(ax: Any, axis: str, ticks: list[int]) -> None:
+    import matplotlib.ticker
+
+    getattr(ax, f"set_{axis}scale")("log")
+    target = ax.xaxis if axis == "x" else ax.yaxis
+    target.set_major_formatter(matplotlib.ticker.ScalarFormatter())
+    target.set_minor_formatter(matplotlib.ticker.NullFormatter())
+    if ticks:
+        getattr(ax, f"set_{axis}ticks")(ticks)
+
+
+def plot_scaling(
+    summary: dict[str, Any], fits: dict[str, Any], name: str, out: Path
+) -> Path:
+    """Is ``p N T`` the variable of ``name`` (``p_cross`` or ``p_min``)?
+
+    One row per encoding, four columns:
+
+    1. ``p* N T`` against ``T``, one line per ``N``: constant if ``p N T``
+       were the variable;
+    2. ``p* T`` against ``T``, one line per ``N``: the measurements per site;
+    3. ``p* N^-a`` against ``T`` (log-log), with the fit ``A T^b``;
+    4. ``p* T^-b`` against ``N`` (log-log), with the fit ``A N^a``.
+
+    ``a``, ``b`` come from :func:`power_law_fit`; the dashed grey line in
+    columns 3 and 4 has slope -1, the value both exponents would take if
+    ``p* N T`` were constant. Estimates defined in less than
+    :data:`FIT_MIN_DEFINED` of the resamplings are hollow (and not fitted).
+    Lower error bars are cut at a quarter of the value (log axes).
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    encodings = list(summary)
+    fig, axes = plt.subplots(
+        len(encodings), 4, figsize=(17, 3.3 * len(encodings)), squeeze=False
+    )
+    all_T = sorted({int(e["T"]) for enc in summary.values() for e in enc.values()})
+    all_N = sorted({int(e["N"]) for enc in summary.values() for e in enc.values()})
+    for row, encoding in enumerate(encodings):
+        entries = [e for e in summary[encoding].values() if e[name] is not None]
+        fit = fits.get(encoding, {}).get(name)
+        ax_nt, ax_t, ax_bt, ax_an = axes[row]
+        for N in all_N:
+            pts = sorted((e for e in entries if e["N"] == N), key=lambda e: e["T"])
+            if not pts:
+                continue
+            color = N_COLORS.get(N, "grey")
+            T = np.asarray([e["T"] for e in pts], dtype=float)
+            p = np.asarray([e[name] for e in pts])
+            dp = np.asarray([e[f"{name}_err"] or 0.0 for e in pts])
+            solid = [e[f"{name}_defined_fraction"] >= FIT_MIN_DEFINED for e in pts]
+            series = [(ax_nt, T, N * T), (ax_t, T, T)]
+            if fit:
+                series.append((ax_bt, T, N ** -fit["a"]))
+                series.append((ax_an, np.full_like(T, N), T ** -fit["b"]))
+            for ax, x, k in series:
+                ax.plot(x, p * k, "-", color=color, lw=0.8, alpha=0.6)
+                for xi, yi, dyi, s in zip(x, p * k, dp * k, solid, strict=True):
+                    # Lower bar cut at y / 4 so that it stays on the log axes.
+                    ax.errorbar(
+                        xi,
+                        yi,
+                        yerr=[[min(dyi, 0.75 * yi)], [dyi]],
+                        fmt=MARKERS.get(N, "o"),
+                        color=color,
+                        mfc=color if s else "white",
+                        ms=5,
+                        capsize=2,
+                    )
+        label = LABELS.get(encoding, encoding)
+        for ax, ylabel in ((ax_nt, f"{name} N T"), (ax_t, f"{name} T")):
+            _setup_log_axis(ax, "x", all_T)
+            ax.set_ylim(bottom=0)
+            ax.set_ylabel(ylabel)
+            vals = [
+                e[name] * (e["N"] * e["T"] if ax is ax_nt else e["T"])
+                for e in entries
+                if e[f"{name}_defined_fraction"] >= FIT_MIN_DEFINED
+            ]
+            if vals:
+                ax.text(
+                    0.03,
+                    0.04,
+                    f"{min(vals):.2g} to {max(vals):.2g}",
+                    transform=ax.transAxes,
+                    fontsize=8,
+                )
+        if fit:
+            t = np.geomspace(min(all_T), max(all_T), 50)
+            n = np.geomspace(min(all_N), max(all_N), 50)
+            # Slope -1 references through the fit at the middle of the range.
+            t0, n0 = np.sqrt(t[0] * t[-1]), np.sqrt(n[0] * n[-1])
+            ax_bt.plot(t, fit["A"] * t ** fit["b"], "k-", lw=1.2)
+            ax_bt.plot(t, fit["A"] * t0 ** fit["b"] * t0 / t, "--", color="grey")
+            ax_an.plot(n, fit["A"] * n ** fit["a"], "k-", lw=1.2)
+            ax_an.plot(n, fit["A"] * n0 ** fit["a"] * n0 / n, "--", color="grey")
+            ax_bt.set_ylabel(f"{name} N^({-fit['a']:.2f})")
+            ax_an.set_ylabel(f"{name} T^({-fit['b']:.2f})")
+            ax_bt.set_title(f"slope b = {_fmt_exp(fit['b'], fit['b_err'])}", fontsize=9)
+            ax_an.set_title(f"slope a = {_fmt_exp(fit['a'], fit['a_err'])}", fontsize=9)
+            _setup_log_axis(ax_bt, "x", all_T)
+            _setup_log_axis(ax_an, "x", all_N)
+            for ax in (ax_bt, ax_an):
+                _setup_log_axis(ax, "y", [])
+        else:
+            for ax in (ax_bt, ax_an):
+                ax.text(0.5, 0.5, "no fit", ha="center", transform=ax.transAxes)
+        for ax in axes[row]:
+            ax.grid(alpha=0.25, lw=0.5, which="both")
+        ax_nt.set_title(label, fontsize=10, loc="left", fontweight="bold")
+    for col, xlabel in enumerate(("T", "T", "T", "N")):
+        axes[-1, col].set_xlabel(xlabel)
+    for N in all_N:
+        axes[0, 0].plot(
+            [],
+            [],
+            MARKERS.get(N, "o") + "-",
+            color=N_COLORS.get(N, "grey"),
+            label=f"N = {N}",
+        )
+    axes[0, 0].legend(fontsize=7, loc="upper right")
+    axes[0, 2].plot([], [], "k-", label="fit A N^a T^b")
+    axes[0, 2].plot([], [], "--", color="grey", label="slope -1 (p N T constant)")
+    axes[0, 2].legend(fontsize=7, loc="lower left")
+    fig.suptitle(f"{ESTIMATES.get(name, name)} against N and T: is p N T the variable?")
+    fig.tight_layout()
+    path = out / f"{name}_scaling.png"
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    return path
+
+
+def _fmt_exp(value: float, err: float | None) -> str:
+    return f"{value:.2f}" if err is None else f"{value:.2f} ± {err:.2f}"
+
+
+def plot_exponents(fits: dict[str, Any], out: Path) -> Path:
+    """Fitted exponents ``a`` (of ``N``) and ``b`` (of ``T``) per encoding.
+
+    One panel per estimate; error bars are the least-squares standard
+    errors. A scaling in ``p N T`` would put both on the dashed line -1.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    encodings = list(fits)
+    x = np.arange(len(encodings))
+    fig, axes = plt.subplots(1, len(ESTIMATES), figsize=(10, 3.8), sharey=True)
+    for ax, name in zip(axes, ESTIMATES, strict=True):
+        for exp, shift, color, legend in (
+            ("a", -0.12, "#1f77b4", "a (exponent of N)"),
+            ("b", 0.12, "#fa5703", "b (exponent of T)"),
+        ):
+            for i, encoding in enumerate(encodings):
+                fit = fits[encoding].get(name)
+                if not fit:
+                    continue
+                ax.errorbar(
+                    i + shift,
+                    fit[exp],
+                    yerr=fit[f"{exp}_err"] or 0.0,
+                    fmt="o",
+                    color=color,
+                    capsize=3,
+                    label=legend if i == 0 else None,
+                )
+                if exp == "a":
+                    ax.text(
+                        i,
+                        0.35,
+                        f"{fit['n_points']} pts\nrms {fit['rms_log']:.2f}",
+                        ha="center",
+                        fontsize=7,
+                        color="grey",
+                    )
+        ax.axhline(-1, ls="--", color="grey", lw=1, label="p N T constant")
+        ax.axhline(0, color="black", lw=0.5)
+        ax.set_xticks(x, [LABELS.get(e, e) for e in encodings])
+        ax.set_title(f"{ESTIMATES[name]} = A N^a T^b", fontsize=10)
+        ax.grid(alpha=0.25, lw=0.5, axis="y")
+    axes[0].set_ylabel("exponent")
+    axes[0].set_ylim(-1.6, 0.6)
+    axes[0].legend(fontsize=7, loc="lower left")
+    fig.tight_layout()
+    path = out / "scaling_exponents.png"
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    return path
+
+
+def plot_scaling_figures(summary: dict[str, Any], out: Path) -> list[Path]:
+    """``fits.json``, ``collapse_spread.json`` and the scaling figures."""
+    fits = power_law_fit(summary)
+    (out / "fits.json").write_text(json.dumps(fits, indent=2))
+    collapse, spreads = plot_collapse(summary, out, fits)
+    (out / "collapse_spread.json").write_text(json.dumps(spreads, indent=2))
+    return [
+        plot_scaling(summary, fits, "p_cross", out),
+        plot_scaling(summary, fits, "p_min", out),
+        plot_exponents(fits, out),
+        collapse,
+    ]
+
+
+# Scaling variables of the collapse figure: (label, factor of p).
+COLLAPSE_VARIABLES = (
+    ("p N T", lambda N, T: float(N * T)),
+    ("p T", lambda N, T: float(T)),
+)
+# Readouts of the collapse figure: (metric, column title).
+COLLAPSE_READOUTS = (
+    (QELM, "QELM on <P_k>, <P_i P_j> and M"),
+    ("ridge_quantum", "QELM on <P_k>, <P_i P_j> (state only)"),
+)
+COLLAPSE_RANGE = (0.0, 1.5)
+
+
+def collapse_spread(
+    entries: list[dict[str, Any]],
+    metric: str,
+    factor: Any,
+    window: tuple[float, float] = COLLAPSE_RANGE,
+    n_grid: int = 61,
+) -> float:
+    """Mean spread of the curves of ``metric`` against ``u = p * factor(N, T)``.
+
+    ``u`` is divided by the median of ``p_cross * factor`` over the
+    ``(N, T)``, so that both variables are compared on the same window, in
+    units of the crossing. Each curve is linearly interpolated on a grid of
+    that window (only inside its own range); the result is the mean over the
+    grid of the standard deviation across the curves (grid points covered by
+    at least two curves).
+    """
+    scale = float(
+        np.median(
+            [e["p_cross"] * factor(e["N"], e["T"]) for e in entries if e["p_cross"]]
+        )
+    )
+    grid = np.linspace(*window, n_grid)
+    rows = []
+    for e in entries:
+        u = np.asarray(e["p"]) * factor(e["N"], e["T"]) / scale
+        y = np.asarray(e[f"accuracy_{metric}"])
+        rows.append(np.where(grid <= u.max(), np.interp(grid, u, y), np.nan))
+    a = np.asarray(rows)
+    ok = np.sum(~np.isnan(a), axis=0) >= 2
+    return float(np.mean(np.nanstd(a[:, ok], axis=0, ddof=1)))
+
+
+def plot_collapse(
+    summary: dict[str, Any], out: Path, fits: dict[str, Any] | None = None
+) -> tuple[Path, dict[str, Any]]:
+    """QELM curves of every ``(N, T)`` against ``p N T`` and against ``p T``.
+
+    One row per encoding; for the QELM, then for the state-only readout, one
+    column per variable: ``p N T``, ``p T`` and, when ``fits`` holds a fit
+    of ``p_cross``, ``p N^-a T^-b`` (the variable that puts every crossing
+    at the same place by construction: does the rest of the curve follow?).
+    Color: ``N``; lightness: ``T`` (darker = deeper). The text gives the spread of
+    :func:`collapse_spread` (lower = better collapse).
+
+    Returns:
+        The figure path and ``{encoding: {metric: {variable: spread}}}``.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.colors
+    import matplotlib.pyplot as plt
+
+    encodings = list(summary)
+    variables_of: dict[str, list[tuple[str, Any]]] = {}
+    for encoding in encodings:
+        variables = list(COLLAPSE_VARIABLES)
+        fit = (fits or {}).get(encoding, {}).get("p_cross")
+        if fit:
+            a, b = fit["a"], fit["b"]
+            variables.append(
+                (
+                    f"p N^{-a:.2f} T^{-b:.2f}",
+                    lambda N, T, a=a, b=b: float(N**-a * T**-b),
+                )
+            )
+        variables_of[encoding] = variables
+    n_var = max(len(v) for v in variables_of.values())
+    panels = [(r, k) for r in COLLAPSE_READOUTS for k in range(n_var)]
+    fig, axes = plt.subplots(
+        len(encodings),
+        len(panels),
+        figsize=(3.6 * len(panels), 3.1 * len(encodings)),
+        squeeze=False,
+    )
+    spreads: dict[str, Any] = {}
+    for row, encoding in enumerate(encodings):
+        entries = sorted(summary[encoding].values(), key=lambda e: (e["N"], e["T"]))
+        variables = variables_of[encoding]
+        spreads[encoding] = {
+            metric: {
+                label: collapse_spread(entries, metric, factor)
+                for label, factor in variables
+            }
+            for metric, _ in COLLAPSE_READOUTS
+        }
+        for col, ((metric, title), k) in enumerate(panels):
+            ax = axes[row, col]
+            if k >= len(variables):
+                ax.set_axis_off()
+                continue
+            label, factor = variables[k]
+            scale = float(
+                np.median(
+                    [
+                        e["p_cross"] * factor(e["N"], e["T"])
+                        for e in entries
+                        if e["p_cross"]
+                    ]
+                )
+            )
+            for e in entries:
+                Ts = sorted({x["T"] for x in entries if x["N"] == e["N"]})
+                shade = 0.45 + 0.55 * (Ts.index(e["T"]) + 1) / len(Ts)
+                base = matplotlib.colors.to_rgb(N_COLORS.get(e["N"], "grey"))
+                color = tuple(1 - shade * (1 - c) for c in base)
+                u = np.asarray(e["p"]) * factor(e["N"], e["T"])
+                ax.plot(u, e[f"accuracy_{metric}"], "-", color=color, lw=1.1)
+            ax.axhline(0.5, ls=":", color="grey", lw=0.8)
+            ax.axvline(scale, ls="--", color="black", lw=0.8)
+            ax.set_xlim(0, COLLAPSE_RANGE[1] * scale * 2)
+            ax.set_ylim(0.45, 1.02)
+            ax.set_xlabel(label)
+            ax.grid(alpha=0.25, lw=0.5)
+            ax.text(
+                0.97,
+                0.95,
+                f"spread {spreads[encoding][metric][label]:.3f}",
+                transform=ax.transAxes,
+                ha="right",
+                va="top",
+                fontsize=8,
+            )
+            ax.set_title(f"{title}\nagainst {label}", fontsize=8)
+        axes[row, 0].set_ylabel(f"{LABELS.get(encoding, encoding)}\naccuracy")
+    for N in sorted({int(e["N"]) for enc in summary.values() for e in enc.values()}):
+        axes[0, 0].plot([], [], "-", color=N_COLORS.get(N, "grey"), label=f"N = {N}")
+    axes[0, 0].plot([], [], "--", color="black", lw=0.8, label="median crossing")
+    axes[0, 0].legend(fontsize=7, loc="lower left")
+    fig.suptitle("Do the QELM curves of every (N, T) collapse on p N T or on p T?")
+    fig.tight_layout()
+    path = out / "collapse_pNT_vs_pT.png"
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    return path, spreads
+
+
 def _fmt(value: float | None, err: float | None) -> str:
     if value is None:
         return "undefined"
@@ -475,10 +857,18 @@ def main(argv: list[str] | None = None) -> list[Path]:
     plot = sub.add_parser("plot", help="figures and summary.json of sweeps")
     plot.add_argument("roots", nargs="+", type=Path)
     plot.add_argument("--out", type=Path, default=Path("figures"))
+    scaling = sub.add_parser(
+        "scaling", help="scaling figures from a saved summary.json, no simulation"
+    )
+    scaling.add_argument("summary", type=Path)
+    scaling.add_argument("--out", type=Path, default=Path("figures"))
     args = parser.parse_args(argv)
     if args.command == "grid":
         print("[" + ",".join(f"{v:g}" for v in p_grid(args.N, args.T)) + "]")
         return []
+    if args.command == "scaling":
+        args.out.mkdir(parents=True, exist_ok=True)
+        return plot_scaling_figures(json.loads(args.summary.read_text()), args.out)
     tree: Tree = {}
     for root in args.roots:
         for encoding, sizes in load_tree(root).items():
@@ -490,8 +880,8 @@ def main(argv: list[str] | None = None) -> list[Path]:
     sizes = sorted({(e["N"], e["T"]) for enc in summary.values() for e in enc.values()})
     paths = [plot_accuracy(summary, N, T, args.out) for N, T in sizes]
     if len({N * T for N, T in sizes}) > 1:
-        fits = power_law_fit(summary)
-        (args.out / "fits.json").write_text(json.dumps(fits, indent=2))
+        paths.extend(plot_scaling_figures(summary, args.out))
+        fits = json.loads((args.out / "fits.json").read_text())
         paths.append(plot_p_star(summary, args.out, fits))
         for encoding, by_name in fits.items():
             for name, fit in by_name.items():

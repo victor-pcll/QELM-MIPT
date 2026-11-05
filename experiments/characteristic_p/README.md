@@ -81,6 +81,12 @@ N = 8, T = 8, 10 circuits, 8000 trajectories per `p` (Figure 1):
   `p_cross` is set mainly by the depth, `p_cross T ≈ 0.7` to 1.3 (bottom
   row), i.e. about one measurement per site over the circuit, with a weak
   decrease with `N`. A scaling in `N T` alone would need `a = b`.
+- **Fitted exponents with errors (Figure 5):** for `p_cross`, `b` = -1.15
+  ± 0.03 (GHZ), -1.10 ± 0.02 (W), -1.10 ± 0.03 (Bell), -1.06 ± 0.01
+  (charge) and `a` = -0.25 ± 0.07, -0.39 ± 0.04, -0.37 ± 0.06, -0.50 ±
+  0.02 (least-squares standard errors, 11 points, rms in log 0.02 to 0.06).
+  `a` is between 7 and 20 standard errors away from -1, so `p N T` is
+  excluded for every encoding (Figures 6 and 7).
 - `p_min` follows the same trend with more scatter: `p_min T ≈ 1.0` to 1.9
   for GHZ and Bell (`b ≈ -1.15`), 2 to 3 for W, 2 to 4 for the charge,
   where the fit has too few defined points to be meaningful.
@@ -135,5 +141,76 @@ shows that `N T` alone does not fix the crossing.
 `p`): with a shallow circuit, `p_cross N T ≈ 7` to 9 and the minimum moves
 to `p ≈ 0.4` to 0.5, close to the end of the grid.
 
+### Is `p N T` the variable?
+
+![Fitted exponents of p_cross and p_min](figures/scaling_exponents.png)
+
+**Figure 5. Exponents of the fit `p* = A N^a T^b`** for `p_cross` (left)
+and `p_min` (right), per encoding. Blue: `a` (exponent of `N`); orange:
+`b` (exponent of `T`); error bars: least-squares standard errors; grey
+text: number of fitted `(N, T)` and rms residual in log. Dashed line: -1,
+where both exponents sit if `p* N T` is constant. For `p_cross`, `b ≈ -1.1`
+for every encoding but `a` is only -0.25 to -0.5: the crossing scales with
+the depth, weakly with the width. `p_min` gives `b ≈ -1.15` for GHZ, W and
+Bell with errors 4 to 10 times larger; for the charge (6 points, plateau)
+the fit is not meaningful. Scan of 10 circuits, 2000 trajectories per `p`.
+
+![p_cross against N and T](figures/p_cross_scaling.png)
+
+**Figure 6. `p_cross` against `N` and `T`.** One row per encoding; color
+and marker: `N` (blue square 4, green triangle 6, orange circle 8, purple
+diamond 10). Column 1: `p_cross N T` against `T`; it would be flat and the
+same for every `N` if `p N T` were the variable, it spreads from 4.3 to 10
+(text, bottom left) and splits by `N`. Column 2: `p_cross T` against `T`,
+0.7 to 1.3 for every encoding and `N`: about one measurement per site over
+the circuit. Column 3: `p_cross N^-a` against `T` (log-log) with the fit
+`A T^b` (black) and a slope -1 (dashed grey). Column 4: `p_cross T^-b`
+against `N` with the fit `A N^a` and the slope -1: the points follow the
+much flatter fit. Error bars: bootstrap over the circuits.
+
+![p_min against N and T](figures/p_min_scaling.png)
+
+**Figure 7. Same as Figure 6 for `p_min`.** Hollow markers: `p_min`
+defined in less than 90 % of the bootstrap resamplings (not fitted); lower
+error bars cut at a quarter of the value for the log axes. The `T`
+dependence is the same as for `p_cross` (column 3) for GHZ, W and Bell,
+`p_min T ≈ 1` to 3; the `N` dependence is lost in the scatter. For the
+charge the "minimum" sits on the chance plateau and moves with `T` as `T^-0.6`.
+
+![QELM curves against p N T, p T and the fitted variable](figures/collapse_pNT_vs_pT.png)
+
+**Figure 8. Do the whole QELM curves collapse?** One row per encoding.
+Columns 1 to 3: the QELM on `<P_k>`, `<P_i P_j>` and `M`; columns 4 to 6:
+the QELM on the state alone (`<P_k>`, `<P_i P_j>`). In each group, the
+accuracy of every `(N, T)` of the scan against `p N T`, `p T`, and the
+fitted variable `p N^-a T^-b` of `p_cross` (Figure 5). Color: `N`;
+lightness: `T` (darker = deeper). Dashed line: the median crossing. Text:
+the mean spread of the curves (standard deviation across `(N, T)`, averaged
+over `0` to `1.5` times the median crossing; `collapse_spread.json`).
+
+| encoding | readout | spread vs `p N T` | vs `p T` | vs `p N^-a T^-b` |
+| --- | --- | --- | --- | --- |
+| GHZ | state only | 0.072 | 0.052 | **0.035** |
+| W | state only | 0.041 | 0.047 | **0.020** |
+| Bell | state only | 0.044 | 0.046 | **0.022** |
+| charge | state only | 0.026 | 0.048 | **0.017** |
+
+Neither `p N T` nor `p T` collapses the curves: against `p N T` the large
+`N` fall later, against `p T` they fall earlier. The fitted variable
+`p N^(0.25 to 0.5) T^(1.06 to 1.15)`, fixed by the crossing only, collapses
+the **whole** decay of the state readout, with a spread 1.5 to 2.5 times
+smaller. The weak `N` dependence is therefore a property of the full curve,
+not of the crossing point alone. `p T` alone is not the variable: one
+measurement per site sets the order of magnitude of the crossing, but
+larger chains lose the state readout after fewer measurements per site.
+
+The scaling figures are drawn from the saved summary, without simulation:
+
+```bash
+uv run python experiments/characteristic_p/characteristic_p.py scaling \
+    experiments/characteristic_p/figures/scan_summary.json \
+    --out experiments/characteristic_p/figures
+```
+
 Data: `figures/N8_T8_summary.json`, `figures/scan_summary.json` (curves and
-estimates of every `(N, T)`), `figures/scan_fits.json` (power-law fits).
+estimates of every `(N, T)`), `figures/scan_fits.json` (power-law fits with the standard errors `a_err`, `b_err`), `figures/collapse_spread.json` (spreads of Figure 8).
