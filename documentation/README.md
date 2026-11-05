@@ -14,3 +14,4 @@ Scientific notes:
 
 - [The early-layers hypothesis of the linear QELM on M](notes/early-layers-proof.md) — what is proven about which rounds of the record the linear readout uses (#288)
 - [État des lieux des sondes de la MIPT](notes/etat-des-lieux-sondes-mipt.md) — note en français : quelles sondes ont été testées, avec quel décodeur, et la suite
+- [Le QELM voit-il la MIPT ?](notes/qelm-voit-il-la-mipt.md) — note en français : ce qui est prouvé, mesuré ou conjecturé, le critère de taille finie, le verdict par cas et les calculs manquants (#303)
