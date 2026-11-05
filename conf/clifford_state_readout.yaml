@@ -1,0 +1,31 @@
+# Learn S_R and the purity of the reference qubit R from the final state of
+# the system, on Clifford circuits (issue #292). Primary config of
+# experiments/clifford_state_readout/clifford_state_readout.py.
+#
+#   uv run python experiments/clifford_state_readout/clifford_state_readout.py N=8
+defaults:
+  - config
+  - _self_
+
+# Number of system qubits, R excluded (issue #235). Even, for the periodic
+# brickwork. R is in a Bell pair with the middle site N // 2.
+N: 8
+
+task:
+  # Measurement probabilities, per site and measured step.
+  p_values: [0.02, 0.05, 0.08, 0.10, 0.12, 0.14, 0.16, 0.18, 0.20, 0.23, 0.26, 0.30, 0.40]
+  # Steps without measurement after the Bell pair (0: monitored from t = 0,
+  # as the QELM tasks; 2N: the scrambling of Gullans & Huse 2020).
+  scramble_steps: 0
+  # Measured steps (a step is one half-layer of the brickwork): T = 2N.
+  steps: ${int:${mul:2,${N}}}
+  # Trajectories per p, new gates for each.
+  samples_per_p: 2000
+  # Fraction of the trajectories of each p used for training.
+  train_fraction: 0.75
+  # Readouts of the final state (READOUTS in the script).
+  readouts: [chance, n_meas, linear, abs, quadratic, mlp]
+  # Write trajectories.npz (features and targets) next to metrics.json.
+  save_arrays: false
+  # Progress bar.
+  progress: false
