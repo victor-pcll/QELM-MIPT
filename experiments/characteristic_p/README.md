@@ -177,6 +177,33 @@ dependence is the same as for `p_cross` (column 3) for GHZ, W and Bell,
 `p_min T ≈ 1` to 3; the `N` dependence is lost in the scatter. For the
 charge the "minimum" sits on the chance plateau and moves with `T` as `T^-0.6`.
 
+![QELM curves against p N T, p T and the fitted variable](figures/collapse_pNT_vs_pT.png)
+
+**Figure 8. Do the whole QELM curves collapse?** One row per encoding.
+Columns 1 to 3: the QELM on `<P_k>`, `<P_i P_j>` and `M`; columns 4 to 6:
+the QELM on the state alone (`<P_k>`, `<P_i P_j>`). In each group, the
+accuracy of every `(N, T)` of the scan against `p N T`, `p T`, and the
+fitted variable `p N^-a T^-b` of `p_cross` (Figure 5). Color: `N`;
+lightness: `T` (darker = deeper). Dashed line: the median crossing. Text:
+the mean spread of the curves (standard deviation across `(N, T)`, averaged
+over `0` to `1.5` times the median crossing; `collapse_spread.json`).
+
+| encoding | readout | spread vs `p N T` | vs `p T` | vs `p N^-a T^-b` |
+| --- | --- | --- | --- | --- |
+| GHZ | state only | 0.072 | 0.052 | **0.035** |
+| W | state only | 0.041 | 0.047 | **0.020** |
+| Bell | state only | 0.044 | 0.046 | **0.022** |
+| charge | state only | 0.026 | 0.048 | **0.017** |
+
+Neither `p N T` nor `p T` collapses the curves: against `p N T` the large
+`N` fall later, against `p T` they fall earlier. The fitted variable
+`p N^(0.25 to 0.5) T^(1.06 to 1.15)`, fixed by the crossing only, collapses
+the **whole** decay of the state readout, with a spread 1.5 to 2.5 times
+smaller. The weak `N` dependence is therefore a property of the full curve,
+not of the crossing point alone. `p T` alone is not the variable: one
+measurement per site sets the order of magnitude of the crossing, but
+larger chains lose the state readout after fewer measurements per site.
+
 The scaling figures are drawn from the saved summary, without simulation:
 
 ```bash
@@ -186,4 +213,4 @@ uv run python experiments/characteristic_p/characteristic_p.py scaling \
 ```
 
 Data: `figures/N8_T8_summary.json`, `figures/scan_summary.json` (curves and
-estimates of every `(N, T)`), `figures/scan_fits.json` (power-law fits with the standard errors `a_err`, `b_err`).
+estimates of every `(N, T)`), `figures/scan_fits.json` (power-law fits with the standard errors `a_err`, `b_err`), `figures/collapse_spread.json` (spreads of Figure 8).

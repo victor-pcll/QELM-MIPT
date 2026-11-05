@@ -678,14 +678,167 @@ def plot_exponents(fits: dict[str, Any], out: Path) -> Path:
 
 
 def plot_scaling_figures(summary: dict[str, Any], out: Path) -> list[Path]:
-    """``fits.json`` and the three scaling figures of a multi-``N T`` sweep."""
+    """``fits.json``, ``collapse_spread.json`` and the scaling figures."""
     fits = power_law_fit(summary)
     (out / "fits.json").write_text(json.dumps(fits, indent=2))
+    collapse, spreads = plot_collapse(summary, out, fits)
+    (out / "collapse_spread.json").write_text(json.dumps(spreads, indent=2))
     return [
         plot_scaling(summary, fits, "p_cross", out),
         plot_scaling(summary, fits, "p_min", out),
         plot_exponents(fits, out),
+        collapse,
     ]
+
+
+# Scaling variables of the collapse figure: (label, factor of p).
+COLLAPSE_VARIABLES = (
+    ("p N T", lambda N, T: float(N * T)),
+    ("p T", lambda N, T: float(T)),
+)
+# Readouts of the collapse figure: (metric, column title).
+COLLAPSE_READOUTS = (
+    (QELM, "QELM on <P_k>, <P_i P_j> and M"),
+    ("ridge_quantum", "QELM on <P_k>, <P_i P_j> (state only)"),
+)
+COLLAPSE_RANGE = (0.0, 1.5)
+
+
+def collapse_spread(
+    entries: list[dict[str, Any]],
+    metric: str,
+    factor: Any,
+    window: tuple[float, float] = COLLAPSE_RANGE,
+    n_grid: int = 61,
+) -> float:
+    """Mean spread of the curves of ``metric`` against ``u = p * factor(N, T)``.
+
+    ``u`` is divided by the median of ``p_cross * factor`` over the
+    ``(N, T)``, so that both variables are compared on the same window, in
+    units of the crossing. Each curve is linearly interpolated on a grid of
+    that window (only inside its own range); the result is the mean over the
+    grid of the standard deviation across the curves (grid points covered by
+    at least two curves).
+    """
+    scale = float(
+        np.median(
+            [e["p_cross"] * factor(e["N"], e["T"]) for e in entries if e["p_cross"]]
+        )
+    )
+    grid = np.linspace(*window, n_grid)
+    rows = []
+    for e in entries:
+        u = np.asarray(e["p"]) * factor(e["N"], e["T"]) / scale
+        y = np.asarray(e[f"accuracy_{metric}"])
+        rows.append(np.where(grid <= u.max(), np.interp(grid, u, y), np.nan))
+    a = np.asarray(rows)
+    ok = np.sum(~np.isnan(a), axis=0) >= 2
+    return float(np.mean(np.nanstd(a[:, ok], axis=0, ddof=1)))
+
+
+def plot_collapse(
+    summary: dict[str, Any], out: Path, fits: dict[str, Any] | None = None
+) -> tuple[Path, dict[str, Any]]:
+    """QELM curves of every ``(N, T)`` against ``p N T`` and against ``p T``.
+
+    One row per encoding; for the QELM, then for the state-only readout, one
+    column per variable: ``p N T``, ``p T`` and, when ``fits`` holds a fit
+    of ``p_cross``, ``p N^-a T^-b`` (the variable that puts every crossing
+    at the same place by construction: does the rest of the curve follow?).
+    Color: ``N``; lightness: ``T`` (darker = deeper). The text gives the spread of
+    :func:`collapse_spread` (lower = better collapse).
+
+    Returns:
+        The figure path and ``{encoding: {metric: {variable: spread}}}``.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.colors
+    import matplotlib.pyplot as plt
+
+    encodings = list(summary)
+    variables_of: dict[str, list[tuple[str, Any]]] = {}
+    for encoding in encodings:
+        variables = list(COLLAPSE_VARIABLES)
+        fit = (fits or {}).get(encoding, {}).get("p_cross")
+        if fit:
+            a, b = fit["a"], fit["b"]
+            variables.append(
+                (
+                    f"p N^{-a:.2f} T^{-b:.2f}",
+                    lambda N, T, a=a, b=b: float(N**-a * T**-b),
+                )
+            )
+        variables_of[encoding] = variables
+    n_var = max(len(v) for v in variables_of.values())
+    panels = [(r, k) for r in COLLAPSE_READOUTS for k in range(n_var)]
+    fig, axes = plt.subplots(
+        len(encodings),
+        len(panels),
+        figsize=(3.6 * len(panels), 3.1 * len(encodings)),
+        squeeze=False,
+    )
+    spreads: dict[str, Any] = {}
+    for row, encoding in enumerate(encodings):
+        entries = sorted(summary[encoding].values(), key=lambda e: (e["N"], e["T"]))
+        variables = variables_of[encoding]
+        spreads[encoding] = {
+            metric: {
+                label: collapse_spread(entries, metric, factor)
+                for label, factor in variables
+            }
+            for metric, _ in COLLAPSE_READOUTS
+        }
+        for col, ((metric, title), k) in enumerate(panels):
+            ax = axes[row, col]
+            if k >= len(variables):
+                ax.set_axis_off()
+                continue
+            label, factor = variables[k]
+            scale = float(
+                np.median(
+                    [
+                        e["p_cross"] * factor(e["N"], e["T"])
+                        for e in entries
+                        if e["p_cross"]
+                    ]
+                )
+            )
+            for e in entries:
+                Ts = sorted({x["T"] for x in entries if x["N"] == e["N"]})
+                shade = 0.45 + 0.55 * (Ts.index(e["T"]) + 1) / len(Ts)
+                base = matplotlib.colors.to_rgb(N_COLORS.get(e["N"], "grey"))
+                color = tuple(1 - shade * (1 - c) for c in base)
+                u = np.asarray(e["p"]) * factor(e["N"], e["T"])
+                ax.plot(u, e[f"accuracy_{metric}"], "-", color=color, lw=1.1)
+            ax.axhline(0.5, ls=":", color="grey", lw=0.8)
+            ax.axvline(scale, ls="--", color="black", lw=0.8)
+            ax.set_xlim(0, COLLAPSE_RANGE[1] * scale * 2)
+            ax.set_ylim(0.45, 1.02)
+            ax.set_xlabel(label)
+            ax.grid(alpha=0.25, lw=0.5)
+            ax.text(
+                0.97,
+                0.95,
+                f"spread {spreads[encoding][metric][label]:.3f}",
+                transform=ax.transAxes,
+                ha="right",
+                va="top",
+                fontsize=8,
+            )
+            ax.set_title(f"{title}\nagainst {label}", fontsize=8)
+        axes[row, 0].set_ylabel(f"{LABELS.get(encoding, encoding)}\naccuracy")
+    for N in sorted({int(e["N"]) for enc in summary.values() for e in enc.values()}):
+        axes[0, 0].plot([], [], "-", color=N_COLORS.get(N, "grey"), label=f"N = {N}")
+    axes[0, 0].plot([], [], "--", color="black", lw=0.8, label="median crossing")
+    axes[0, 0].legend(fontsize=7, loc="lower left")
+    fig.suptitle("Do the QELM curves of every (N, T) collapse on p N T or on p T?")
+    fig.tight_layout()
+    path = out / "collapse_pNT_vs_pT.png"
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    return path, spreads
 
 
 def _fmt(value: float | None, err: float | None) -> str:
