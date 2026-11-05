@@ -267,6 +267,7 @@ def test_launcher_and_plots(tmp_path: Path) -> None:
     assert set(summary["sizes"]) == {"4", "6"}
     assert summary["feature_sets"] == ["exact", "shots30"]
     assert "4-6" in summary["crossings"]["oracle_var4"]
+    assert "4-6" in summary["crossings"]["oracle_test_ratio"]
     assert "shots30_direct" in summary["crossings"]
     for name in ("order_parameter", "r2_per_p", "r2_pooled", "shots"):
         assert (tmp_path / f"{name}.png").is_file()
@@ -281,3 +282,18 @@ def test_launcher_refuses_bad_max_jobs(tmp_path: Path) -> None:
     env = {**os.environ, "OUT_DIR": str(tmp_path), "MAX_JOBS": "0"}
     result = subprocess.run(["bash", str(BASH_SCRIPT)], env=env, capture_output=True)
     assert result.returncode != 0
+
+
+def test_averaged_features_do_not_depend_on_p() -> None:
+    """Averaged over gates and outcomes, <Z_i> and <Z_i Z_j> ignore p.
+
+    The Haar U(1) average already dephases the state, so measurements leave
+    the averaged diagonal unchanged: a readout linear in the state has the
+    same mean prediction at every p.
+    """
+    means = []
+    for p in (0.0, 0.5):
+        tr = sample_trajectories(4, p, 4000, rng=np.random.default_rng(8))
+        z, zz = exact_features(tr.probs)
+        means.append(np.concatenate([z.mean(axis=0), zz.mean(axis=0)]))
+    np.testing.assert_allclose(means[0], means[1], atol=0.04)

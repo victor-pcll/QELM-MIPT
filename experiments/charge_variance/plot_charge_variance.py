@@ -133,7 +133,9 @@ def summarize(runs: dict[int, list[dict[str, Any]]]) -> dict[str, Any]:
     """Average the runs of each ``N`` and find the crossings.
 
     Returns:
-        ``p``, ``feature_sets``, per ``N`` the oracle order parameters and
+        ``p``, ``feature_sets``, per ``N`` the oracle order parameters (on
+        every trajectory, and ``oracle_test`` on the test trajectories that
+        the pooled readouts predict) and
         the per-p and pooled scores of each feature set (mean and error
         over seeds), and ``crossings``: for each oracle order parameter and
         each pooled readout of each feature set, the crossing ``p`` of each
@@ -155,9 +157,13 @@ def summarize(runs: dict[int, list[dict[str, Any]]]) -> dict[str, Any]:
             "oracle": {},
             "results": {},
         }
+        entry["oracle_test"] = {}
         for key in ORACLES:
             m, e = mean_err([r["oracle_all"][key] for r in rs])
             entry["oracle"][key] = {"mean": m.tolist(), "err": e.tolist()}
+            # On the test trajectories only, those of the pooled predictions.
+            m, e = mean_err([r["oracle"][key] for r in rs])
+            entry["oracle_test"][key] = {"mean": m.tolist(), "err": e.tolist()}
         for fs in sets:
             res = rs[0]["results"][fs]
             entry["results"][fs] = {
@@ -172,9 +178,10 @@ def summarize(runs: dict[int, list[dict[str, Any]]]) -> dict[str, Any]:
         return {f"{a}-{b}": crossing(p, curve(a), curve(b)) for a, b in pairs}
 
     for key in ORACLES:
-        out["crossings"][f"oracle_{key}"] = cross(
-            lambda s, k=key: np.array(out["sizes"][s]["oracle"][k]["mean"])
-        )
+        for name in ("oracle", "oracle_test"):
+            out["crossings"][f"{name}_{key}"] = cross(
+                lambda s, k=key, o=name: np.array(out["sizes"][s][o][k]["mean"])
+            )
     for fs in sets:
         for name in out["sizes"][sizes[0]]["results"][fs]["pooled"]:
             if name == "p_mean":
@@ -255,6 +262,9 @@ def draw_r2_pooled(summary: dict[str, Any]) -> Figure:
     sizes = list(summary["sizes"])
     sets = summary["feature_sets"]
     colors = color_map(list(POOLED_READOUTS))
+    # The palette cycles after six colors: the two estimators of the
+    # identity get neutral ones.
+    colors.update({"plugin": "black", "direct": "gray"})
     fig, axes = subplots(1, len(sets), figsize=(4.4 * len(sets), 3.8), sharey=True)
     axes = np.atleast_1d(axes)
     for ax, fs in zip(axes, sets, strict=True):
@@ -263,13 +273,14 @@ def draw_r2_pooled(summary: dict[str, Any]) -> Figure:
             d = [
                 summary["sizes"][N]["results"][fs]["pooled"][r]["R2_all"] for N in sizes
             ]
+            unfitted = r in ("sep", "plugin", "direct")
             ax.errorbar(
                 [int(N) for N in sizes],
                 [x["mean"] for x in d],
                 yerr=[x["err"] for x in d],
                 color=colors[r],
-                ls="--" if r == "p_mean" else "-",
-                marker="o",
+                ls="--" if r == "p_mean" else (":" if unfitted else "-"),
+                marker="s" if unfitted else "o",
                 ms=4,
                 capsize=2,
                 label=LABELS[r],
@@ -279,7 +290,7 @@ def draw_r2_pooled(summary: dict[str, Any]) -> Figure:
         ax.set_xlabel("$N$")
     axes[0].set_ylabel(r"$R^2$ of Var(Q) over all $p$ (test)")
     axes[0].set_ylim(-0.1, 1.05)
-    axes[-1].legend(fontsize=7)
+    axes[-1].legend(fontsize=7, loc="center left", bbox_to_anchor=(1.02, 0.5))
     return fig
 
 
