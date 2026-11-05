@@ -16,7 +16,7 @@ written before issue #235").
 Next to `metrics.json`, every Python experiment script (`projective/`,
 `QELM_Z/`, `QELM_M/`, `QELM_Q/`, `QELM_S/`, `charge_sharpening/`,
 `purification/`, `learnability/`, `double_descent/`, `haar_readouts/`,
-`per_p_convergence/`) writes
+`per_p_convergence/`, `charge_variance/`) writes
 `resolved_config.json`, the config of the run with every interpolation
 evaluated (`QELM.utils.save_config`, issue #85). `.hydra/config.yaml` keeps the
 formulas as written in `conf/`, such as `depth: ${int:${div:${N},2}}`;
@@ -53,6 +53,7 @@ commands and every option of the launchers.
 | [`characteristic_p/`](characteristic_p/README.md) | crossing of the QELM with Bayes on `M` and minimum of the QELM, against `p N T`, four encodings | where the state readout hands over to the record (#285) |
 | [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
 | [`clifford_state_readout/`](clifford_state_readout/README.md) | `S_R` and purity of the reference qubit from the final Clifford state, ridge / quadratic / MLP | can a readout of the state probe purification (#292) |
+| [`charge_variance/`](charge_variance/README.md) | per-trajectory `Var(Q)` from the final U(1) state, linear / two-point / quadratic readouts | can a readout of the state probe charge sharpening (#299) |
 | [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
 | [`diagnostics/`](diagnostics/README.md) | chaos and locality of every reservoir | why a reservoir shows the MIPT or not |
 | [`double_descent/`](double_descent/README.md) | MNIST with a QELM readout | statistics of the readout |
@@ -1504,6 +1505,41 @@ Launcher options: `N_VALUES`, `SEEDS`, `CONFIGS` (`gates:encoding` pairs),
 `PER_P`, `DEPTH`, `P_VALUES`, `MAX_JOBS`, `SKIP_DONE`, `OUT_DIR`, `OUT_ROOT`.
 At `N = 8` and `T = 16` a run of 8 values of `p` and 4000 trajectories per `p`
 takes 5 to 15 minutes on one core.
+
+## Learn the per-trajectory charge variance of a U(1) circuit (issue #299)
+
+`experiments/charge_variance/charge_variance.py` (config
+`conf/charge_variance.yaml`) simulates, at one size `N` and for every `p` of
+`task.p_values`, `task.samples_per_p` trajectories of the random U(1)
+brickwork of Barratt et al. (2022) (`QELM.evaluation.charge_variance`: the
+chain starts in `(|N//2> + |N//2 - 1>) / sqrt(2)`, `T = N` steps, every site
+measured in Z with probability `p` after each layer), and fits readouts of
+`<Z_i>` and `<Z_i Z_j>` of the final state (exact, and from `task.n_shots`
+bitstrings) to the exact `Var(Q)`. Physics, readouts and results:
+[`charge_variance/README.md`](charge_variance/README.md).
+
+```bash
+uv run python experiments/charge_variance/charge_variance.py N=8
+MAX_JOBS=4 ./experiments/charge_variance/charge_variance.sh
+uv run python experiments/charge_variance/plot_charge_variance.py \
+  outputs/charge_variance/<date_time>
+```
+
+Options of the launcher (environment variables): `OUT_ROOT`, `OUT_DIR`,
+`N_VALUES` (default `6 8 10 12`), `SEEDS` (`42 43 44`), `PER_P` (`2000`),
+`N_SHOTS` (Hydra list, default `[100,1000]`), `READOUTS` (Hydra list,
+default every readout), `SAVE_ARRAYS` (`false`), `SKIP_DONE` (`true`),
+`MAX_JOBS` (`1`). The state vectors are dense: a run at `N = 12` takes about
+1 GB of memory and twenty minutes on one core.
+
+Each run writes `N<N>_seed<seed>/metrics.json` (per `p`: the exact
+`4 <Var(Q)>` and the ratio `1 - <Var^2> / (3 <Var>^2)` with bootstrap
+errors, and for each feature set the `R2` and mean absolute error of each
+readout trained at that `p`, and of each readout trained on all `p` with its
+mean prediction), its log and its config. The plot script writes
+`order_parameter.png`, `r2_per_p.png`, `r2_pooled.png`, `shots.png`, their
+data and `summary.json` (averages over seeds and crossings of consecutive
+sizes) in the sweep folder.
 
 ## Write your own
 
