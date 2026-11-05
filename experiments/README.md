@@ -49,6 +49,7 @@ commands and every option of the launchers.
 | [`charge_sharpening/`](charge_sharpening/README.md) | Agrawal et al. (2024), Fig. 7 | benchmark of purification |
 | [`haar_readouts/`](haar_readouts/README.md) | sector of a purifying reference qubit, many decoders | purification decoding (task 1B) |
 | [`nonlinear_M/`](nonlinear_M/README.md) | local label of a reference qubit from non-linear maps of `M` (XOR, `\|M\|`, pairs), Haar U(4) | why the linear QELM-M fails (#269) |
+| [`bloch_purity/`](bloch_purity/README.md) | Bloch vector and purity of a reference qubit from `M` and the state, Haar U(4) | tomography and purity of the local encoding (#277) |
 | [`characteristic_p/`](characteristic_p/README.md) | crossing of the QELM with Bayes on `M` and minimum of the QELM, against `p N T`, four encodings | where the state readout hands over to the record (#285) |
 | [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
 | [`clifford_state_readout/`](clifford_state_readout/README.md) | `S_R` and purity of the reference qubit from the final Clifford state, ridge / quadratic / MLP | can a readout of the state probe purification (#292) |
@@ -1484,6 +1485,41 @@ prediction), its log and its config. The plot script writes
 `order_parameter.png`, `r2_per_p.png`, `r2_pooled.png`, their data and
 `summary.json` (averages over seeds and crossings of consecutive sizes) in
 the sweep folder.
+
+## Run the tomography and purity of the reference qubit (issue #277)
+
+The task of `nonlinear_M/` (reference qubit `R` in a Bell pair with the
+middle site, Haar U(4) gates, one fixed circuit per seed), with two
+continuous targets instead of the Z label: the Bloch vector
+`(<X_R>, <Y_R>, <Z_R>)` of `R` given the record, and its purity
+`Tr(rho_R^2)`. One run, from the repository root:
+
+```bash
+uv run python experiments/bloch_purity/bloch_purity.py N=8 seed=42
+```
+
+The sweep of the figures (`N = 8`, `T = 2N`, 8000 trajectories per `p`,
+10 circuits), then the two figures:
+
+```bash
+MAX_JOBS=4 ./experiments/bloch_purity/bloch_purity.sh
+uv run python experiments/bloch_purity/plot_bloch_purity.py \
+    outputs/bloch_purity/<date_time> --out outputs/bloch_purity/<date_time>/figures
+```
+
+On the cluster, larger sizes and more circuits:
+
+```bash
+OUT_ROOT=/scratch/qelm N_VALUES="8 10 12" SEEDS="$(seq 42 61)" \
+    SAVE_ARRAYS=false MAX_JOBS=16 ./experiments/bloch_purity/bloch_purity.sh
+```
+
+Options of the launcher (`PER_P`, `DEPTH`, `P_VALUES`, `ENCODING`, `FIXED`,
+`SAVE_ARRAYS`, `MAX_JOBS`, `SKIP_DONE`) are listed at the top of
+`bloch_purity.sh`. Each run writes `metrics.json` (and `bloch_purity.npz`) to
+`<OUT_DIR>/N<N>_seed<seed>/`; the plot script writes `bloch_vector_N<N>.png`,
+`purity_N<N>.png` and `summary.json`. Results:
+[`bloch_purity/README.md`](bloch_purity/README.md).
 
 ## Learn the per-trajectory charge variance of a U(1) circuit (issue #299)
 
