@@ -146,3 +146,18 @@ def test_qelm_features_carry_the_label_of_an_unmeasured_bell_pair() -> None:
     assert acc["M+state/ridge"]["acc"] == pytest.approx(1.0)
     assert acc["M/ridge"]["acc"] < 0.65
     assert acc["bayes_M"]["acc"] == pytest.approx(0.5)
+
+
+def test_scramble_drops_the_unmeasured_rows() -> None:
+    """``scramble`` steps run without measurement and leave ``M`` (#303)."""
+    from QELM.evaluation.dehghani_decoder import draw_fixed_circuit, simulate_records
+
+    rng = np.random.default_rng(0)
+    N, S = 6, 12
+    gates = draw_fixed_circuit(N, S + 2 * N, rng)
+    rec, rec_f = simulate_records(gates, N, 1.0, 20, rng, scramble=S)
+    assert rec.M.shape == (20, 2 * N, N)
+    assert rec_f.M.shape == (20, 2 * N + 1, N)
+    assert np.all(rec.M != 0)  # p = 1: every measured step is full
+    with pytest.raises(ValueError):
+        simulate_records(gates, N, 0.5, 2, rng, scramble=S + 2 * N)

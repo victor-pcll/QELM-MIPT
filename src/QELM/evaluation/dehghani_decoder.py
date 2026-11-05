@@ -174,6 +174,7 @@ def simulate_records(
     n: int,
     rng: np.random.Generator,
     site: int | None = None,
+    scramble: int = 0,
 ) -> tuple[Records, Records]:
     """Sample ``n`` trajectories of a fixed circuit at measurement rate ``p``.
 
@@ -193,6 +194,10 @@ def simulate_records(
         rng: Random generator of the measured sites and the ``stim`` seeds.
         site: System site in the Bell pair with ``R``; ``None`` for
             ``N // 2``.
+        scramble: Number of first steps of ``gates`` run without any
+            measurement (the scrambling time ``t0`` of Gullans & Huse, after
+            the Bell pair is made). Their rows, always 0, are dropped from
+            ``M``.
 
     Returns:
         ``(without, with_readout)``, two :class:`Records`.
@@ -206,6 +211,8 @@ def simulate_records(
     if not 0 <= site < N:
         raise ValueError(f"site must be in [0, {N - 1}], got {site}.")
     T = gates.shape[0]
+    if not 0 <= scramble < T:
+        raise ValueError(f"scramble must be in [0, {T - 1}], got {scramble}.")
     layers = _gate_layers(gates, N)
     M = np.zeros((n, T + 1, N), dtype=np.int8)
     axis = np.zeros((2, n), dtype=np.int8)
@@ -213,14 +220,15 @@ def simulate_records(
     for i in range(n):
         measured = np.ones((T + 1, N), dtype=bool)
         measured[:T] = rng.random((T, N)) < p
+        measured[:scramble] = False
         out, axis[0, i], sign[0, i], final, axis[1, i], sign[1, i] = _run(
             layers, measured, site, int(rng.integers(2**63))
         )
         assert final is not None
         # Row-major order of the mask = the order of the M lines.
         M[i][measured] = np.concatenate([out, final])
-    without = Records(M=M[:, :T], axis=axis[0], sign=sign[0])
-    return without, Records(M=M, axis=axis[1], sign=sign[1])
+    without = Records(M=M[:, scramble:T], axis=axis[0], sign=sign[0])
+    return without, Records(M=M[:, scramble:], axis=axis[1], sign=sign[1])
 
 
 def parity_weight_one(
