@@ -14,8 +14,9 @@ folders in the new convention (`documentation/configuration.md`, "Runs
 written before issue #235").
 
 Next to `metrics.json`, every Python experiment script (`projective/`,
-`QELM_Z/`, `QELM_M/`, `QELM_Q/`, `QELM_S/`, `QELM_R/`, `charge_sharpening/`,
-`purification/`, `learnability/`, `double_descent/`, `haar_readouts/`) writes
+`QELM_Z/`, `QELM_M/`, `QELM_Q/`, `QELM_S/`, `charge_sharpening/`,
+`purification/`, `learnability/`, `double_descent/`, `haar_readouts/`,
+`per_p_convergence/`) writes
 `resolved_config.json`, the config of the run with every interpolation
 evaluated (`QELM.utils.save_config`, issue #85). `.hydra/config.yaml` keeps the
 formulas as written in `conf/`, such as `depth: ${int:${div:${N},2}}`;
@@ -49,6 +50,9 @@ commands and every option of the launchers.
 | [`haar_readouts/`](haar_readouts/README.md) | sector of a purifying reference qubit, many decoders | purification decoding (task 1B) |
 | [`nonlinear_M/`](nonlinear_M/README.md) | local label of a reference qubit from non-linear maps of `M` (XOR, `\|M\|`, pairs), Haar U(4) | why the linear QELM-M fails (#269) |
 | [`bloch_purity/`](bloch_purity/README.md) | Bloch vector and purity of a reference qubit from `M` and the state, Haar U(4) | tomography and purity of the local encoding (#277), size dependence, nonlinear readouts and variance probe (#282) |
+| [`characteristic_p/`](characteristic_p/README.md) | crossing of the QELM with Bayes on `M` and minimum of the QELM, against `p N T`, four encodings | where the state readout hands over to the record (#285) |
+| [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
+| [`clifford_state_readout/`](clifford_state_readout/README.md) | `S_R` and purity of the reference qubit from the final Clifford state, ridge / quadratic / MLP | can a readout of the state probe purification (#292) |
 | [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
 | [`diagnostics/`](diagnostics/README.md) | chaos and locality of every reservoir | why a reservoir shows the MIPT or not |
 | [`double_descent/`](double_descent/README.md) | MNIST with a QELM readout | statistics of the readout |
@@ -1293,6 +1297,75 @@ uv run python experiments/haar_readouts/plot_haar_readouts.py \
 the `ridge` (with the quadratic ridge) or the `logistic` readout, every
 benchmark set on the same panels, with the purification curve.
 
+### Statistical convergence in `PER_P` (issue #267)
+
+How many trajectories per `p` (`PER_P`) the QELM ridge of the section
+above needs before its accuracy stops moving, averaged over independent
+fixed Haar circuits:
+
+```bash
+uv run python experiments/per_p_convergence/per_p_convergence.py \
+  hydra.run.dir=outputs/per_p_convergence/N8
+uv run python experiments/per_p_convergence/plot_per_p_convergence.py \
+  outputs/per_p_convergence/N8
+```
+
+The defaults (`conf/per_p_convergence.yaml`, block `convergence`) are those
+of the issue: `N = 8`, `T = n_rounds = 8`, 20 circuits, `PER_P` in 500,
+1000, ..., 32 000, 11 values of `p` from 0.02 to 0.4, an 80 / 20 split and
+the tolerance 0.005. All the trajectories of one fixed circuit share its
+gates, so they are simulated together as one array of state vectors; each
+circuit runs in its own process (`convergence.n_jobs`, 0 for every core).
+On 4 cores the defaults take about 25 minutes. For the projection of
+`PER_P*` with `N`, run other sizes at the three regimes, with `T = N`:
+
+```bash
+uv run python experiments/per_p_convergence/per_p_convergence.py N=10 \
+  convergence.n_rounds=10 'convergence.p_values=[0.05,0.18,0.4]' \
+  hydra.run.dir=outputs/per_p_convergence/N10
+uv run python experiments/per_p_convergence/plot_per_p_convergence.py \
+  outputs/per_p_convergence/N8 outputs/per_p_convergence/N6 \
+  outputs/per_p_convergence/N10 --out outputs/per_p_convergence/figures
+```
+
+Each run folder holds `per_p_convergence.npz` (test and training accuracy,
+chosen `alpha`, spectrum of `X^T X` and its effective rank, axes circuit,
+`p`, `PER_P`), `summary.json` (mean, spread and standard error over the
+circuits, `PER_P*` per `p` and for every `p`) and `resolved_config.json`.
+The notebook `notebooks/results/09_per_p_convergence.ipynb` runs the same
+sweeps and draws the figures.
+
+## Run the characteristic p of the QELM against `N T` (issue #285)
+
+[`characteristic_p/`](characteristic_p/README.md) runs
+`experiments/nonlinear_M/nonlinear_M.py` (fixed Haar U(4) circuits, one per
+seed) over encodings, sizes `N` and depths `T`, with a `p` grid dense in the
+expected number of measurements `p N T`, then locates `p_cross` (the QELM on
+`<P_k>`, `<P_i P_j>` and `M` meets the Bayes decoder of `M`) and `p_min` (the
+minimum of that QELM):
+
+```bash
+# N = 8, T = 8, 10 circuits, 8000 trajectories per p, the four encodings
+OUT_DIR=outputs/characteristic_p/N8T8 SIZES="8:8" SEEDS="$(seq -s ' ' 42 51)" \
+  PER_P=8000 MAX_JOBS=4 ./experiments/characteristic_p/characteristic_p.sh
+
+# the N T scan
+OUT_DIR=outputs/characteristic_p/scan SIZES="4:2,4,8,16 6:3,6,12 8:4,8,16 10:5" \
+  SEEDS="$(seq -s ' ' 42 51)" PER_P=2000 MAX_JOBS=4 \
+  ./experiments/characteristic_p/characteristic_p.sh
+
+# figures and summary.json (several sweep folders are merged)
+uv run python experiments/characteristic_p/characteristic_p.py plot \
+  outputs/characteristic_p/scan --out outputs/characteristic_p/figures
+```
+
+Options of the launcher (environment variables): `ENCODINGS` (default
+`"ghz w bell charge"`), `SIZES` (`N:T1,T2,...` pairs), `SEEDS`, `PER_P`,
+`MAX_JOBS`, `SKIP_DONE=1`, `OUT_ROOT` / `OUT_DIR`. Each run writes
+`<OUT_DIR>/<encoding>/N<N>_T<T>/seed<seed>/metrics.json`; a failed run leaves
+its log next to it and is listed in `failed_runs.txt`. The `p` grid of a run
+is `python experiments/characteristic_p/characteristic_p.py grid N T`.
+
 ## Check the chaos and the locality of the reservoirs (issue #243)
 
 ```bash
@@ -1376,6 +1449,41 @@ subset of the reservoirs and `--parts spectra growth otoc reference
 velocities scrambling` a subset of the diagnostics (each part of each family
 has its own random generator, so a part run alone gives the same figure as in
 the full run).
+
+## Learn S_R of the reference qubit from the final Clifford state (issue #292)
+
+`experiments/clifford_state_readout/clifford_state_readout.py` (config
+`conf/clifford_state_readout.yaml`) simulates, at one size `N` and for every
+`p` of `task.p_values`, `task.samples_per_p` trajectories of the Clifford
+brickwork of `QELM.models.circuits.stabilizer` (reference qubit `R` in a Bell
+pair with the middle site, `task.scramble_steps` unmeasured steps, then
+`task.steps = 2N` measured steps), and fits readouts of the final state of the
+system to the entropy `S_R` of `R` (0 or 1 bit; the purity is `1 - S_R / 2`).
+Physics, readouts and results: [`clifford_state_readout/README.md`](clifford_state_readout/README.md).
+
+```bash
+uv run python experiments/clifford_state_readout/clifford_state_readout.py N=8
+MAX_JOBS=4 ./experiments/clifford_state_readout/clifford_state_readout.sh
+SCRAMBLE=2N MAX_JOBS=4 ./experiments/clifford_state_readout/clifford_state_readout.sh
+uv run python experiments/clifford_state_readout/plot_clifford_state_readout.py \
+  outputs/clifford_state_readout/<date_time>
+```
+
+Options of the launcher (environment variables): `OUT_ROOT`, `OUT_DIR`,
+`N_VALUES` (default `6 8 10 12 16 20`), `SEEDS` (`42 43 44`), `PER_P`
+(`2000`), `SCRAMBLE` (`0`, or `2N` for the scrambling of Gullans & Huse),
+`READOUTS` (Hydra list, default every readout), `SAVE_ARRAYS` (`false`),
+`SKIP_DONE` (`true`), `MAX_JOBS` (`1`). A run at `N = 20` takes about 4 GB
+of memory (the pooled quadratic ridge): keep `MAX_JOBS <= 2` for it on a
+16 GB machine.
+
+Each run writes `N<N>_seed<seed>/metrics.json` (per `p`: the oracle
+`<S_R>`, the `R2` and mean absolute error of each readout trained at that
+`p`, and of each readout trained on all `p` at once with its mean
+prediction), its log and its config. The plot script writes
+`order_parameter.png`, `r2_per_p.png`, `r2_pooled.png`, their data and
+`summary.json` (averages over seeds and crossings of consecutive sizes) in
+the sweep folder.
 
 ## Run the tomography and purity of the reference qubit (issue #277)
 

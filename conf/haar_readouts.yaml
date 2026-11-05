@@ -25,6 +25,14 @@ readouts_task:
   # Rounds of (one brickwork layer of Haar gates, measurement of each system
   # qubit with probability p), as the 5 steps of experiments/QELM_M.
   n_rounds: 5
+  # Depth rule, which replaces n_rounds when set: a number (10, the same T
+  # for every N) or a multiple of N (N, 2N: T grows with the chain), issue
+  # #268. null keeps n_rounds.
+  depth_rule: null
+  # false skips haar_readouts.npz (the record and the features of every
+  # trajectory: about 200 MB per run at N = 12, T = 24); metrics.json is
+  # always written.
+  save_arrays: true
   # Readouts of the record, each fitted and scored on its own
   # (READOUTS in the script): ridge, logistic, ridge_pairs, knn, mlp,
   # gradient_boosting.
