@@ -16,7 +16,7 @@ written before issue #235").
 Next to `metrics.json`, every Python experiment script (`projective/`,
 `QELM_Z/`, `QELM_M/`, `QELM_Q/`, `QELM_S/`, `charge_sharpening/`,
 `purification/`, `learnability/`, `double_descent/`, `haar_readouts/`,
-`per_p_convergence/`) writes
+`per_p_convergence/`, `charge_variance/`) writes
 `resolved_config.json`, the config of the run with every interpolation
 evaluated (`QELM.utils.save_config`, issue #85). `.hydra/config.yaml` keeps the
 formulas as written in `conf/`, such as `depth: ${int:${div:${N},2}}`;
@@ -49,7 +49,11 @@ commands and every option of the launchers.
 | [`charge_sharpening/`](charge_sharpening/README.md) | Agrawal et al. (2024), Fig. 7 | benchmark of purification |
 | [`haar_readouts/`](haar_readouts/README.md) | sector of a purifying reference qubit, many decoders | purification decoding (task 1B) |
 | [`dehghani_decoder/`](dehghani_decoder/README.md) | Dehghani et al. (2023): purified reference qubit of a fixed Clifford circuit, ridge vs MLP vs Bayes on `M`, `M` + final readout, `M` + `<P_k>` + `<P_i P_j>` | why a linear readout of `M` fails (parities), purification decoding (task 1B) |
+| [`nonlinear_M/`](nonlinear_M/README.md) | local label of a reference qubit from non-linear maps of `M` (XOR, `\|M\|`, pairs), Haar U(4) | why the linear QELM-M fails (#269) |
+| [`characteristic_p/`](characteristic_p/README.md) | crossing of the QELM with Bayes on `M` and minimum of the QELM, against `p N T`, four encodings | where the state readout hands over to the record (#285) |
 | [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
+| [`clifford_state_readout/`](clifford_state_readout/README.md) | `S_R` and purity of the reference qubit from the final Clifford state, ridge / quadratic / MLP | can a readout of the state probe purification (#292) |
+| [`charge_variance/`](charge_variance/README.md) | per-trajectory `Var(Q)` from the final U(1) state, linear / two-point / quadratic readouts | can a readout of the state probe charge sharpening (#299) |
 | [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
 | [`diagnostics/`](diagnostics/README.md) | chaos and locality of every reservoir | why a reservoir shows the MIPT or not |
 | [`double_descent/`](double_descent/README.md) | MNIST with a QELM readout | statistics of the readout |
@@ -1356,6 +1360,37 @@ writes the figures and `summary.json` (mean and standard error over the
 circuits) into the same folder. Set `OMP_NUM_THREADS=1` when `--jobs` uses
 every core.
 
+## Run the characteristic p of the QELM against `N T` (issue #285)
+
+[`characteristic_p/`](characteristic_p/README.md) runs
+`experiments/nonlinear_M/nonlinear_M.py` (fixed Haar U(4) circuits, one per
+seed) over encodings, sizes `N` and depths `T`, with a `p` grid dense in the
+expected number of measurements `p N T`, then locates `p_cross` (the QELM on
+`<P_k>`, `<P_i P_j>` and `M` meets the Bayes decoder of `M`) and `p_min` (the
+minimum of that QELM):
+
+```bash
+# N = 8, T = 8, 10 circuits, 8000 trajectories per p, the four encodings
+OUT_DIR=outputs/characteristic_p/N8T8 SIZES="8:8" SEEDS="$(seq -s ' ' 42 51)" \
+  PER_P=8000 MAX_JOBS=4 ./experiments/characteristic_p/characteristic_p.sh
+
+# the N T scan
+OUT_DIR=outputs/characteristic_p/scan SIZES="4:2,4,8,16 6:3,6,12 8:4,8,16 10:5" \
+  SEEDS="$(seq -s ' ' 42 51)" PER_P=2000 MAX_JOBS=4 \
+  ./experiments/characteristic_p/characteristic_p.sh
+
+# figures and summary.json (several sweep folders are merged)
+uv run python experiments/characteristic_p/characteristic_p.py plot \
+  outputs/characteristic_p/scan --out outputs/characteristic_p/figures
+```
+
+Options of the launcher (environment variables): `ENCODINGS` (default
+`"ghz w bell charge"`), `SIZES` (`N:T1,T2,...` pairs), `SEEDS`, `PER_P`,
+`MAX_JOBS`, `SKIP_DONE=1`, `OUT_ROOT` / `OUT_DIR`. Each run writes
+`<OUT_DIR>/<encoding>/N<N>_T<T>/seed<seed>/metrics.json`; a failed run leaves
+its log next to it and is listed in `failed_runs.txt`. The `p` grid of a run
+is `python experiments/characteristic_p/characteristic_p.py grid N T`.
+
 ## Check the chaos and the locality of the reservoirs (issue #243)
 
 ```bash
@@ -1439,6 +1474,76 @@ subset of the reservoirs and `--parts spectra growth otoc reference
 velocities scrambling` a subset of the diagnostics (each part of each family
 has its own random generator, so a part run alone gives the same figure as in
 the full run).
+
+## Learn S_R of the reference qubit from the final Clifford state (issue #292)
+
+`experiments/clifford_state_readout/clifford_state_readout.py` (config
+`conf/clifford_state_readout.yaml`) simulates, at one size `N` and for every
+`p` of `task.p_values`, `task.samples_per_p` trajectories of the Clifford
+brickwork of `QELM.models.circuits.stabilizer` (reference qubit `R` in a Bell
+pair with the middle site, `task.scramble_steps` unmeasured steps, then
+`task.steps = 2N` measured steps), and fits readouts of the final state of the
+system to the entropy `S_R` of `R` (0 or 1 bit; the purity is `1 - S_R / 2`).
+Physics, readouts and results: [`clifford_state_readout/README.md`](clifford_state_readout/README.md).
+
+```bash
+uv run python experiments/clifford_state_readout/clifford_state_readout.py N=8
+MAX_JOBS=4 ./experiments/clifford_state_readout/clifford_state_readout.sh
+SCRAMBLE=2N MAX_JOBS=4 ./experiments/clifford_state_readout/clifford_state_readout.sh
+uv run python experiments/clifford_state_readout/plot_clifford_state_readout.py \
+  outputs/clifford_state_readout/<date_time>
+```
+
+Options of the launcher (environment variables): `OUT_ROOT`, `OUT_DIR`,
+`N_VALUES` (default `6 8 10 12 16 20`), `SEEDS` (`42 43 44`), `PER_P`
+(`2000`), `SCRAMBLE` (`0`, or `2N` for the scrambling of Gullans & Huse),
+`READOUTS` (Hydra list, default every readout), `SAVE_ARRAYS` (`false`),
+`SKIP_DONE` (`true`), `MAX_JOBS` (`1`). A run at `N = 20` takes about 4 GB
+of memory (the pooled quadratic ridge): keep `MAX_JOBS <= 2` for it on a
+16 GB machine.
+
+Each run writes `N<N>_seed<seed>/metrics.json` (per `p`: the oracle
+`<S_R>`, the `R2` and mean absolute error of each readout trained at that
+`p`, and of each readout trained on all `p` at once with its mean
+prediction), its log and its config. The plot script writes
+`order_parameter.png`, `r2_per_p.png`, `r2_pooled.png`, their data and
+`summary.json` (averages over seeds and crossings of consecutive sizes) in
+the sweep folder.
+
+## Learn the per-trajectory charge variance of a U(1) circuit (issue #299)
+
+`experiments/charge_variance/charge_variance.py` (config
+`conf/charge_variance.yaml`) simulates, at one size `N` and for every `p` of
+`task.p_values`, `task.samples_per_p` trajectories of the random U(1)
+brickwork of Barratt et al. (2022) (`QELM.evaluation.charge_variance`: the
+chain starts in `(|N//2> + |N//2 - 1>) / sqrt(2)`, `T = N` steps, every site
+measured in Z with probability `p` after each layer), and fits readouts of
+`<Z_i>` and `<Z_i Z_j>` of the final state (exact, and from `task.n_shots`
+bitstrings) to the exact `Var(Q)`. Physics, readouts and results:
+[`charge_variance/README.md`](charge_variance/README.md).
+
+```bash
+uv run python experiments/charge_variance/charge_variance.py N=8
+MAX_JOBS=4 ./experiments/charge_variance/charge_variance.sh
+uv run python experiments/charge_variance/plot_charge_variance.py \
+  outputs/charge_variance/<date_time>
+```
+
+Options of the launcher (environment variables): `OUT_ROOT`, `OUT_DIR`,
+`N_VALUES` (default `6 8 10 12`), `SEEDS` (`42 43 44`), `PER_P` (`2000`),
+`N_SHOTS` (Hydra list, default `[100,1000]`), `READOUTS` (Hydra list,
+default every readout), `SAVE_ARRAYS` (`false`), `SKIP_DONE` (`true`),
+`MAX_JOBS` (`1`). The state vectors are dense: a run at `N = 12` takes about
+1 GB of memory and twenty minutes on one core.
+
+Each run writes `N<N>_seed<seed>/metrics.json` (per `p`: the exact
+`4 <Var(Q)>` and the ratio `1 - <Var^2> / (3 <Var>^2)` with bootstrap
+errors, and for each feature set the `R2` and mean absolute error of each
+readout trained at that `p`, and of each readout trained on all `p` with its
+mean prediction), its log and its config. The plot script writes
+`order_parameter.png`, `r2_per_p.png`, `r2_pooled.png`, `shots.png`, their
+data and `summary.json` (averages over seeds and crossings of consecutive
+sizes) in the sweep folder.
 
 ## Write your own
 
