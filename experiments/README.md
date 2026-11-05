@@ -50,7 +50,7 @@ commands and every option of the launchers.
 | [`haar_readouts/`](haar_readouts/README.md) | sector of a purifying reference qubit, many decoders | purification decoding (task 1B) |
 | [`dehghani_decoder/`](dehghani_decoder/README.md) | Dehghani et al. (2023): purified reference qubit of a fixed Clifford circuit, ridge vs MLP vs Bayes on `M`, `M` + final readout, `M` + `<P_k>` + `<P_i P_j>` | why a linear readout of `M` fails (parities), purification decoding (task 1B) |
 | [`nonlinear_M/`](nonlinear_M/README.md) | local label of a reference qubit from non-linear maps of `M` (XOR, `\|M\|`, pairs), Haar U(4) | why the linear QELM-M fails (#269) |
-| [`bloch_purity/`](bloch_purity/README.md) | Bloch vector and purity of a reference qubit from `M` and the state, Haar U(4) | tomography and purity of the local encoding (#277) |
+| [`bloch_purity/`](bloch_purity/README.md) | Bloch vector and purity of a reference qubit from `M` and the state, Haar U(4) | tomography and purity of the local encoding (#277), size dependence, nonlinear readouts and variance probe (#282) |
 | [`characteristic_p/`](characteristic_p/README.md) | crossing of the QELM with Bayes on `M` and minimum of the QELM, against `p N T`, four encodings | where the state readout hands over to the record (#285) |
 | [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
 | [`clifford_state_readout/`](clifford_state_readout/README.md) | `S_R` and purity of the reference qubit from the final Clifford state, ridge / quadratic / MLP | can a readout of the state probe purification (#292) |
@@ -1545,6 +1545,20 @@ Options of the launcher (`PER_P`, `DEPTH`, `P_VALUES`, `ENCODING`, `FIXED`,
 `<OUT_DIR>/N<N>_seed<seed>/`; the plot script writes `bloch_vector_N<N>.png`,
 `purity_N<N>.png` and `summary.json`. Results:
 [`bloch_purity/README.md`](bloch_purity/README.md).
+
+Finite-size comparison, nonlinear readouts and variance probe (#282):
+
+```bash
+N_VALUES="10 8 6" NONLINEAR=abs SAVE_ARRAYS=false MAX_JOBS=4 \
+    ./experiments/bloch_purity/bloch_purity.sh
+uv run python experiments/bloch_purity/plot_bloch_fss.py \
+    outputs/bloch_purity/<date_time> --out outputs/bloch_purity/<date_time>/figures
+```
+
+`plot_bloch_fss.py` writes `bloch_fss.png`, `purity_variance.png`,
+`bloch_nonlinear.png` (runs with `NONLINEAR=true`) and `fss_summary.json`;
+`readout_learning_curve.py` draws the learning curves of the readouts from
+one `bloch_purity.npz`.
 
 ## Learn the per-trajectory charge variance of a U(1) circuit (issue #299)
 
