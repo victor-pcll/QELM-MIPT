@@ -1,7 +1,7 @@
 # CNN decoder of the record M on Clifford circuits
 
-Does a nonlinear readout that respects the light-cone locality of the record
-recover the learnability transition of the reference qubit? The Dehghani
+Does a nonlinear readout with a local (convolutional) bias recover the
+learnability transition of the reference qubit? The Dehghani
 decoder experiment ([`dehghani_decoder/`](../dehghani_decoder/README.md),
 issue #287) showed that the ridge on `vec(M)` (the linear QELM-M) only reads
 weight-1 parities, and that a generic MLP gains less and less with `N`.
@@ -14,7 +14,9 @@ ridge, the MLP and the Bayes-optimal decoder on the same trajectories
 **Short answer: no.** The CNN does no better than the MLP, stays far below
 Bayes (0.65 to 0.85 against 1 on purified trajectories), and shows no
 crossing in `N` that would track the Bayes transition. Its accuracy grows
-only logarithmically with the training-set size.
+only logarithmically with the training-set size. This is at `T = 2N` and
+`N ≤ 16`; Dehghani et al. recover the transition at much shorter depth and
+larger `L` (see [Comparison with Dehghani et al.](#comparison-with-dehghani-et-al)).
 
 ## Experiment overview
 
@@ -91,8 +93,12 @@ Error bars are standard errors over circuits. How to run it:
   seed-43 circuit at `p = 0.16`, it goes from 0.69 to 0.77 at `N = 8` and
   from 0.75 to 0.82 at `N = 12`; the ridge on 4.2·10⁴ trajectories is at
   0.72 and 0.80. At that rate, Bayes accuracy would need an astronomically
-  large training set. This is the exponential sample complexity of learning
-  long parities (Dehghani et al.; #289 for the MLP). It is not a lack of
+  large training set. This is consistent with the exponential sample
+  complexity of learning long parities: Dehghani et al. find it grows
+  roughly exponentially with the purification time `t_p` and is nearly
+  independent of `L`; Agrawal et al. (PRX 14, 041012, 2024) find that a
+  recurrent network needs a training set that appears to grow exponentially
+  with `L` to match the optimal decoder (#289 for the MLP). It is not a lack of
   capacity: the validation loss is lowest after 2 to 4 epochs and rises
   after, so the network overfits rather than underfits.
 - **Circuit-to-circuit spread is large.** Two of the circuits (`N = 12` and
@@ -109,6 +115,30 @@ time (a point at `N = 16` takes about 10 minutes). A larger network, a
 different label convention, or Dehghani's per-circuit learnability threshold
 (accuracy ≥ 0.98) would not change the conclusion that the CNN stays far
 from Bayes at these sizes.
+
+## Comparison with Dehghani et al.
+
+Like Dehghani et al., this experiment trains one network per fixed circuit
+and feeds the full record `M`. The convolution gives a local bias, but there
+is **no light-cone crop** of the input; Dehghani et al. also use the full
+record for their phase analysis and keep the crop for a scalability test.
+The differences that matter:
+
+- **Depth.** Dehghani's scaling collapse uses `t_d = L/16` (2 to 4 steps at
+  `L = 32` to 64), where most purified trajectories purify early through
+  short parities. Here `T = 2N` (12 to 32 steps).
+- **Score.** Dehghani count the fraction of circuits learnt to accuracy
+  ≥ 0.98 (`S̃_Q = 1 − R_l`), out of `10²` to `10³` circuits. Here the score is
+  the mean accuracy over 4 to 6 circuits.
+- **Sizes.** `L = 32` to 64 for their collapse, `N = 6` to 16 here. Their
+  learned `p_c ≈ 0.13` (joint fit `0.14 ± 0.03`); 0.16 is the literature
+  value they compare with.
+
+So this experiment does not contradict Dehghani et al.: it tests a deeper,
+smaller regime, where the labels are long parities. The short-depth,
+large-`L` regime was not tested. A claim-by-claim check of the literature
+behind this comparison is in [`literature_check.md`](literature_check.md)
+(issue #297).
 
 ## Figures
 
