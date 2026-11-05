@@ -1595,6 +1595,24 @@ mean prediction), its log and its config. The plot script writes
 data and `summary.json` (averages over seeds and crossings of consecutive
 sizes) in the sweep folder.
 
+## Draw the QELM verdict figures (issue #303)
+
+`experiments/qelm_verdict/plot_verdict.py` runs no simulation. It reads
+`experiments/dehghani_decoder/figures/summary.json` and the figure data copied
+into `experiments/qelm_verdict/sources/` (#292, #299). It then applies the same
+crossing criterion (resolved crossings of consecutive sizes, the Bayes share
+`g`, the shrinkage of pooled readouts) to every curve. Results and the French
+argument map: [`qelm_verdict/README.md`](qelm_verdict/README.md),
+[`documentation/notes/qelm-voit-il-la-mipt.md`](../documentation/notes/qelm-voit-il-la-mipt.md).
+
+```bash
+uv run python experiments/qelm_verdict/plot_verdict.py
+```
+
+It writes `fig1_meme_circuit.png`, `fig2_controles_u1.png`,
+`fig3_retrecissement.png`, `fig4_critere_fss.png` and `verdict_summary.json`
+to `experiments/qelm_verdict/figures/` (option `--out`), in a few seconds.
+
 ## Write your own
 
 1. Copy the test script and make the copy executable:

@@ -1,0 +1,583 @@
+{
+ "clifford_dehghani": {
+  "bayes_M": {
+   "6-8": {
+    "resolved": null,
+    "mean_curve_crossings": [],
+    "share_with_crossing": 0.8455,
+    "share_with_one_crossing": 0.211,
+    "p_star": 0.07424366848747066,
+    "p_star_err": 0.02503758362660599
+   },
+   "8-10": {
+    "resolved": null,
+    "mean_curve_crossings": [
+     0.11341463414634155
+    ],
+    "share_with_crossing": 0.9945,
+    "share_with_one_crossing": 0.356,
+    "p_star": 0.11265648256261677,
+    "p_star_err": 0.017425360410156486
+   },
+   "10-12": {
+    "resolved": null,
+    "mean_curve_crossings": [],
+    "share_with_crossing": 0.7585,
+    "share_with_one_crossing": 0.16,
+    "p_star": 0.07465422372395103,
+    "p_star_err": 0.02428236361645279
+   }
+  },
+  "purified_fraction": {
+   "6-8": {
+    "resolved": null,
+    "mean_curve_crossings": [],
+    "share_with_crossing": 0.84,
+    "share_with_one_crossing": 0.21,
+    "p_star": 0.0743426682686221,
+    "p_star_err": 0.02534987871094196
+   },
+   "8-10": {
+    "resolved": null,
+    "mean_curve_crossings": [
+     0.11689655172413796
+    ],
+    "share_with_crossing": 0.9955,
+    "share_with_one_crossing": 0.3735,
+    "p_star": 0.11509281738585614,
+    "p_star_err": 0.01725146920191038
+   },
+   "10-12": {
+    "resolved": null,
+    "mean_curve_crossings": [],
+    "share_with_crossing": 0.7365,
+    "share_with_one_crossing": 0.165,
+    "p_star": 0.07448099177162656,
+    "p_star_err": 0.02489401432477889
+   }
+  },
+  "ridge_M_raw": {
+   "6-8": {
+    "resolved": null,
+    "mean_curve_crossings": [],
+    "share_with_crossing": 0.985,
+    "share_with_one_crossing": 0.0305,
+    "p_star": 0.08554604995453614,
+    "p_star_err": 0.06361047600917705
+   },
+   "8-10": {
+    "resolved": null,
+    "mean_curve_crossings": [
+     0.05923076923076933
+    ],
+    "share_with_crossing": 0.9885,
+    "share_with_one_crossing": 0.046,
+    "p_star": 0.07868341207931086,
+    "p_star_err": 0.035746266661684255
+   },
+   "10-12": {
+    "resolved": null,
+    "mean_curve_crossings": [
+     0.45798816568047346
+    ],
+    "share_with_crossing": 0.997,
+    "share_with_one_crossing": 0.0095,
+    "p_star": 0.40169907342226796,
+    "p_star_err": 0.11671167134786968
+   }
+  },
+  "mlp_M_raw": {
+   "6-8": {
+    "resolved": null,
+    "mean_curve_crossings": [],
+    "share_with_crossing": 0.9945,
+    "share_with_one_crossing": 0.0135,
+    "p_star": 0.08283959227114561,
+    "p_star_err": 0.04977814834263094
+   },
+   "8-10": {
+    "resolved": null,
+    "mean_curve_crossings": [
+     0.25639534883720927
+    ],
+    "share_with_crossing": 0.9995,
+    "share_with_one_crossing": 0.021,
+    "p_star": 0.25407502640935975,
+    "p_star_err": 0.04389358406629235
+   },
+   "10-12": {
+    "resolved": null,
+    "mean_curve_crossings": [
+     0.4629370629370623
+    ],
+    "share_with_crossing": 0.9975,
+    "share_with_one_crossing": 0.012,
+    "p_star": 0.3977261789956406,
+    "p_star_err": 0.1235614615005265
+   }
+  },
+  "ridge_M_skill": {
+   "6-8": {
+    "resolved": null,
+    "mean_curve_crossings": [],
+    "share_with_crossing": 0.982,
+    "share_with_one_crossing": 0.019,
+    "p_star": 0.09417905102069271,
+    "p_star_err": 0.0639332028282256
+   },
+   "8-10": {
+    "resolved": null,
+    "mean_curve_crossings": [],
+    "share_with_crossing": 0.9565,
+    "share_with_one_crossing": 0.007,
+    "p_star": 0.1015283649126314,
+    "p_star_err": 0.049712980782981954
+   },
+   "10-12": {
+    "resolved": null,
+    "mean_curve_crossings": [
+     0.15065420560747667,
+     0.45628742514969994
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.005,
+    "p_star": 0.14999783817783752,
+    "p_star_err": 0.020905598057127227
+   }
+  },
+  "qelm_full_raw": {
+   "6-8": {
+    "resolved": null,
+    "mean_curve_crossings": [
+     0.11755725190839687
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.072,
+    "p_star": 0.11783920570286134,
+    "p_star_err": 0.01567772001130277
+   },
+   "8-10": {
+    "resolved": null,
+    "mean_curve_crossings": [
+     0.09692307692307683
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.1065,
+    "p_star": 0.0967922806794711,
+    "p_star_err": 0.020266918577943
+   }
+  },
+  "qelm_full_skill": {
+   "6-8": {
+    "resolved": null,
+    "mean_curve_crossings": [
+     0.12187617460130233
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.0485,
+    "p_star": 0.12414850654778117,
+    "p_star_err": 0.020476227092377394
+   },
+   "8-10": {
+    "resolved": null,
+    "mean_curve_crossings": [
+     0.0923204606789202,
+     0.11942925557070655,
+     0.12122577871807962
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.059,
+    "p_star": 0.09292963439525768,
+    "p_star_err": 0.020988315509618743
+   }
+  },
+  "qelm_state_only_raw": {
+   "6-8": {
+    "resolved": {
+     "p_low": 0.1,
+     "p_high": 0.6,
+     "p_star": 0.38333333333333436
+    },
+    "mean_curve_crossings": [
+     0.2,
+     0.38333333333333436,
+     0.41153846153846046
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.141,
+    "p_star": 0.19774192923576223,
+    "p_star_err": 0.020874215170924876
+   },
+   "8-10": {
+    "resolved": null,
+    "mean_curve_crossings": [
+     0.07871428571428563,
+     0.11399999999999992,
+     0.15875000000000017,
+     0.1830769230769228
+    ],
+    "share_with_crossing": 0.9995,
+    "share_with_one_crossing": 0.0,
+    "p_star": 0.07857942494797819,
+    "p_star_err": 0.013359566310060396
+   }
+  },
+  "skill_at_p016": {
+   "ridge_M": {
+    "6": 0.2966,
+    "8": 0.3560000000000001,
+    "10": 0.393,
+    "12": 0.403
+   },
+   "qelm_full": {
+    "6": 0.3313313313313315,
+    "8": 0.35326586936522525,
+    "10": 0.4170363797692993
+   }
+  }
+ },
+ "u1_charge_variance": {
+  "exact state: $4\\langle \\mathrm{Var}(Q)\\rangle$": {
+   "6-8": {
+    "resolved": {
+     "p_low": 0.04,
+     "p_high": 0.1,
+     "p_star": 0.08143815810473763
+    },
+    "mean_curve_crossings": [
+     0.08143815810473763
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.7455,
+    "p_star": 0.08152696489838285,
+    "p_star_err": 0.012179830495899258
+   },
+   "8-10": {
+    "resolved": {
+     "p_low": 0.02,
+     "p_high": 0.12,
+     "p_star": 0.06403744598487396
+    },
+    "mean_curve_crossings": [
+     0.06403744598487396
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.814,
+    "p_star": 0.06422168006251791,
+    "p_star_err": 0.010184721843489036
+   },
+   "10-12": {
+    "resolved": {
+     "p_low": 0.04,
+     "p_high": 0.1,
+     "p_star": 0.07135891403008433
+    },
+    "mean_curve_crossings": [
+     0.07135891403008433
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.9825,
+    "p_star": 0.07132236738701894,
+    "p_star_err": 0.006827910116340171
+   }
+  },
+  "pooled readout: linear on $\\langle Z_i\\rangle, \\langle Z_iZ_j\\rangle$": {
+   "6-8": {
+    "resolved": null,
+    "mean_curve_crossings": [],
+    "share_with_crossing": 0.0,
+    "share_with_one_crossing": 0.0,
+    "p_star": null,
+    "p_star_err": null
+   },
+   "8-10": {
+    "resolved": null,
+    "mean_curve_crossings": [],
+    "share_with_crossing": 0.0,
+    "share_with_one_crossing": 0.0,
+    "p_star": null,
+    "p_star_err": null
+   },
+   "10-12": {
+    "resolved": null,
+    "mean_curve_crossings": [],
+    "share_with_crossing": 0.0,
+    "share_with_one_crossing": 0.0,
+    "p_star": null,
+    "p_star_err": null
+   }
+  },
+  "pooled readout: quadratic on $\\langle Z_i\\rangle$": {
+   "6-8": {
+    "resolved": {
+     "p_low": 0.02,
+     "p_high": 0.12,
+     "p_star": 0.09631488272329612
+    },
+    "mean_curve_crossings": [
+     0.09631488272329612
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.5975,
+    "p_star": 0.09410515711982578,
+    "p_star_err": 0.01211235727370167
+   },
+   "8-10": {
+    "resolved": null,
+    "mean_curve_crossings": [
+     0.027104891702395047
+    ],
+    "share_with_crossing": 0.929,
+    "share_with_one_crossing": 0.2075,
+    "p_star": 0.03529036959349302,
+    "p_star_err": 0.03205658939067059
+   },
+   "10-12": {
+    "resolved": {
+     "p_low": 0.04,
+     "p_high": 0.1,
+     "p_star": 0.079506405927188
+    },
+    "mean_curve_crossings": [
+     0.05282708733791891,
+     0.079506405927188,
+     0.08019963214443135
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.254,
+    "p_star": 0.05304690455318045,
+    "p_star_err": 0.01175468791995239
+   }
+  }
+ },
+ "clifford_state_readout": {
+  "shrinkage": {
+   "6": {
+    "ybar": 0.48582051282051286,
+    "lambda": 0.6844763787117826,
+    "intercept": -0.0014861786804633622,
+    "rms_residual": 0.02433418203533089,
+    "oracle_minus_ybar_at_p016": -0.01298717948717959
+   },
+   "8": {
+    "ybar": 0.4895,
+    "lambda": 0.6849238137768554,
+    "intercept": -0.001037381942259397,
+    "rms_residual": 0.029942285322117488,
+    "oracle_minus_ybar_at_p016": -0.01716666666666672
+   },
+   "10": {
+    "ybar": 0.4964358974358974,
+    "lambda": 0.6952462174649181,
+    "intercept": 0.0035053797273096638,
+    "rms_residual": 0.0380277523347047,
+    "oracle_minus_ybar_at_p016": 0.009897435897435913
+   },
+   "12": {
+    "ybar": 0.5003461538461538,
+    "lambda": 0.7181978328473371,
+    "intercept": 0.002397969554215203,
+    "rms_residual": 0.04479478890480317,
+    "oracle_minus_ybar_at_p016": -0.002846153846153776
+   },
+   "16": {
+    "ybar": 0.504,
+    "lambda": 0.7521738373598359,
+    "intercept": -0.0004796692862006459,
+    "rms_residual": 0.05864878983933203,
+    "oracle_minus_ybar_at_p016": -0.0011666666666666492
+   }
+  },
+  "oracle_crossings": {
+   "6-8": {
+    "resolved": {
+     "p_low": 0.12,
+     "p_high": 0.18,
+     "p_star": 0.15914285714285714
+    },
+    "mean_curve_crossings": [
+     0.15914285714285714
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.939,
+    "p_star": 0.15852264061555615,
+    "p_star_err": 0.009590646163020817
+   },
+   "8-10": {
+    "resolved": {
+     "p_low": 0.16,
+     "p_high": 0.23,
+     "p_star": 0.17990243902439018
+    },
+    "mean_curve_crossings": [
+     0.17990243902439018
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.899,
+    "p_star": 0.1798694576148483,
+    "p_star_err": 0.009375969326212945
+   },
+   "10-12": {
+    "resolved": {
+     "p_low": 0.14,
+     "p_high": 0.23,
+     "p_star": 0.15552742616033757
+    },
+    "mean_curve_crossings": [
+     0.15552742616033757
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.5975,
+    "p_star": 0.15531855890614063,
+    "p_star_err": 0.00888119975592898
+   },
+   "12-16": {
+    "resolved": {
+     "p_low": 0.14,
+     "p_high": 0.18,
+     "p_star": 0.1627826086956522
+    },
+    "mean_curve_crossings": [
+     0.1627826086956522
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.985,
+    "p_star": 0.16246273440638795,
+    "p_star_err": 0.004422224855135911
+   }
+  },
+  "ridge_pooled_crossings": {
+   "6-8": {
+    "resolved": {
+     "p_low": 0.1,
+     "p_high": 0.26,
+     "p_star": 0.18706700493336473
+    },
+    "mean_curve_crossings": [
+     0.14998260454696735,
+     0.18706700493336473,
+     0.21276382132273725
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.118,
+    "p_star": 0.14989643361740282,
+    "p_star_err": 0.012909994949211558
+   },
+   "8-10": {
+    "resolved": {
+     "p_low": 0.16,
+     "p_high": 0.26,
+     "p_star": 0.2349884851067062
+    },
+    "mean_curve_crossings": [
+     0.2349884851067062
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.698,
+    "p_star": 0.23464747506070968,
+    "p_star_err": 0.010243737947512661
+   },
+   "10-12": {
+    "resolved": {
+     "p_low": 0.14,
+     "p_high": 0.23,
+     "p_star": 0.168059460838366
+    },
+    "mean_curve_crossings": [
+     0.168059460838366
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.778,
+    "p_star": 0.16775082629256877,
+    "p_star_err": 0.011214776738660311
+   },
+   "12-16": {
+    "resolved": {
+     "p_low": 0.14,
+     "p_high": 0.2,
+     "p_star": 0.15951456574321146
+    },
+    "mean_curve_crossings": [
+     0.15951456574321146
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.8455,
+    "p_star": 0.15914720683743935,
+    "p_star_err": 0.01062518252411125
+   }
+  },
+  "oracle_T2N_crossings": {
+   "6-8": {
+    "resolved": {
+     "p_low": 0.12,
+     "p_high": 0.14,
+     "p_star": 0.12781021897810219
+    },
+    "mean_curve_crossings": [
+     0.07596638655462179,
+     0.093913043478261,
+     0.12781021897810219
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.197,
+    "p_star": 0.07624169564947944,
+    "p_star_err": 0.02381021644298269
+   },
+   "8-10": {
+    "resolved": {
+     "p_low": 0.08,
+     "p_high": 0.12,
+     "p_star": 0.10587628865979386
+    },
+    "mean_curve_crossings": [
+     0.10587628865979386
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.764,
+    "p_star": 0.10590690179870452,
+    "p_star_err": 0.005454659290674844
+   },
+   "10-12": {
+    "resolved": null,
+    "mean_curve_crossings": [
+     0.1265771812080537
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.3795,
+    "p_star": 0.12668658193750537,
+    "p_star_err": 0.012448145714368425
+   },
+   "12-16": {
+    "resolved": {
+     "p_low": 0.1,
+     "p_high": 0.14,
+     "p_star": 0.12673684210526315
+    },
+    "mean_curve_crossings": [
+     0.12673684210526315
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.4585,
+    "p_star": 0.12642331088283404,
+    "p_star_err": 0.006670052553448578
+   },
+   "16-20": {
+    "resolved": {
+     "p_low": 0.12,
+     "p_high": 0.16,
+     "p_star": 0.13488372093023254
+    },
+    "mean_curve_crossings": [
+     0.02,
+     0.05940298507462703,
+     0.13488372093023254,
+     0.39642857142857146
+    ],
+    "share_with_crossing": 1.0,
+    "share_with_one_crossing": 0.0165,
+    "p_star": 0.05128452251256567,
+    "p_star_err": 0.03146615265807084
+   }
+  }
+ }
+}

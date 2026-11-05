@@ -10,3 +10,4 @@ Notes for this repository. Scientific parameters stay in Hydra YAML under `conf/
 - [Code quality](code-quality.md) — Ruff, Mypy, pytest, and the seed from config
 - [Contributing](contributing.md) — issues, draft pull requests, and who marks a pull request ready
 - [État des lieux des sondes de la MIPT](notes/etat-des-lieux-sondes-mipt.md) — note en français : quelles sondes ont été testées, avec quel décodeur, et la suite
+- [Le QELM voit-il la MIPT ?](notes/qelm-voit-il-la-mipt.md) — note en français : ce qui est prouvé, mesuré ou conjecturé, le critère de taille finie, le verdict par cas et les calculs manquants (#303)
