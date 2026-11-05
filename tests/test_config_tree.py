@@ -38,7 +38,8 @@ def test_conf_tree_mirrors_the_package() -> None:
         # QELM_M_ratio.yaml, #96; double_descent.yaml, #181; QELM_S.yaml,
         # #230; purification_gullans_huse.yaml, #185; QELM_R.yaml, #247;
         # haar_readouts.yaml; nonlinear_M.yaml, #269; per_p_convergence.yaml,
-        # #267; clifford_state_readout.yaml, #292; early_layers.yaml, #288;
+        # #267; clifford_state_readout.yaml, #292; bloch_purity.yaml, #277;
+        # early_layers.yaml, #288;
         # charge_variance.yaml, #299).
         if path.name
         not in (
@@ -53,6 +54,7 @@ def test_conf_tree_mirrors_the_package() -> None:
             "haar_readouts.yaml",
             "nonlinear_M.yaml",
             "early_layers.yaml",
+            "bloch_purity.yaml",
             "per_p_convergence.yaml",
             "clifford_state_readout.yaml",
             "charge_variance.yaml",

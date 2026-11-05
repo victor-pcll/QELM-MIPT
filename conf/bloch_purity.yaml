@@ -1,0 +1,50 @@
+# Tomography and purity of the reference qubit from the record M (issue #277).
+# Primary config of experiments/bloch_purity/bloch_purity.py: the main config,
+# the Haar circuit and the blocks below.
+#
+#   uv run python experiments/bloch_purity/bloch_purity.py N=8 seed=42
+defaults:
+  - config
+  - override models: haar_circuit
+  - _self_
+
+# One ancilla: the reference qubit R (qubit 0), in a Bell pair with the middle
+# system site (the local encoding of #270 / #275 / #269), never acted on.
+Nr: 1
+N: 8
+
+ancilla_bell_pair:
+  N: ${N}
+  site: null # null: the middle of the chain, N // 2
+
+# Haar U(4) brickwork on the open chain, one fixed circuit per run (set by the
+# seed): the purification direction of R depends on the gates.
+haar_circuit:
+  fixed_instance: true
+
+bloch_task:
+  # Initial state of R and the system (encodings of nonlinear_M): bell (R
+  # paired with the middle site), charge, ghz or w.
+  encoding: bell
+  # Measurement probabilities. p = 0 is left out: R stays maximally mixed,
+  # the targets do not vary and R2 is undefined.
+  p_values: [0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2, 0.225, 0.25, 0.275,
+             0.3, 0.325, 0.35, 0.375, 0.4, 0.5, 0.7, 1.0]
+  samples_per_p: 8000
+  # Rounds T: an integer, or a multiple of N ("N", "2N").
+  depth_rule: 2N
+  # Labels of the Bloch vector: exact (the exact r(M), Bayes R2 = 1), shots
+  # (one Pauli measurement of R per trajectory along a random axis, the
+  # experimental label; Bayes R2 ~ E[r_a^2]) or both. The purity is always
+  # scored on its exact value.
+  labels: both
+  # Features of the QELM on M: raw (vec(M), +-1 and 0) or raw_abs
+  # ([vec(M), vec(|M|)], the one-hot record, which also sees where the chain
+  # was measured and so can read the purity).
+  m_features: raw
+  # Nonlinear diagnostics of the QELM on M: a ridge on [vec(M), vec(|M|)]
+  # (M_abs) and a small MLP on the same features (M_mlp). Slower (the MLP);
+  # abs adds M_abs only.
+  nonlinear_readouts: false
+  # Save the records, Bloch vectors and purities (.npz).
+  save_arrays: true
