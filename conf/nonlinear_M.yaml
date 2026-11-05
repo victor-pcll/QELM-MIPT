@@ -1,0 +1,49 @@
+# Non-linear features of the measurement record M (issue #269). Primary config
+# of experiments/nonlinear_M/nonlinear_M.py: the main config, the Haar circuit
+# and the blocks below.
+#
+#   uv run python experiments/nonlinear_M/nonlinear_M.py N=8 seed=42
+defaults:
+  - config
+  - override models: haar_circuit
+  - _self_
+
+# One ancilla: the reference qubit R (qubit 0), in a Bell pair with the middle
+# system site (the local encoding of #270 / #275), never acted on.
+Nr: 1
+N: 8
+
+ancilla_bell_pair:
+  N: ${N}
+  site: null # null: the middle of the chain, N // 2
+
+# Haar U(4) brickwork on the open chain, one fixed circuit per run (set by the
+# seed): with new gates per trajectory every readout is at chance (#261).
+haar_circuit:
+  fixed_instance: true
+
+nonlinear_task:
+  # Initial state of R and the system: bell (R paired with the middle site),
+  # charge (R entangled with the sectors N // 2 and N // 2 - 1, block
+  # ancilla_charge_sector of config.yaml), ghz ((|0>|0..0> + |1>|1..1>)/sqrt 2)
+  # or w ((|0>|0..0> + |1>|W>)/sqrt 2, W the one-excitation state of the chain).
+  encoding: bell
+  # Measurement probabilities, the grid of the issue (0.05 to 0.40 by 0.025)
+  # plus p = 0 and three larger values.
+  p_values: [0.0, 0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2, 0.225, 0.25,
+             0.275, 0.3, 0.325, 0.35, 0.375, 0.4, 0.5, 0.7, 1.0]
+  samples_per_p: 2000
+  # Rounds T: an integer, or a multiple of N ("N", "2N"). The issue asks for
+  # T = 8 at N = 8, so the default is T = N.
+  depth_rule: N
+  # Feature maps of M read by the ridge (QELM.features.MODES): raw, abs,
+  # raw_abs, xor_local, xor_cone, xor_full.
+  modes: [raw, abs, raw_abs, xor_local, xor_cone, xor_full]
+  # The QELM on the quantum state (<P_k>, <P_i P_j> of the final state after R
+  # is measured, P in X, Y, Z), for comparison.
+  quantum_baseline: true
+  # A non-linear classifier on vec(M) (MLP, two hidden layers of 64 units),
+  # the "deep" reference of Dehghani et al. 2023.
+  mlp_reference: true
+  # Save the records, labels and Bloch vectors (.npz).
+  save_arrays: true
