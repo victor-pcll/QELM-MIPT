@@ -15,6 +15,7 @@
 | `results/` | `08_QELM_Q_linear_observables.ipynb` | Distributions of the linear observables `<X_k>`, `<Y_k>`, `<Z_k>` of the unitary QELM (`exp_QELM_Q` at `p = 0`) for datasets of 100 to 5000 samples: the ridge readout of `Q` on these features alone, superimposed histograms of `<Z_{N/2}>` per charge sector `Q1`, `Q2` and for both, each with its Gaussian fit, the convergence of the empirical laws with the dataset size and their shape (issue #191) |
 | `results/` | `10_QELM_M_nonlinear_features.ipynb` | Non-linear maps of the record `M` (`\|M\|`, XOR of neighbours, every product `m_a m_b`) read by a ridge, against the linear QELM-M, an MLP, the QELM on the state and the Bayes ceiling of an observer who knows the circuit, Haar U(4) gates and a reference qubit paired with the middle site; correlation spectrum per order and space-time map of the information (issue #269) |
 | `results/` | `09_per_p_convergence.ipynb` | Statistical convergence of the QELM ridge (108 Pauli features of the final state) on the charge of a monitored Haar brickwork, against the number of trajectories per `p` (`PER_P` = 500 to 32 000), over 20 fixed circuits at `N = 8`, `T = 8`: accuracy profiles of the three regimes with the plateau in `#fa5703`, the map over `(PER_P, p)`, the spectrum of `X^T X`, and the threshold `PER_P*` against `N = 6, 8, 10` (issue #267) |
+| `results/` | `11_pnt_decay.ipynb` | Why the QELM state readout decays with `p N T`: exact signal of the record-averaged state, first-order volumes `V_eff` and `V_feat` (light cone of the features), sampled noise, ridge against the oracle linear readout and the Gaussian prediction `Phi(sqrt(SNR^2)/2)`, collapse of the accuracy in `p V_feat`, accuracy at a fixed number of measurements, midpoints (issue #305) |
 
 `benchmarks/` reproduces published figures, to validate the library; `results/` holds the new results of the project.
 
@@ -37,6 +38,7 @@ Each notebook moves to the repository root first, then launches its sweep in its
 | `results/08_QELM_Q_linear_observables.ipynb` | `outputs/QELM_Q_linear/<date_time>/` |
 | `results/10_QELM_M_nonlinear_features.ipynb` | `outputs/nonlinear_M/<date_time>/` |
 | `results/09_per_p_convergence.ipynb` | `outputs/per_p_convergence/<date_time>/N<N>/` |
+| `results/11_pnt_decay.ipynb` | `outputs/pnt_decay/<date_time>/` |
 
 The notebook creates the sweep folder (`QELM.utils.new_sweep_dir`), hands it to the launcher as `OUT_DIR` and reads back exactly that folder; `RUN = False` reads back the latest sweep of its own folder. Every figure is saved there with the data it shows, through `QELM.utils.plots.save_figure`: `<name>.png` next to `<name>.json`. The learnability notebooks also pass `FIGURES`, so each sweep folder holds only its own figure (Fig. 2b or 2c). The plots share one style (`QELM.utils.plots.subplots`): no grid, a box closed on all four sides, large titles.
 

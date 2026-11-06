@@ -53,6 +53,7 @@ commands and every option of the launchers.
 | [`early_layers/`](early_layers/README.md) | which rounds of `M` the linear QELM-M reads: weights, signal share, windows, ablation, exact bounds, Haar U(4) and U(1) | the early-layers hypothesis, with proofs (#288) |
 | [`bloch_purity/`](bloch_purity/README.md) | Bloch vector and purity of a reference qubit from `M` and the state, Haar U(4) | tomography and purity of the local encoding (#277), size dependence, nonlinear readouts and variance probe (#282) |
 | [`characteristic_p/`](characteristic_p/README.md) | crossing of the QELM with Bayes on `M` and minimum of the QELM, against `p N T`, four encodings | where the state readout hands over to the record (#285) |
+| [`pnt_decay/`](pnt_decay/README.md) | exact signal of the record-averaged state, light-cone volume `V_feat`, sampled noise, oracle linear readout and Gaussian prediction, Haar U(4) | why the state readout decays with `p N T` (#305) |
 | [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
 | [`clifford_state_readout/`](clifford_state_readout/README.md) | `S_R` and purity of the reference qubit from the final Clifford state, ridge / quadratic / MLP | can a readout of the state probe purification (#292) |
 | [`charge_variance/`](charge_variance/README.md) | per-trajectory `Var(Q)` from the final U(1) state, linear / two-point / quadratic readouts | can a readout of the state probe charge sharpening (#299) |
@@ -1398,6 +1399,44 @@ Options of the launcher (environment variables): `ENCODINGS` (default
 `<OUT_DIR>/<encoding>/N<N>_T<T>/seed<seed>/metrics.json`; a failed run leaves
 its log next to it and is listed in `failed_runs.txt`. The `p` grid of a run
 is `python experiments/characteristic_p/characteristic_p.py grid N T`.
+
+## Run why the QELM state readout decays with `p N T` (issue #305)
+
+[`pnt_decay/`](pnt_decay/README.md) runs `experiments/pnt_decay/pnt_decay.py`
+(one fixed Haar U(4) circuit per seed) over encodings, sizes `N` and depths
+`T`, with `p` on a grid in `p N T`: the exact signal of the record-averaged
+state, the first-order volumes `V_eff` and `V_feat`, and, from sampled
+trajectories, the noise, the ridge, the oracle linear readout and the
+Gaussian prediction of the accuracy:
+
+```bash
+# the campaign of the README: N = 4 to 10, T = N/2 to 4N, 8 circuits
+ENCODINGS="charge bell" SEEDS="$(seq -s ' ' 42 49)" MAX_JOBS=4 \
+  OUT_DIR=outputs/pnt_decay/main ./experiments/pnt_decay/pnt_decay.sh
+
+# only the exact part (signal, V_eff, V_feat), no trajectories: cheap
+SAMPLE=0 PNT_VALUES="0" ENCODINGS="charge bell" SEEDS="$(seq -s ' ' 42 49)" \
+  MAX_JOBS=4 OUT_DIR=outputs/pnt_decay/volumes ./experiments/pnt_decay/pnt_decay.sh
+
+# on the cluster: N = 12 (16 times the exact cost of N = 10)
+SIZES="12:6,12,24,48" ENCODINGS="charge bell" SEEDS="$(seq -s ' ' 42 49)" \
+  MAX_JOBS=16 OUT_ROOT=/scratch/$USER/qelm ./experiments/pnt_decay/pnt_decay.sh
+
+# figures and pnt_summary.json; --volumes fills V_feat of runs that lack it
+uv run python experiments/pnt_decay/plot_pnt_decay.py outputs/pnt_decay/main \
+  --volumes outputs/pnt_decay/volumes --out outputs/pnt_decay/figures
+```
+
+Options of the launcher (environment variables): `ENCODINGS` (default
+`charge`), `SIZES` (`N:T1,T2,...` pairs, default
+`"4:2,4,8,16 6:3,6,12,24 8:4,8,16,32 10:5,10,20,40"`), `SEEDS` (default 42 to
+51), `PER_P` (trajectories per `p`, default 3000), `PNT_VALUES` (grid in
+`p N T`), `SAMPLE=0` (exact part only), `MAX_JOBS` (one BLAS thread each when
+above 1), `SKIP_DONE=1` (resume), `OUT_ROOT` / `OUT_DIR`. Each run writes
+`<OUT_DIR>/<encoding>_N<N>_T<T>_seed<seed>/metrics.json`; a failed run keeps
+its log next to it and is listed in `failed_runs.txt`. Cost per run at
+`N = 10`, `T = 40`: about 4 minutes of exact evolution and 15 minutes of
+trajectories.
 
 ## Check the chaos and the locality of the reservoirs (issue #243)
 
