@@ -54,6 +54,7 @@ commands and every option of the launchers.
 | [`bloch_purity/`](bloch_purity/README.md) | Bloch vector and purity of a reference qubit from `M` and the state, Haar U(4) | tomography and purity of the local encoding (#277), size dependence, nonlinear readouts and variance probe (#282) |
 | [`characteristic_p/`](characteristic_p/README.md) | crossing of the QELM with Bayes on `M` and minimum of the QELM, against `p N T`, four encodings | where the state readout hands over to the record (#285) |
 | [`pnt_decay/`](pnt_decay/README.md) | exact signal of the record-averaged state, light-cone volume `V_feat`, sampled noise, oracle linear readout and Gaussian prediction, Haar U(4) | why the state readout decays with `p N T` (#305) |
+| [`fourier_expressivity/`](fourier_expressivity/README.md) | exact Fourier coefficients of the record and readout features on the `3^N` Bloch monomials: rank, degree profile, `d_eff`, selection rules; Haar, U(1), Z2, Clifford | which functions of the input the QELM can read across the MIPT (#309) |
 | [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
 | [`clifford_state_readout/`](clifford_state_readout/README.md) | `S_R` and purity of the reference qubit from the final Clifford state, ridge / quadratic / MLP | can a readout of the state probe purification (#292) |
 | [`charge_variance/`](charge_variance/README.md) | per-trajectory `Var(Q)` from the final U(1) state, linear / two-point / quadratic readouts | can a readout of the state probe charge sharpening (#299) |
@@ -1660,6 +1661,38 @@ mean prediction), its log and its config. The plot script writes
 `order_parameter.png`, `r2_per_p.png`, `r2_pooled.png`, `shots.png`, their
 data and `summary.json` (averages over seeds and crossings of consecutive
 sizes) in the sweep folder.
+
+## Run the Fourier expressivity of the QELM (issue #309)
+
+[`fourier_expressivity/`](fourier_expressivity/README.md) runs
+`experiments/fourier_expressivity/fourier_expressivity.py` once per dynamics,
+size `N` and fixed circuit, with depth `T = N`. Each run computes the exact
+transfer matrix `C(p)` of the record and readout features onto the Bloch
+monomials, for every `p`, and writes its measures:
+
+```bash
+# the default grid: N = 4, 6, 8 (10 circuits), N = 10 (2 circuits), 4 dynamics
+MAX_JOBS=4 ./experiments/fourier_expressivity/fourier_expressivity.sh
+
+# a quick look, without N = 10
+SIZES="4:10 6:10 8:10" MAX_JOBS=4 ./experiments/fourier_expressivity/fourier_expressivity.sh
+
+# figures and summary_table.json, in the sweep folder
+uv run python experiments/fourier_expressivity/plot_fourier_expressivity.py \
+  outputs/fourier_expressivity/<date_time>
+```
+
+Options of the launcher (environment variables):
+
+- `MODELS`: the dynamics, default `"haar u1 z2 clifford"`.
+- `SIZES`: `N:circuits` pairs, default `"4:10 6:10 8:10 10:2"`. The seeds are 42, 43, and so on.
+- `T_FACTOR`: sets the depth `T = T_FACTOR * N`, default 1.
+- `P_VALUES`: the `p` grid, default 0 to 1 by 0.05.
+- `MAX_JOBS`: number of runs at once, default 4. Each run gets one BLAS thread.
+- `SKIP_DONE=1`: resume a sweep.
+- `OUT_ROOT` / `OUT_DIR`: where the sweep is written.
+
+Each run writes `<OUT_DIR>/<model>_N<N>_T<T>_seed<seed>/metrics.json`. A run that fails leaves its log next to that folder and is listed in `failed_runs.txt`.
 
 ## Draw the QELM verdict figures (issue #303)
 
