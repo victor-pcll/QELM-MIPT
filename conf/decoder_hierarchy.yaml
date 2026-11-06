@@ -1,0 +1,32 @@
+# Three decoders of the charge on the same monitored U(1) trajectories
+# (issue #307): Bayes with the gates known, SEP (gates averaged), ridge
+# readouts. Primary config of
+# experiments/decoder_hierarchy/decoder_hierarchy.py.
+#
+#   uv run python experiments/decoder_hierarchy/decoder_hierarchy.py N=8
+defaults:
+  - config
+  - _self_
+
+# Chain of N sites, no ancilla: the chain starts in (|Q0> + |Q1>) / sqrt(2).
+N: 8
+Nr: 0
+
+task:
+  # Measurement probabilities per site and per round (after each layer).
+  p_values: [0.0, 0.02, 0.04, 0.06, 0.08, 0.10, 0.12, 0.14, 0.16, 0.20, 0.25, 0.30, 0.40]
+  # Time steps T (each an even then an odd layer): T = N as in Barratt 2022.
+  depth: ${N}
+  # The two charges, null for (N // 2, N // 2 - 1).
+  charges: null
+  boundary: open
+  measure_every: layer
+  # Trajectories per p, a new circuit for each.
+  samples_per_p: 4000
+  # Trajectories simulated at once; memory grows as batch * 2**N.
+  batch: 500
+  # Fraction of the trajectories of each p used to train the ridges.
+  train_fraction: 0.7
+  # Decoders (DECODERS in the script).
+  decoders: [bayes, sep, ridge_M, ridge_Z, n_ones]
+  progress: false

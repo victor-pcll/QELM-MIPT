@@ -56,6 +56,7 @@ commands and every option of the launchers.
 | [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
 | [`clifford_state_readout/`](clifford_state_readout/README.md) | `S_R` and purity of the reference qubit from the final Clifford state, ridge / quadratic / MLP | can a readout of the state probe purification (#292) |
 | [`charge_variance/`](charge_variance/README.md) | per-trajectory `Var(Q)` from the final U(1) state, linear / two-point / quadratic readouts | can a readout of the state probe charge sharpening (#299) |
+| [`decoder_hierarchy/`](decoder_hierarchy/README.md) | charge of a monitored U(1) circuit: Bayes with the gates known, SEP (gates averaged), ridge on `M` and on `<Z_i>`, same trajectories | where the linear QELM sits among the decoders of Agrawal et al. (2024) (#307) |
 | [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
 | [`diagnostics/`](diagnostics/README.md) | chaos and locality of every reservoir | why a reservoir shows the MIPT or not |
 | [`double_descent/`](double_descent/README.md) | MNIST with a QELM readout | statistics of the readout |
@@ -1621,6 +1622,38 @@ mean prediction), its log and its config. The plot script writes
 `order_parameter.png`, `r2_per_p.png`, `r2_pooled.png`, `shots.png`, their
 data and `summary.json` (averages over seeds and crossings of consecutive
 sizes) in the sweep folder.
+
+## Compare three levels of decoders of the U(1) charge (issue #307)
+
+`experiments/decoder_hierarchy/decoder_hierarchy.py` (config
+`conf/decoder_hierarchy.yaml`) simulates, at one size `N` and for every `p`
+of `task.p_values`, `task.samples_per_p` trajectories of the circuit of
+`charge_variance` (chain in `(|N//2> + |N//2 - 1>) / sqrt(2)`, a new random
+U(1) brickwork per trajectory, `T = N` steps, Z measurements with
+probability `p` after each layer), and scores on them the decoders of the
+charge: Bayes with the gates known, the SEP posterior (gates averaged), and
+ridges on `vec(M)`, on the final `<Z_i>` and on the counts of the outcomes.
+Physics, decoders and results:
+[`decoder_hierarchy/README.md`](decoder_hierarchy/README.md).
+
+```bash
+uv run python experiments/decoder_hierarchy/decoder_hierarchy.py N=8
+MAX_JOBS=4 ./experiments/decoder_hierarchy/decoder_hierarchy.sh
+uv run python experiments/decoder_hierarchy/plot_decoder_hierarchy.py \
+  outputs/decoder_hierarchy/<date_time>
+```
+
+Options of the launcher (environment variables): `OUT_ROOT`, `OUT_DIR`,
+`N_VALUES` (default `6 8 10 12`), `SEEDS` (`42 43 44`), `PER_P` (`4000`),
+`P_VALUES` (Hydra list, default the grid of the config), `SKIP_DONE`
+(`true`), `MAX_JOBS` (`1`). The largest sizes start first.
+
+Each run writes `N<N>_seed<seed>/metrics.json` (per `p` and decoder: the
+mean expected accuracy on the held-out trajectories, its standard error and
+the share `g` of the advantage of Bayes) and its config. The plot script
+writes `decoder_hierarchy.png`, `crossings.png`, their data and
+`summary.json` (averages over seeds, crossings of consecutive sizes) in the
+sweep folder.
 
 ## Draw the QELM verdict figures (issue #303)
 

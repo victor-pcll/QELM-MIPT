@@ -40,7 +40,7 @@ def test_conf_tree_mirrors_the_package() -> None:
         # haar_readouts.yaml; nonlinear_M.yaml, #269; per_p_convergence.yaml,
         # #267; clifford_state_readout.yaml, #292; bloch_purity.yaml, #277;
         # early_layers.yaml, #288;
-        # charge_variance.yaml, #299).
+        # charge_variance.yaml, #299; decoder_hierarchy.yaml, #307).
         if path.name
         not in (
             "config.yaml",
@@ -58,6 +58,7 @@ def test_conf_tree_mirrors_the_package() -> None:
             "per_p_convergence.yaml",
             "clifford_state_readout.yaml",
             "charge_variance.yaml",
+            "decoder_hierarchy.yaml",
         )
     }
     assert found == expected
