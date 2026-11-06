@@ -381,6 +381,35 @@ partenaire. Un brouillage les supprime entièrement. Sans brouillage, leur part
 baisse avec `N`. Le QELM-M ne lit donc pas la transition de purification : il
 lit un effet de bord de l'état initial, qui n'a pas de limite d'échelle à `p_c`.
 
+**Le changement de régime de `g` autour de `p_c` (`T = 2N`).** Au-dessus de
+`p ≈ 0.14`, les courbes de `g` se séparent en `N`, alors qu'elles coïncident
+en dessous. On compare, circuit par circuit, `g` moyen pour `p ≥ 0.18` et pour
+`p ≤ 0.10`. L'écart se creuse avec `N` : −0,12 ; −0,20 ; −0,23 ; −0,27
+(±0,01 à ±0,03, pour `N = 12, 16, 24, 32`). Mais `g` est une part **parmi les
+trajectoires purifiées**, et son dénominateur `f` est l'oracle, qui a lui-même
+le croisement.
+
+On décompose donc `g = (f g) / f`, où `f g = 2 (acc − 1/2)` est la part de
+**toutes** les trajectoires que le ridge lit. Rapports `N = 32` sur `N = 12` :
+
+| | `p ≤ 0.10` | `p ≥ 0.18` |
+| --- | --- | --- |
+| `f g` | 0,86 | 0,74 |
+| `f` | 0,81 | 1,13 |
+| `g` | 1,05 | 0,67 |
+
+La moitié environ de la séparation de `g` vient donc de `f`, c'est-à-dire de
+l'oracle (le piège T6). L'autre moitié est une baisse de `f g` un peu plus forte
+au-dessus de `p_c` qu'en dessous : 0,74 contre 0,86. Elle est faible devant la
+variance entre circuits (environ ±0,1 sur ce rapport).
+
+`w₁` ne tend pas visiblement vers 0 : au-dessus de `p_c`, il vaut 0,30 à
+`N = 24` comme à `N = 32`, et une extrapolation linéaire en `1/N` de `g`
+donne environ 0,2. **Statut : signal possible, pas démontré.** Pour qu'il le
+soit, il faudrait que la séparation de `f g` (et non de `g`) se resserre autour
+d'un même `p`, proche de 0,16, quand `N` grandit. Cela demande `N = 48` et les
+13 graines manquantes.
+
 **Ce qui reste.**
 - Les 13 graines manquantes de `T = 2N` resserreraient les barres sur `g` ; le
   script reprend là où il s'est arrêté.
