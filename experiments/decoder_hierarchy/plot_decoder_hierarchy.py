@@ -213,7 +213,7 @@ def draw_hierarchy(summary: dict[str, Any]) -> Figure:
         "share of the Bayes advantage  g = (acc - 1/2)/(acc_Bayes - 1/2)", fontsize=9
     )
     ax.set_ylim(0, 1.05)
-    ax.legend(fontsize=7, loc="lower right")
+    ax.legend(fontsize=7, loc="lower right", handlelength=4)
     ax = axes[5]
     N = sizes[-1]
     for d in summary["decoders"]:
@@ -227,7 +227,7 @@ def draw_hierarchy(summary: dict[str, Any]) -> Figure:
         )
     ax.set_title(f"all decoders, N = {N}", fontsize=9)
     ax.set_ylim(0.48, 1.01)
-    ax.legend(fontsize=7, loc="lower right")
+    ax.legend(fontsize=7, loc="lower right", handlelength=4)
     for k, ax in enumerate(axes):
         ax.set_xlabel("measurement probability $p$")
         ax.axhline(0.5, color="0.6", lw=0.7, ls="--")
