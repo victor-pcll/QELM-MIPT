@@ -1,0 +1,43 @@
+# Why the QELM state readout decays with p N T (issue #305). Primary config
+# of experiments/pnt_decay/pnt_decay.py: the main config, the Haar circuit and
+# the block below.
+#
+#   uv run python experiments/pnt_decay/pnt_decay.py N=6 pnt_task.T=6
+defaults:
+  - config
+  - override models: haar_circuit
+  - _self_
+
+# One ancilla: the reference qubit R (qubit 0), never acted on.
+Nr: 1
+N: 8
+
+# Block of the bell encoding (experiments/nonlinear_M).
+ancilla_bell_pair:
+  N: ${N}
+  site: null # null: the middle of the chain, N // 2
+
+# Haar U(4) brickwork on the open chain, one fixed circuit per run (set by the
+# seed): with new gates per trajectory the averaged signal is 0 (#261).
+haar_circuit:
+  fixed_instance: true
+
+pnt_task:
+  # Initial state of R and the system (experiments/nonlinear_M): charge (as
+  # #268), bell, ghz or w.
+  encoding: charge
+  # Rounds (one brickwork layer + Z measurement of each site with
+  # probability p). depth_rule (10, N, 2N...) replaces T when set.
+  T: 8
+  depth_rule: null
+  # Grid in the mean number of measurements n = p N T: p = n / (N T),
+  # values above p = 1 dropped.
+  pnt_values: [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 10, 12, 16]
+  # Trajectories per p, split with samples.train_fraction (ridge, covariance)
+  # and the rest (test).
+  samples_per_p: 3000
+  # false skips the trace distance (an eigendecomposition of 2^N x 2^N per p).
+  trace_distance: true
+  # false: only the exact averaged channel (signal, V_eff, V_feat), no
+  # trajectories, for a cheap scan of the volumes.
+  sample: true
