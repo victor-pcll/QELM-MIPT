@@ -16,12 +16,16 @@
 #     SIZES="4:10 6:10 8:10 10:2" N:number-of-seeds pairs (seeds 42, 43, ...)
 #     T_FACTOR=1                  depth T = T_FACTOR * N
 #     P_VALUES="0 0.05 ... 1"     measurement probabilities (default 21 values)
+#     TASK_SAMPLES=3000           inputs of the QELM scores (R2, accuracy), 0 = off
+#     DEGREES="1 2 3"             Fourier degrees of the targets
 #     MAX_JOBS=4                  runs at once, one BLAS thread each
 #     SKIP_DONE=1                 skip the runs that already have a metrics.json
 #
 # Cost per run (21 values of p, T = N, one core): N = 6 about 1 s, N = 8
 # about 1 min, N = 10 about 40 min (the Heisenberg evolution of 2^N x 2^N
-# operators). The default grid takes about 1.5 hours with MAX_JOBS=4.
+# operators), plus the sampled records of the QELM scores: about 1 min at
+# N = 8 and 5 min at N = 10 with TASK_SAMPLES=3000. The default grid takes
+# about 2 hours with MAX_JOBS=4.
 #
 # A failed run does not stop the others: the sweep lists the failed runs in
 # $OUT_DIR/failed_runs.txt and exits with 1.
@@ -38,10 +42,16 @@ read -r -a MODELS <<< "${MODELS:-haar u1 z2 clifford}"
 read -r -a SIZES <<< "${SIZES:-4:10 6:10 8:10 10:2}"
 T_FACTOR="${T_FACTOR:-1}"
 P_VALUES="${P_VALUES:-0 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1}"
+TASK_SAMPLES="${TASK_SAMPLES:-3000}"
+DEGREES="${DEGREES:-1 2 3}"
 MAX_JOBS="${MAX_JOBS:-4}"
 SKIP_DONE="${SKIP_DONE:-0}"
 if ! [[ "$MAX_JOBS" =~ ^[1-9][0-9]*$ ]]; then
   echo "MAX_JOBS must be a positive integer, got '$MAX_JOBS'" >&2
+  exit 2
+fi
+if ! [[ "$TASK_SAMPLES" =~ ^[0-9]+$ ]]; then
+  echo "TASK_SAMPLES must be a non-negative integer, got '$TASK_SAMPLES'" >&2
   exit 2
 fi
 if ! [[ "$T_FACTOR" =~ ^[1-9][0-9]*$ ]]; then
@@ -91,7 +101,8 @@ run_one() {
   # shellcheck disable=SC2086
   uv run python experiments/fourier_expressivity/fourier_expressivity.py \
     --model "$MODEL" --N "$N" --T "$T" --seed "$SEED" \
-    --p $P_VALUES --out "$RUN_DIR" > "$RUN_DIR.log" 2>&1
+    --p $P_VALUES --task-samples "$TASK_SAMPLES" --degrees $DEGREES \
+    --out "$RUN_DIR" > "$RUN_DIR.log" 2>&1
   status=$?
   if (( status != 0 )); then
     echo "exit $status: $1" >> "$FAILED_LOG"
@@ -101,7 +112,7 @@ run_one() {
   rm -f "$RUN_DIR.log"
 }
 export -f run_one
-export OUT_DIR P_VALUES FAILED_LOG SKIP_DONE
+export OUT_DIR P_VALUES TASK_SAMPLES DEGREES FAILED_LOG SKIP_DONE
 if (( MAX_JOBS > 1 )); then
   export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
 fi

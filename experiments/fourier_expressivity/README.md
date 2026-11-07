@@ -22,7 +22,7 @@ dynamics.
 | System sizes `N` | 4, 6, 8 (10 circuits each) and 10 (2 circuits) by default |
 | Control parameters | `p` from 0 to 1 by 0.05, the dynamics |
 | Initial state | angle encoding `prod_i (I + sin(theta_i) X_i + cos(theta_i) Z_i) / 2`, angles uniform on `[0, pi]` for `d_eff` |
-| ML task | none: the expressivity of the features (record `M_{t,i}` and final `Z_i`), independent of any target |
+| ML task | (1) the expressivity of the features (record `M_{t,i}` and final `Z_i`), independent of any target; (2) regression of targets spread over the Bloch monomials of one degree `k = 1, 2, 3` (unit variance, angles uniform on `[0, pi]`), ridge (`alpha = 1e-3`, bias column) on one single-shot record per input, 3000 inputs, 75 % train, scored by test R2 and test accuracy of the sign of the target |
 | Issues / PRs | #309 |
 
 ## Methodology
@@ -36,7 +36,13 @@ dynamics.
    - the share `A_k` of the degree-`k` monomials in reach;
    - the participation ratio `d_eff` of the feature covariance for angles uniform on `[0, pi]`;
    - the weight on monomials with an odd number of `sin`.
-5. Average over the circuits.
+5. QELM scores (`QELM.evaluation.fourier_tasks`), with the same circuit:
+   1. Draw one target per degree `k` and 3000 inputs. Both are drawn once per run (seed `seed + 10000`), and the same ones are used for every `p`.
+   2. For each input, draw a single-shot record (masks and outcomes with the Born rule on the state vector), then the final Z outcomes.
+   3. Fit the ridge on 2250 inputs and score it on 750: test R2 and test accuracy.
+   4. Estimate the shot noise `Noise = E[Cov(M | theta)]` from the same records.
+   5. From `C(p)`, predict the R2 of the best linear readout of records averaged over `S` shots, `c^T (Sigma + Noise / S)^+ c / Var(y)`, for `S = 1, 10, 100, 1000`. The prediction for `S = inf` (no shot noise) is the ceiling: the share of the target that the mean features can represent. The predicted accuracy is that of a Gaussian target, `1/2 + arcsin(sqrt(R2)) / pi`.
+6. Average over the circuits.
 
 No trajectory is sampled. The cost is the Heisenberg evolution of
 `2^N x 2^N` operators. How to run it:

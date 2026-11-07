@@ -1688,6 +1688,8 @@ Options of the launcher (environment variables):
 - `SIZES`: `N:circuits` pairs, default `"4:10 6:10 8:10 10:2"`. The seeds are 42, 43, and so on.
 - `T_FACTOR`: sets the depth `T = T_FACTOR * N`, default 1.
 - `P_VALUES`: the `p` grid, default 0 to 1 by 0.05.
+- `TASK_SAMPLES`: number of inputs used to score the QELM (R2, accuracy), default 3000. Set it to 0 to skip the scores.
+- `DEGREES`: Fourier degrees of the targets, default `"1 2 3"`.
 - `MAX_JOBS`: number of runs at once, default 4. Each run gets one BLAS thread.
 - `SKIP_DONE=1`: resume a sweep.
 - `OUT_ROOT` / `OUT_DIR`: where the sweep is written.

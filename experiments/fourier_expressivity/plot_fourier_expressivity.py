@@ -92,8 +92,105 @@ def summarize(runs: list[dict[str, Any]]) -> dict[str, dict[int, dict[str, Any]]
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
             entry["mean_degree_by_time"] = np.nanmean(by_time, axis=0)
+        _summarize_tasks(entry, group)
         summary[model][N] = entry
     return dict(summary)
+
+
+def _summarize_tasks(entry: dict[str, Any], group: list[dict[str, Any]]) -> None:
+    """Add ``tasks[k][name]`` (mean, sem over p) when the runs scored the QELM."""
+    first = group[0]["per_p"][0].get("tasks")
+    if not first:
+        return
+    tasks: dict[str, dict[str, np.ndarray]] = {}
+    for k, row in first.items():
+        tasks[k] = {}
+        for name in row:
+            data = np.array(
+                [[r["tasks"][k][name] for r in run["per_p"]] for run in group]
+            )
+            tasks[k][f"{name}_mean"] = data.mean(axis=0)
+            tasks[k][f"{name}_sem"] = (
+                data.std(axis=0, ddof=1) / np.sqrt(len(group))
+                if len(group) > 1
+                else np.zeros(data.shape[1])
+            )
+    entry["tasks"] = tasks
+
+
+def task_curves(
+    summary: dict[str, Any],
+    k: str,
+    measured: str,
+    predicted: str | None,
+    ylabel: str,
+) -> Figure:
+    """One panel per dynamics: a QELM score against ``p`` for target ``k``.
+
+    Markers with error bars: ``measured`` (simulated single-shot QELM);
+    dashed line: ``predicted`` (from ``C(p)`` and the shot noise), if given.
+    """
+    models = [
+        m for m in _models(summary) if any("tasks" in e for e in summary[m].values())
+    ]
+    sizes = sorted({N for m in models for N in summary[m]})
+    colors = color_map([str(N) for N in sizes])
+    fig, axes = subplots(1, len(models), figsize=(4.2 * len(models), 3.8), sharey=True)
+    axes = np.atleast_1d(axes)
+    for ax, model in zip(axes, models, strict=True):
+        for N, entry in sorted(summary[model].items()):
+            task = entry.get("tasks", {}).get(k)
+            if task is None:
+                continue
+            ax.errorbar(
+                entry["p"],
+                task[f"{measured}_mean"],
+                yerr=task[f"{measured}_sem"],
+                marker="o",
+                markersize=3,
+                capsize=2,
+                linestyle="none" if predicted else "-",
+                color=colors[str(N)],
+                label=f"N = {N}",
+            )
+            if predicted:
+                ax.plot(
+                    entry["p"],
+                    task[f"{predicted}_mean"],
+                    linestyle="--",
+                    color=colors[str(N)],
+                )
+        ax.set_title(MODEL_LABELS.get(model, model))
+        ax.set_xlabel("p")
+    axes[0].set_ylabel(ylabel)
+    axes[-1].legend(frameon=False)
+    return fig
+
+
+def shots_curves(summary: dict[str, Any], N: int, k: str = "k1") -> Figure:
+    """Predicted R2 against ``p`` for ``S`` averaged shots, at size ``N``."""
+    models = [m for m in _models(summary) if "tasks" in summary[m].get(N, {})]
+    names = [f"r2_pred_S{s}" for s in (1, 10, 100, 1000)] + ["r2_ideal"]
+    labels = ["S = 1", "S = 10", "S = 100", "S = 1000", "S = inf"]
+    colors = color_map(labels)
+    fig, axes = subplots(1, len(models), figsize=(4.2 * len(models), 3.8), sharey=True)
+    axes = np.atleast_1d(axes)
+    for ax, model in zip(axes, models, strict=True):
+        entry = summary[model][N]
+        for name, label in zip(names, labels, strict=True):
+            ax.plot(
+                entry["p"],
+                entry["tasks"][k][f"{name}_mean"],
+                marker="o",
+                markersize=3,
+                color=colors[label],
+                label=label,
+            )
+        ax.set_title(MODEL_LABELS.get(model, model))
+        ax.set_xlabel("p")
+    axes[0].set_ylabel(f"predicted R2, target {k}, N = {N}")
+    axes[-1].legend(frameon=False)
+    return fig
 
 
 def _models(summary: dict[str, Any]) -> list[str]:
@@ -217,6 +314,30 @@ def accessibility_by_degree(
     return fig
 
 
+def task_table(summary: dict[str, Any]) -> list[dict[str, Any]]:
+    """Rows of the QELM scores at a few p, per model, N and target degree."""
+    rows = []
+    for model in _models(summary):
+        for N, entry in sorted(summary[model].items()):
+            for k, task in sorted(entry.get("tasks", {}).items()):
+                for p in (0.0, 0.1, 0.25, 0.5, 1.0):
+                    idx = int(np.argmin(np.abs(entry["p"] - p)))
+                    rows.append(
+                        {
+                            "model": model,
+                            "N": N,
+                            "target": k,
+                            "p": float(entry["p"][idx]),
+                            **{
+                                name[: -len("_mean")]: float(values[idx])
+                                for name, values in task.items()
+                                if name.endswith("_mean")
+                            },
+                        }
+                    )
+    return rows
+
+
 def table(summary: dict[str, Any]) -> list[dict[str, Any]]:
     """Rows of the summary table: per model and N, the measures at a few p."""
     rows = []
@@ -268,6 +389,38 @@ def draw_all(sweep: Path, show: bool = False) -> dict[str, Path]:
             summary, largest
         ),
     }
+    with_tasks = [m for m in summary if any("tasks" in e for e in summary[m].values())]
+    if with_tasks:
+        degrees = sorted(
+            {
+                k
+                for m in with_tasks
+                for e in summary[m].values()
+                for k in e.get("tasks", {})
+            }
+        )
+        for k in degrees:
+            figures[f"r2_ideal_{k}"] = task_curves(
+                summary, k, "r2_ideal", None, f"R2 ceiling (S = inf), target {k}"
+            )
+            figures[f"r2_qelm_{k}"] = task_curves(
+                summary,
+                k,
+                "r2_test",
+                "r2_pred_S1",
+                f"QELM test R2 (1 shot), target {k}",
+            )
+            figures[f"accuracy_qelm_{k}"] = task_curves(
+                summary,
+                k,
+                "accuracy_test",
+                "accuracy_pred_S1",
+                f"QELM test accuracy (1 shot), target {k}",
+            )
+        largest_task = max(
+            N for m in with_tasks for N, e in summary[m].items() if "tasks" in e
+        )
+        figures[f"r2_vs_shots_N{largest_task}"] = shots_curves(summary, largest_task)
     paths = {name: save_figure(fig, sweep, name) for name, fig in figures.items()}
     if show:
         plt.show()
@@ -277,6 +430,10 @@ def draw_all(sweep: Path, show: bool = False) -> dict[str, Path]:
     (sweep / "summary_table.json").write_text(
         json.dumps(table(summary), indent=2) + "\n"
     )
+    if with_tasks:
+        (sweep / "task_table.json").write_text(
+            json.dumps(task_table(summary), indent=2) + "\n"
+        )
     return paths
 
 
