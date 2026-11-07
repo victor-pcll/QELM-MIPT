@@ -224,3 +224,19 @@ def gaussian_accuracy(r2: float) -> float:
     """
     rho = float(np.sqrt(np.clip(r2, 0.0, 1.0)))
     return 0.5 + float(np.arcsin(rho)) / np.pi
+
+
+def product_features(
+    records: np.ndarray, products: Sequence[Sequence[int]]
+) -> np.ndarray:
+    """Return the sampled product features, one column per product.
+
+    ``records`` as returned by :func:`sample_records`; column ``r`` is the
+    product of the columns ``products[r]``, a single-shot sample of the row
+    ``r`` of :func:`QELM.evaluation.fourier.product_transfer_matrix`.
+    """
+    out = np.ones((records.shape[0], len(products)))
+    for r, prod in enumerate(products):
+        for k in prod:
+            out[:, r] *= records[:, k]
+    return out

@@ -10,7 +10,9 @@ import pytest
 from QELM.evaluation.fourier import (
     accessible_rank,
     angle_moments,
+    basic_measures,
     bloch_monomials,
+    correlator_products,
     degree_accessibility,
     degree_profile,
     effective_dimension,
@@ -21,6 +23,7 @@ from QELM.evaluation.fourier import (
     odd_x_mask,
     odd_x_weight,
     pauli_xz_coefficients,
+    product_transfer_matrix,
     transfer_matrix,
 )
 from QELM.models.circuits import HaarBrickworkCircuit, U1BrickworkCircuit
@@ -170,3 +173,87 @@ def test_profile_accessibility_and_effective_dimension() -> None:
     assert effective_dimension(np.zeros((2, 2))) == 0.0
     measures = expressivity_measures(identity, N)
     assert measures["rank"] == 27 and measures["rank_fraction"] == 1.0
+
+
+def brute_force_outcome_moments(
+    layers: list, N: int, p: float, theta: np.ndarray
+) -> np.ndarray:
+    """``E[F F^T | theta]`` over the records and final Z outcomes, enumerated."""
+    T = len(layers)
+    K = T * N + N
+    second = np.zeros((K, K))
+    for mask in itertools.product((0, 1), repeat=T * N):
+        k = sum(mask)
+        weight = p**k * (1 - p) ** (T * N - k)
+        if weight == 0:
+            continue
+        branches = [(encoded_state(theta), np.zeros(K))]
+        for t in range(T + 1):
+            if t < T:
+                branches = [(apply_layer(r, layers[t]), rc) for r, rc in branches]
+            for i in range(N):
+                if t == T or mask[t * N + i]:
+                    nxt = []
+                    for r, rc in branches:
+                        for s in (0, 1):
+                            P = projector(i, s, N)
+                            rc2 = rc.copy()
+                            rc2[t * N + i] = 1 - 2 * s
+                            nxt.append((P @ r @ P, rc2))
+                    branches = nxt
+        for rho, rec in branches:
+            second += weight * np.trace(rho).real * np.outer(rec, rec)
+    return second
+
+
+def test_single_feature_products_are_the_rows_of_the_transfer_matrix() -> None:
+    rng = np.random.default_rng(6)
+    N = 3
+    circuit = HaarBrickworkCircuit({"N": N, "depth": 3, "Nr": 0}, rng)
+    for p in (0.0, 0.35, 1.0):
+        C = transfer_matrix(circuit.layers, N, p)
+        P = product_transfer_matrix(circuit.layers, N, p, [(k,) for k in range(len(C))])
+        np.testing.assert_allclose(P, C, atol=1e-12)
+
+
+@pytest.mark.parametrize("p", [0.4, 1.0])
+def test_pair_rows_match_the_enumeration_of_masks_and_outcomes(p: float) -> None:
+    rng = np.random.default_rng(7)
+    N = 2
+    circuit = HaarBrickworkCircuit({"N": N, "depth": 2, "Nr": 0}, rng)
+    pairs = correlator_products(2, N, "all")
+    P = product_transfer_matrix(circuit.layers, N, p, pairs)
+    theta = rng.uniform(0, np.pi, N)
+    second = brute_force_outcome_moments(circuit.layers, N, p, theta)
+    expected = [second[a, b] for a, b in pairs]
+    np.testing.assert_allclose(P @ bloch_monomials(theta), expected, atol=1e-10)
+
+
+def test_correlator_products_and_basic_measures() -> None:
+    assert correlator_products(2, 3, "same-time") == [
+        (0, 1),
+        (0, 2),
+        (1, 2),
+        (3, 4),
+        (3, 5),
+        (4, 5),
+        (6, 7),
+        (6, 8),
+        (7, 8),
+    ]
+    assert len(correlator_products(2, 3, "all")) == 9 * 8 // 2
+    with pytest.raises(ValueError):
+        correlator_products(2, 3, "none")
+    measures = basic_measures(np.eye(27), 3)
+    assert measures["rank"] == 27 and measures["n_features"] == 27
+
+
+@pytest.mark.parametrize("cls", [U1BrickworkCircuit, Z2BrickworkCircuit])
+def test_z_symmetric_correlators_never_reach_odd_sin_monomials(cls: type) -> None:
+    rng = np.random.default_rng(8)
+    N = 3
+    circuit = cls({"N": N, "depth": 3, "Nr": 0}, rng)
+    P = product_transfer_matrix(
+        circuit.layers, N, 0.5, correlator_products(3, N, "all")
+    )
+    assert odd_x_weight(P, N) < 1e-20

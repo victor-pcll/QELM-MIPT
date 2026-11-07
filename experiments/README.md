@@ -1690,6 +1690,9 @@ Options of the launcher (environment variables):
 - `P_VALUES`: the `p` grid, default 0 to 1 by 0.05.
 - `TASK_SAMPLES`: number of inputs used to score the QELM (R2, accuracy), default 3000. Set it to 0 to skip the scores.
 - `DEGREES`: Fourier degrees of the targets, default `"1 2 3"`.
+- `PAIRS`: correlator features added to the linear ones, `none` (default),
+  `same-time` (`M_{t,i} M_{t,j}` and the final `Z_i Z_j`) or `all` (every
+  pair `M_k M_l`, records and final readout).
 - `MAX_JOBS`: number of runs at once, default 4. Each run gets one BLAS thread.
 - `SKIP_DONE=1`: resume a sweep.
 - `OUT_ROOT` / `OUT_DIR`: where the sweep is written.

@@ -13,6 +13,7 @@ import argparse
 import json
 import warnings
 from collections import defaultdict
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -93,6 +94,7 @@ def summarize(runs: list[dict[str, Any]]) -> dict[str, dict[int, dict[str, Any]]
             warnings.simplefilter("ignore", category=RuntimeWarning)
             entry["mean_degree_by_time"] = np.nanmean(by_time, axis=0)
         _summarize_tasks(entry, group)
+        _summarize_pairs(entry, group)
         summary[model][N] = entry
     return dict(summary)
 
@@ -116,6 +118,167 @@ def _summarize_tasks(entry: dict[str, Any], group: list[dict[str, Any]]) -> None
                 else np.zeros(data.shape[1])
             )
     entry["tasks"] = tasks
+
+
+PAIR_SCALARS = ["rank", "rank_fraction", "mean_degree", "odd_x_weight", "d_eff"]
+
+
+def _mean_sem(data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    sem = (
+        data.std(axis=0, ddof=1) / np.sqrt(len(data))
+        if len(data) > 1
+        else np.zeros(data.shape[1:])
+    )
+    return data.mean(axis=0), sem
+
+
+def _summarize_pairs(entry: dict[str, Any], group: list[dict[str, Any]]) -> None:
+    """Add ``pairs`` when the runs added the correlator features.
+
+    ``entry["pairs"]`` holds ``mode``, ``n_pairs``, and for ``pairs_only`` and
+    ``linear_pairs`` the mean and sem of each of :data:`PAIR_SCALARS`; and
+    ``tasks[k][name]`` (mean, sem) of the QELM on linear features plus
+    correlators, as :func:`_summarize_tasks`.
+    """
+    first = group[0]["per_p"][0].get("pairs")
+    if not first:
+        return
+    pairs: dict[str, Any] = {
+        "mode": group[0].get("pairs"),
+        "n_pairs": group[0].get("n_pairs"),
+    }
+    for part in ("pairs_only", "linear_pairs"):
+        pairs[part] = {}
+        for name in PAIR_SCALARS:
+            data = np.array(
+                [[r["pairs"][part][name] for r in run["per_p"]] for run in group]
+            )
+            mean, sem = _mean_sem(data)
+            pairs[part][f"{name}_mean"], pairs[part][f"{name}_sem"] = mean, sem
+    if "tasks" in first:
+        pairs["tasks"] = {}
+        for k, row in first["tasks"].items():
+            pairs["tasks"][k] = {}
+            for name in row:
+                data = np.array(
+                    [
+                        [r["pairs"]["tasks"][k][name] for r in run["per_p"]]
+                        for run in group
+                    ]
+                )
+                mean, sem = _mean_sem(data)
+                pairs["tasks"][k][f"{name}_mean"] = mean
+                pairs["tasks"][k][f"{name}_sem"] = sem
+    entry["pairs"] = pairs
+
+
+def pair_comparison(
+    summary: dict[str, Any],
+    linear: Callable[[dict[str, Any]], tuple[np.ndarray, np.ndarray] | None],
+    with_pairs: Callable[[dict[str, Any]], tuple[np.ndarray, np.ndarray] | None],
+    ylabel: str,
+) -> Figure:
+    """One panel per dynamics: linear features (filled, solid) against linear
+    features plus correlators (open, dashed), one color per ``N``.
+
+    ``linear`` and ``with_pairs`` map a summary entry to ``(mean, sem)`` over
+    ``p``, or ``None`` when the entry lacks it.
+    """
+    models = [
+        m for m in _models(summary) if any("pairs" in e for e in summary[m].values())
+    ]
+    sizes = sorted({N for m in models for N, e in summary[m].items() if "pairs" in e})
+    colors = color_map([str(N) for N in sizes])
+    fig, axes = subplots(1, len(models), figsize=(4.2 * len(models), 3.8), sharey=True)
+    axes = np.atleast_1d(axes)
+    for ax, model in zip(axes, models, strict=True):
+        for N, entry in sorted(summary[model].items()):
+            if "pairs" not in entry:
+                continue
+            for getter, style, fill, suffix in (
+                (linear, "-", colors[str(N)], ""),
+                (with_pairs, "--", "white", " + pairs"),
+            ):
+                values = getter(entry)
+                if values is None:
+                    continue
+                ax.errorbar(
+                    entry["p"],
+                    values[0],
+                    yerr=values[1],
+                    marker="o",
+                    markersize=3.5,
+                    markerfacecolor=fill,
+                    capsize=2,
+                    linestyle=style,
+                    color=colors[str(N)],
+                    label=f"N = {N}{suffix}",
+                )
+        ax.set_title(MODEL_LABELS.get(model, model))
+        ax.set_xlabel("p")
+    axes[0].set_ylabel(ylabel)
+    axes[-1].legend(frameon=False, fontsize=8)
+    return fig
+
+
+def pair_figures(summary: dict[str, Any]) -> dict[str, Figure]:
+    """Linear features against linear features plus correlators."""
+
+    def measure(name: str) -> tuple[Callable[..., Any], Callable[..., Any]]:
+        return (
+            lambda e: (e[f"{name}_mean"], e[f"{name}_sem"]),
+            lambda e: (
+                e["pairs"]["linear_pairs"][f"{name}_mean"],
+                e["pairs"]["linear_pairs"][f"{name}_sem"],
+            ),
+        )
+
+    def task(k: str, name: str) -> tuple[Callable[..., Any], Callable[..., Any]]:
+        def lin(e: dict[str, Any]) -> tuple[np.ndarray, np.ndarray] | None:
+            t = e.get("tasks", {}).get(k)
+            return None if t is None else (t[f"{name}_mean"], t[f"{name}_sem"])
+
+        def pai(e: dict[str, Any]) -> tuple[np.ndarray, np.ndarray] | None:
+            t = e["pairs"].get("tasks", {}).get(k)
+            return None if t is None else (t[f"{name}_mean"], t[f"{name}_sem"])
+
+        return lin, pai
+
+    figures = {
+        "pairs_effective_dimension": pair_comparison(
+            summary, *measure("d_eff"), "d_eff (participation ratio)"
+        ),
+        "pairs_accessible_rank": pair_comparison(
+            summary, *measure("rank_fraction"), "rank / 3^N"
+        ),
+        "pairs_mean_degree": pair_comparison(
+            summary, *measure("mean_degree"), "mean degree / N, all features"
+        ),
+    }
+    degrees = sorted(
+        {
+            k
+            for m in summary
+            for e in summary[m].values()
+            for k in e.get("pairs", {}).get("tasks", {})
+        }
+    )
+    for k in degrees:
+        figures[f"pairs_r2_ideal_{k}"] = pair_comparison(
+            summary, *task(k, "r2_ideal"), f"R2 ceiling (S = inf), target {k}"
+        )
+        figures[f"pairs_r2_S100_{k}"] = pair_comparison(
+            summary, *task(k, "r2_pred_S100"), f"predicted R2 (S = 100), target {k}"
+        )
+        figures[f"pairs_r2_qelm_{k}"] = pair_comparison(
+            summary, *task(k, "r2_test"), f"QELM test R2 (1 shot), target {k}"
+        )
+        figures[f"pairs_accuracy_qelm_{k}"] = pair_comparison(
+            summary,
+            *task(k, "accuracy_test"),
+            f"QELM test accuracy (1 shot), target {k}",
+        )
+    return figures
 
 
 def task_curves(
@@ -421,6 +584,8 @@ def draw_all(sweep: Path, show: bool = False) -> dict[str, Path]:
             N for m in with_tasks for N, e in summary[m].items() if "tasks" in e
         )
         figures[f"r2_vs_shots_N{largest_task}"] = shots_curves(summary, largest_task)
+    if any("pairs" in e for m in summary for e in summary[m].values()):
+        figures.update(pair_figures(summary))
     paths = {name: save_figure(fig, sweep, name) for name, fig in figures.items()}
     if show:
         plt.show()

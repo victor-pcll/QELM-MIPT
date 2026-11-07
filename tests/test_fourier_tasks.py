@@ -5,12 +5,18 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from QELM.evaluation.fourier import bloch_monomials, transfer_matrix
+from QELM.evaluation.fourier import (
+    bloch_monomials,
+    correlator_products,
+    product_transfer_matrix,
+    transfer_matrix,
+)
 from QELM.evaluation.fourier_tasks import (
     degree_target,
     gaussian_accuracy,
     ideal_r2,
     predicted_r2,
+    product_features,
     qelm_scores,
     sample_records,
     shot_noise_covariance,
@@ -92,3 +98,15 @@ def test_gaussian_accuracy_limits() -> None:
     assert gaussian_accuracy(0.0) == pytest.approx(0.5)
     assert gaussian_accuracy(1.0) == pytest.approx(1.0)
     assert gaussian_accuracy(-0.2) == pytest.approx(0.5)
+
+
+def test_sampled_products_average_to_the_product_transfer_matrix() -> None:
+    rng = np.random.default_rng(9)
+    N, p = 3, 0.5
+    layers, _ = circuit_matrix(N, p, seed=9)
+    pairs = correlator_products(3, N, "all")
+    P = product_transfer_matrix(layers, N, p, pairs)
+    theta = np.tile(rng.uniform(0, np.pi, N), (20_000, 1))
+    samples = product_features(sample_records(layers, N, p, theta, rng), pairs)
+    exact = P @ bloch_monomials(theta[0])
+    np.testing.assert_allclose(samples.mean(axis=0), exact, atol=0.04)

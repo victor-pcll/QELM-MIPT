@@ -42,7 +42,8 @@ dynamics.
    3. Fit the ridge on 2250 inputs and score it on 750: test R2 and test accuracy.
    4. Estimate the shot noise `Noise = E[Cov(M | theta)]` from the same records.
    5. From `C(p)`, predict the R2 of the best linear readout of records averaged over `S` shots, `c^T (Sigma + Noise / S)^+ c / Var(y)`, for `S = 1, 10, 100, 1000`. The prediction for `S = inf` (no shot noise) is the ceiling: the share of the target that the mean features can represent. The predicted accuracy is that of a Gaussian target, `1/2 + arcsin(sqrt(R2)) / pi`.
-6. Average over the circuits.
+6. Optionally (`PAIRS=same-time` or `PAIRS=all`), add the correlators `F_a F_b` of two features as features: `M_{t,i} M_{t,j}` and the final `Z_i Z_j` (`same-time`), or every pair (`all`). Their means `E[F_a F_b | theta]` are again linear in `rho(theta)`, since the joint outcome distribution is. Their rows come from a backward evolution in which a measured feature acts as `O -> p {Z_i, O} / 2` and the other sites as the dephasing (`product_transfer_matrix`). Steps 3 to 5 are repeated on the linear features plus the correlators, with the same sampled records multiplied pairwise.
+7. Average over the circuits.
 
 No trajectory is sampled. The cost is the Heisenberg evolution of
 `2^N x 2^N` operators. How to run it:

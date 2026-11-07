@@ -26,6 +26,7 @@ def test_notebook_runs_the_sweep_and_plots(
         "P_VALUES": "0 0.5 1",
         "TASK_SAMPLES": "200",
         "DEGREES": "1 2",
+        "PAIRS": "same-time",
         "MAX_JOBS": "2",
         "OUT_ROOT": str(tmp_path),
         "RUN": "1",
@@ -55,3 +56,7 @@ def test_notebook_runs_the_sweep_and_plots(
     for name in ("r2_qelm_k1", "accuracy_qelm_k2", "r2_ideal_k1", "r2_vs_shots_N4"):
         assert (sweep / f"{name}.png").is_file()
     assert {row["target"] for row in namespace["task_rows"]} == {"k1", "k2"}
+    for name in ("pairs_effective_dimension", "pairs_r2_ideal_k1", "pairs_r2_qelm_k2"):
+        assert (sweep / f"{name}.png").is_file()
+    assert u1["pairs"]["n_pairs"] == 4 * 6 + 6
+    assert max(u1["pairs"]["linear_pairs"]["odd_x_weight_mean"]) < 1e-20

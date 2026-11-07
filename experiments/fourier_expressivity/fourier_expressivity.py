@@ -15,6 +15,11 @@ also scored, on targets spread over the monomials of one degree ``k``
 predicted from ``C(p)`` and the measured shot noise for ``S`` averaged
 shots, and the ceiling ``S = inf``.
 
+With ``--pairs same-time`` (or ``all``), the correlators ``E[M_k M_l | x]``
+and ``E[Z_i Z_j | x]`` are added as features
+(:func:`QELM.evaluation.fourier.product_transfer_matrix`), and every measure
+and score is also given for the linear features plus these correlators.
+
     uv run python experiments/fourier_expressivity/fourier_expressivity.py \
         --model haar --N 6 --T 6 --seed 42 --out outputs/fourier/one_run
 
@@ -31,14 +36,18 @@ from pathlib import Path
 import numpy as np
 
 from QELM.evaluation.fourier import (
+    basic_measures,
     bloch_monomials,
+    correlator_products,
     expressivity_measures,
+    product_transfer_matrix,
     transfer_matrix,
 )
 from QELM.evaluation.fourier_tasks import (
     degree_target,
     gaussian_accuracy,
     predicted_r2,
+    product_features,
     qelm_scores,
     sample_records,
     shot_noise_covariance,
@@ -63,20 +72,20 @@ SHOTS = (1, 10, 100, 1000)
 
 
 def task_scores(
-    layers: list,
+    records: np.ndarray,
     C: np.ndarray,
     N: int,
-    p: float,
     theta: np.ndarray,
     targets: dict[int, tuple[np.ndarray, float]],
     n_train: int,
     alpha: float,
-    rng: np.random.Generator,
     low: float,
     high: float,
 ) -> dict[str, dict[str, float]]:
-    """Scores of the QELM and their Fourier predictions, per target degree."""
-    records = sample_records(layers, N, p, theta, rng)
+    """Scores of the QELM on ``records`` and their Fourier predictions, per degree.
+
+    ``records`` are the sampled features whose means are ``C B(theta)``.
+    """
     noise = shot_noise_covariance(records, C, theta)
     B = bloch_monomials(theta)
     out: dict[str, dict[str, float]] = {}
@@ -103,6 +112,7 @@ def run(
     train_frac: float = 0.75,
     degrees: tuple[int, ...] = (1, 2, 3),
     alpha: float = 1e-3,
+    pairs: str = "none",
 ) -> dict[str, object]:
     """Return the measures of ``C(p)`` for each ``p``, on one circuit.
 
@@ -110,6 +120,13 @@ def run(
     of :func:`task_scores` for the degrees ``k <= N`` of ``degrees``. The
     targets and the inputs are drawn once per run (seed ``seed + 10000``),
     the same for every ``p``.
+
+    With ``pairs`` (``"same-time"`` or ``"all"``, see
+    :func:`QELM.evaluation.fourier.correlator_products`), each ``p`` also
+    carries ``pairs``: the measures of the correlator features ``F_a F_b``
+    alone and of the linear features plus the correlators, and, with
+    ``task_samples > 0``, the scores of the QELM on linear features plus
+    correlators, from the same sampled records as ``tasks``.
     """
     rng = np.random.default_rng(seed)
     circuit = MODELS[model]({"N": N, "depth": T, "Nr": 0}, rng)
@@ -117,24 +134,30 @@ def run(
     targets = {k: degree_target(N, k, task_rng, low, high) for k in degrees if k <= N}
     theta = task_rng.uniform(low, high, (task_samples, N))
     n_train = int(round(train_frac * task_samples))
+    products = correlator_products(T, N, pairs) if pairs != "none" else []
     per_p = []
     for p in p_values:
         C = transfer_matrix(circuit.layers, N, p)
         row: dict[str, object] = {"p": p, **expressivity_measures(C, N, low, high)}
+        records = None
         if task_samples > 0:
+            records = sample_records(circuit.layers, N, p, theta, task_rng)
             row["tasks"] = task_scores(
-                circuit.layers,
-                C,
-                N,
-                p,
-                theta,
-                targets,
-                n_train,
-                alpha,
-                task_rng,
-                low,
-                high,
+                records, C, N, theta, targets, n_train, alpha, low, high
             )
+        if products:
+            P = product_transfer_matrix(circuit.layers, N, p, products)
+            C_all = np.vstack([C, P])
+            extra: dict[str, object] = {
+                "pairs_only": basic_measures(P, N, low, high),
+                "linear_pairs": basic_measures(C_all, N, low, high),
+            }
+            if records is not None:
+                full = np.hstack([records, product_features(records, products)])
+                extra["tasks"] = task_scores(
+                    full, C_all, N, theta, targets, n_train, alpha, low, high
+                )
+            row["pairs"] = extra
         per_p.append(row)
     return {
         "model": model,
@@ -148,6 +171,8 @@ def run(
         "n_train": n_train,
         "alpha": alpha,
         "shots": list(SHOTS),
+        "pairs": pairs,
+        "n_pairs": len(products),
         "per_p": per_p,
     }
 
@@ -167,6 +192,7 @@ def main() -> None:
     parser.add_argument("--train-frac", type=float, default=0.75)
     parser.add_argument("--degrees", type=int, nargs="+", default=[1, 2, 3])
     parser.add_argument("--alpha", type=float, default=1e-3)
+    parser.add_argument("--pairs", choices=["none", "same-time", "all"], default="none")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
 
@@ -183,6 +209,7 @@ def main() -> None:
         args.train_frac,
         tuple(args.degrees),
         args.alpha,
+        args.pairs,
     )
     result["seconds"] = time.time() - start
     args.out.mkdir(parents=True, exist_ok=True)

@@ -189,6 +189,134 @@ def transfer_matrix(
     return p * C
 
 
+def correlator_products(T: int, N: int, mode: str) -> list[tuple[int, int]]:
+    """Return the pairs of features whose product is a correlator feature.
+
+    A feature is named by its column ``t N + i`` in :func:`transfer_matrix`:
+    ``M_{t,i}`` for ``t < T`` and the final ``Z_i`` for ``t = T``.
+
+    Args:
+        T: Number of layers.
+        N: Number of qubits.
+        mode: ``"same-time"``: ``M_{t,i} M_{t,j}`` for ``i < j`` and every
+            ``t``, then the final ``Z_i Z_j``; ``"all"``: every pair of two
+            distinct features.
+
+    Returns:
+        Pairs ``(a, b)`` with ``a < b``.
+    """
+    if mode == "same-time":
+        return [
+            (t * N + i, t * N + j)
+            for t in range(T + 1)
+            for i in range(N)
+            for j in range(i + 1, N)
+        ]
+    if mode == "all":
+        K = T * N + N
+        return [(a, b) for a in range(K) for b in range(a + 1, K)]
+    raise ValueError(f"mode must be 'same-time' or 'all', got {mode!r}.")
+
+
+@lru_cache(maxsize=8)
+def _site_masks(N: int) -> tuple[np.ndarray, np.ndarray]:
+    """Return ``same[a, b, i]`` (bits of ``a`` and ``b`` agree on site ``i``)
+    and ``z[a, i]`` (the eigenvalue of ``Z_i`` on ``|a>``)."""
+    dim = 2**N
+    bits = (np.arange(dim)[:, None] >> np.arange(N - 1, -1, -1)) & 1
+    same = bits[:, None, :] == bits[None, :, :]
+    return same, 1.0 - 2.0 * bits
+
+
+def _measurement_step(obs: np.ndarray, sites: set[int], p: float) -> np.ndarray:
+    """Heisenberg image of one round of Z measurements of probability ``p``.
+
+    A site of ``sites`` has its outcome ``+-1`` (or ``0`` if not measured)
+    multiplied into the feature: ``obs -> p {Z_i, obs} / 2``. Every other
+    site is measured and forgotten: the Z-dephasing of :func:`dephase`.
+    """
+    N = obs.shape[0].bit_length() - 1
+    same, z = _site_masks(N)
+    factor = np.ones(obs.shape)
+    for i in range(N):
+        if i in sites:
+            factor = factor * (p * same[:, :, i] * z[:, i][:, None])
+        elif p > 0:
+            factor = factor * np.where(same[:, :, i], 1.0, 1.0 - p)
+    return np.asarray(obs * factor)
+
+
+def product_observable(
+    layers: Sequence[Layer], N: int, p: float, features: Sequence[int]
+) -> np.ndarray:
+    """Return ``O`` with ``E[prod_k F_k | rho] = Tr[O rho]``.
+
+    ``features`` are distinct columns of :func:`transfer_matrix` (``t N +
+    i``, ``t = T`` for the final ``Z_i``). The mean runs over the masks and
+    outcomes of every measurement, with the Born rule: the joint outcome
+    distribution is linear in ``rho``, so the product is again a combination
+    of the Bloch monomials. One feature gives back a row of ``C(p)``.
+    """
+    T = len(layers)
+    by_time: dict[int, set[int]] = {}
+    for f in features:
+        by_time.setdefault(f // N, set()).add(f % N)
+    obs = np.eye(2**N, dtype=complex)
+    for t in range(max(by_time), -1, -1):
+        sites = by_time.get(t, set())
+        if t == T:
+            # Final readout: every site is measured.
+            obs = _measurement_step(obs, sites, 1.0)
+            continue
+        obs = heisenberg_layer(_measurement_step(obs, sites, p), layers[t])
+    return obs
+
+
+def product_transfer_matrix(
+    layers: Sequence[Layer],
+    N: int,
+    p: float,
+    products: Sequence[Sequence[int]],
+) -> np.ndarray:
+    """Return the transfer matrix of the product features.
+
+    Row ``r`` holds the coefficients on the Bloch monomials of
+    ``E[prod_{k in products[r]} F_k | theta]``, with ``F`` the features of
+    :func:`transfer_matrix`; for example the pairs of
+    :func:`correlator_products`.
+    """
+    if not 0.0 <= p <= 1.0:
+        raise ValueError(f"p must lie in [0, 1], got {p}.")
+    if not products:
+        return np.zeros((0, 3**N))
+    return np.array(
+        [
+            pauli_xz_coefficients(product_observable(layers, N, p, list(prod)))
+            for prod in products
+        ]
+    )
+
+
+def basic_measures(
+    C: np.ndarray, N: int, low: float = 0.0, high: float = np.pi
+) -> dict[str, float | list[float]]:
+    """Measures of any set of features, JSON-ready: no layout assumed."""
+    W = degree_profile(C, N)
+    Sigma = feature_covariance(C, N, low, high)
+    rank = accessible_rank(C)
+    return {
+        "n_features": int(C.shape[0]),
+        "rank": rank,
+        "rank_fraction": rank / 3**N,
+        "degree_profile": W.tolist(),
+        "mean_degree": mean_degree(W),
+        "degree_accessibility": degree_accessibility(C, N).tolist(),
+        "odd_x_weight": odd_x_weight(C, N),
+        "d_eff": effective_dimension(Sigma),
+        "feature_variance": float(np.trace(Sigma)),
+    }
+
+
 def accessible_rank(C: np.ndarray, rtol: float = 1e-8) -> int:
     """Return the rank of ``C``: the dimension of the accessible functions."""
     if C.size == 0:
