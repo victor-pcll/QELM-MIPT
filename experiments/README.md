@@ -56,6 +56,7 @@ commands and every option of the launchers.
 | [`pnt_decay/`](pnt_decay/README.md) | exact signal of the record-averaged state, light-cone volume `V_feat`, sampled noise, oracle linear readout and Gaussian prediction, Haar U(4) | why the state readout decays with `p N T` (#305) |
 | [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
 | [`clifford_state_readout/`](clifford_state_readout/README.md) | `S_R` and purity of the reference qubit from the final Clifford state, ridge / quadratic / MLP | can a readout of the state probe purification (#292) |
+| [`symmetry_regimes/`](symmetry_regimes/README.md) | QELM on the state, on `M` and on both, and Bayes on `M`, for six gate families (Haar, Clifford, U(1), Z2, dipole, diagonal), four encodings and the Z or X label of `R` | which tasks put the label in the state, which in the record (#311) |
 | [`charge_variance/`](charge_variance/README.md) | per-trajectory `Var(Q)` from the final U(1) state, linear / two-point / quadratic readouts | can a readout of the state probe charge sharpening (#299) |
 | [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
 | [`diagnostics/`](diagnostics/README.md) | chaos and locality of every reservoir | why a reservoir shows the MIPT or not |
@@ -1695,6 +1696,27 @@ uv run python experiments/qelm_verdict/plot_clifford_fss.py \
 
 On 4 cores, the scrambled sweep takes about 1.6 h; a `T = 2N` circuit at
 `N = 32` takes about 17 min.
+
+## Find the state and record regimes across gate symmetries (issue #311)
+
+`experiments/symmetry_regimes/symmetry_regimes.sh` runs
+`experiments/nonlinear_M/nonlinear_M.py` on the grid gate family
+(`nonlinear_task.circuit`) x encoding x target (`nonlinear_task.target`, Z or
+X of `R`) x seed, and `plot_symmetry_regimes.py` draws the figures. Results:
+[`symmetry_regimes/README.md`](symmetry_regimes/README.md).
+
+```bash
+MAX_JOBS=4 OUT_DIR=outputs/symmetry_regimes/run \
+    ./experiments/symmetry_regimes/symmetry_regimes.sh
+MAX_JOBS=4 OUT_DIR=outputs/symmetry_regimes/run TARGETS=x SEEDS="42 43 44" \
+    SKIP_DONE=1 ./experiments/symmetry_regimes/symmetry_regimes.sh
+uv run python experiments/symmetry_regimes/plot_symmetry_regimes.py \
+    outputs/symmetry_regimes/run --out experiments/symmetry_regimes/figures
+```
+
+At `N = 8`, `T = 16`, 3000 trajectories per `p` and 16 values of `p`, a run
+takes about 3 min on one core; the Z grid (120 runs) takes about 1.5 h on 4
+cores, the X grid (72 runs) about 1 h.
 
 ## Write your own
 

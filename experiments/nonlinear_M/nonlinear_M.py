@@ -24,6 +24,15 @@ each of its ``nonlinear_task.samples_per_p`` trajectories:
    evolves, measuring it at the end is the same as measuring it first: ``Y``
    is the initial Z state of the middle site, +-1 with probability 1/2.
 
+Two options turn the setting into other tasks (issue #311):
+
+- ``nonlinear_task.circuit`` sets the gate family (:data:`CIRCUITS`):
+  ``haar`` (default), ``clifford``, ``u1`` (charge conserved), ``z2``
+  (parity), ``dipole`` (charge and dipole) or ``diagonal`` (every ``Z_i``);
+- ``nonlinear_task.target`` sets the axis along which ``R`` is read: ``z``
+  (default) or ``x``. With ``x``, ``r_z`` in the outputs below stands for
+  ``<X_R>`` and ``Y`` for the X outcome of ``R``.
+
 The readouts, each fitted on 70 % of the trajectories of one ``p`` and
 scored on the rest (``accuracy`` of the sign, ``R2`` of the output):
 
@@ -95,7 +104,13 @@ from QELM.features import (
     spatial_pairs,
     temporal_pairs,
 )
-from QELM.models.circuits.haar import HaarBrickworkCircuit
+from QELM.models.circuits.clifford import CliffordBrickworkCircuit
+from QELM.models.circuits.haar import HaarBrickworkCircuit, U1BrickworkCircuit
+from QELM.models.circuits.symmetric import (
+    DiagonalBrickworkCircuit,
+    DipoleCircuit,
+    Z2BrickworkCircuit,
+)
 from QELM.physics.operators import PAULIS
 from QELM.training.measurements.projective import measure_projective_psi
 from QELM.utils import save_config
@@ -165,6 +180,51 @@ def reference_z(psi: np.ndarray) -> float:
     return float(np.sum(np.abs(psi[:half]) ** 2) - np.sum(np.abs(psi[half:]) ** 2))
 
 
+# Axes along which the reference qubit can be read (``nonlinear_task.target``).
+TARGETS = ("z", "x")
+# Hadamard: maps the X eigenbasis of R on its Z eigenbasis.
+_HADAMARD = np.array([[1.0, 1.0], [1.0, -1.0]], dtype=complex) / np.sqrt(2.0)
+
+
+def reference_bloch(psi: np.ndarray, axis: str) -> float:
+    """``<Z_R>`` or ``<X_R>`` of the reference qubit (qubit 0).
+
+    Raises:
+        ValueError: If ``axis`` is not one of :data:`TARGETS`.
+    """
+    if axis == "z":
+        return reference_z(psi)
+    if axis == "x":
+        half = psi.size // 2
+        return float(2.0 * np.real(np.vdot(psi[:half], psi[half:])))
+    raise ValueError(f"target must be one of {TARGETS}, got {axis!r}.")
+
+
+# Gate families of nonlinear_task.circuit, all built from the haar_circuit
+# block (N, depth, boundary, fixed_instance). The symmetric ones conserve a
+# quantity diagonal in Z (#288): u1 the charge, z2 the parity, dipole the
+# charge and the dipole, diagonal every Z_i.
+CIRCUITS: dict[str, Any] = {
+    "haar": HaarBrickworkCircuit,
+    "clifford": CliffordBrickworkCircuit,
+    "u1": U1BrickworkCircuit,
+    "z2": Z2BrickworkCircuit,
+    "dipole": DipoleCircuit,
+    "diagonal": DiagonalBrickworkCircuit,
+}
+
+
+def build_circuit(name: str, params: dict[str, Any], rng: np.random.Generator) -> Any:
+    """The circuit of family ``name`` (:data:`CIRCUITS`) with ``params``.
+
+    Raises:
+        ValueError: If the family is unknown.
+    """
+    if name not in CIRCUITS:
+        raise ValueError(f"circuit must be one of {tuple(CIRCUITS)}, got {name!r}.")
+    return CIRCUITS[name](params, rng)
+
+
 ENCODINGS = ("bell", "charge", "ghz", "w")
 
 
@@ -218,16 +278,28 @@ def initial_state(cfg: DictConfig, encoding: str) -> np.ndarray:
 
 def trajectory(
     psi0: np.ndarray,
-    circuit: HaarBrickworkCircuit,
+    circuit: Any,
     p: float,
     rng: np.random.Generator,
+    axis: str = "z",
 ) -> tuple[np.ndarray, float, float, float, np.ndarray]:
     """Run one trajectory from ``psi0``.
 
+    Args:
+        psi0: Initial state of ``R`` and the system.
+        circuit: Any circuit of :data:`CIRCUITS` (``N``, ``N_total``,
+            ``depth``, ``apply_layer``).
+        p: Measurement probability of each system qubit after each round.
+        rng: Generator of the measurements.
+        axis: ``"z"`` (default) or ``"x"``, the axis along which ``R`` is
+            read at the end.
+
     Returns:
-        ``(M, r_z, S_R, Y, psi)``: the record ``(depth, N)``, ``<Z_R>`` and
-        the entropy of ``R`` (bits) given the record, the Born outcome of
-        ``R``, +-1, and the state after that measurement.
+        ``(M, r, S_R, Y, psi)``: the record ``(depth, N)``, the Bloch
+        component of ``R`` along ``axis`` and its entropy (bits) given the
+        record, the Born outcome of ``R`` along ``axis``, +-1, and the state
+        after that measurement (for ``axis = "x"``, ``R`` is left in the Z
+        eigenstate of the outcome; the features of the system do not see it).
     """
     N, N_total = circuit.N, circuit.N_total
     psi = psi0
@@ -237,10 +309,12 @@ def trajectory(
         for k in range(N):
             if rng.random() < p:
                 psi, M[t, k] = measure_projective_psi(psi, k + 1, N_total, rng)
-    r_z = reference_z(psi)
+    r = reference_bloch(psi, axis)
     S_R = von_neumann_entropy(psi, [0])
+    if axis == "x":
+        psi = _apply_pauli(psi, _HADAMARD, 0, N_total)
     psi, Y = measure_projective_psi(psi, 0, N_total, rng)
-    return M, r_z, S_R, float(Y), psi
+    return M, r, S_R, float(Y), psi
 
 
 def _ridge(X_tr: np.ndarray, Y_tr: np.ndarray, X_te: np.ndarray) -> np.ndarray:
@@ -330,6 +404,12 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     T = depth_from_rule(task.depth_rule, N)
     want_quantum = bool(task.get("quantum_baseline", True))
     want_mlp = bool(task.get("mlp_reference", True))
+    family = str(task.get("circuit", "haar"))
+    axis = str(task.get("target", "z"))
+    if axis not in TARGETS:
+        raise ValueError(
+            f"nonlinear_task.target must be one of {TARGETS}, got {axis!r}."
+        )
 
     seed = int(cfg.seed)
     gate_rng = np.random.default_rng([seed, RNG_TAG, 0])
@@ -338,7 +418,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     assert isinstance(block, dict)
     params = {str(k): v for k, v in block.items()}
     params["depth"] = T
-    circuit = HaarBrickworkCircuit(params, gate_rng)
+    circuit = build_circuit(family, params, gate_rng)
     fixed = bool(params.get("fixed_instance", True))
     bell = AncillaBellPairEncoding.from_config(cfg)
     site = bell.site
@@ -356,7 +436,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     for i in tqdm(range(L)):
         if not fixed and i > 0:
             circuit.redraw(gate_rng)
-        M[i], r_z[i], S_R[i], Y[i], psi = trajectory(psi0, circuit, float(p[i]), rng)
+        M[i], r_z[i], S_R[i], Y[i], psi = trajectory(
+            psi0, circuit, float(p[i]), rng, axis
+        )
         if want_quantum:
             Q[i] = quantum_features(psi, N)
     elapsed = time.perf_counter() - start
@@ -373,6 +455,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         "T": float(T),
         "site": float(site),
         "fixed_instance": float(fixed),
+        "target_x": float(axis == "x"),
         "n_features_quantum": float(n_quantum),
         **{
             f"n_features_{mode}": float(features[f"ridge_{mode}"].shape[1])
