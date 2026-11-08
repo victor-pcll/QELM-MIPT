@@ -146,6 +146,22 @@ three bands of `p`, per gate family (rows) and encoding (columns); blue: the
 state carries the label, red: the record does. Bottom: accuracy of the full
 QELM. The X label: [`regime_map_x.png`](figures/regime_map_x.png).
 
+![The two regimes, accuracy](figures/two_regimes_haar_bell_z.png)
+![The two regimes, R2](figures/two_regimes_haar_bell_z_r2.png)
+
+**Figure 6. The two regimes of the starting task.** Haar U(4), Bell pair with
+the middle site, Z label, `N = 8`, `T = 16`, 10 fixed circuits, 8000
+trajectories per `p` (the run of `nonlinear_M`, `bell_T16_summary.json`). Test
+accuracy (top) and test R2 of the readout output (bottom) of the QELM on the
+state (blue), on `M` (red) and on both (orange). Background: blue for
+`p < p_x`, red for `p > p_x`, where `p_x` is the crossing of the state and `M`
+curves (0.065 for the accuracy, 0.062 for the R2). Below `p_x` the label is
+still in the final state and the record holds almost nothing (`R2(M) < 0.01`);
+above it the state is at chance (`R2 = 0`) and only the record reads the label,
+slowly (accuracy 0.54 at `p = 0.1`, 0.66 at `p = 1`; R2 0.012 and 0.13). The
+full QELM follows the better of the two. Produced by
+`experiments/symmetry_regimes/plot_two_regimes.py`.
+
 The other panels (`qelm_by_symmetry_<encoding>_<target>.png`) and the data
 (`summary.json`: every curve, and the band means of the regime maps) are in
 `figures/`.

@@ -172,3 +172,25 @@ def test_sweep_and_figures(tmp_path: Path) -> None:
     assert table["circuits"] == ["haar", "u1"]
     assert table["encodings"] == ["bell", "ghz"]
     assert np.asarray(table["0 < p <= 0.05"]["ridge_raw"]).shape == (2, 2)
+
+
+def test_two_regimes_crossing_and_figure(tmp_path: Path) -> None:
+    module = _load(FOLDER / "plot_two_regimes.py")
+    entry = {
+        "p": [0.0, 0.1, 0.2, 0.3],
+        "accuracy_ridge_quantum": [1.0, 0.8, 0.5, 0.5],
+        "accuracy_ridge_raw": [0.5, 0.6, 0.7, 0.8],
+    }
+    # State - M: 0.2 at p = 0.1, -0.2 at p = 0.2, so the crossing is 0.15.
+    assert module.crossing(entry) == pytest.approx(0.15)
+    with pytest.raises(ValueError):
+        module.crossing({**entry, "accuracy_ridge_raw": [0.4] * 4})
+    paths = module.main(["--out", str(tmp_path)])
+    assert [p.name for p in paths] == [
+        "two_regimes_haar_bell_z.png",
+        "two_regimes_haar_bell_z_r2.png",
+    ]
+    for path in paths:
+        assert path.stat().st_size > 0
+        data = json.loads(path.with_suffix(".json").read_text())
+        assert 0.0 < data["p_x"] < 0.1
