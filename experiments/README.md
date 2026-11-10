@@ -55,6 +55,8 @@ commands and every option of the launchers.
 | [`characteristic_p/`](characteristic_p/README.md) | crossing of the QELM with Bayes on `M` and minimum of the QELM, against `p N T`, four encodings | where the state readout hands over to the record (#285) |
 | [`pnt_decay/`](pnt_decay/README.md) | exact signal of the record-averaged state, light-cone volume `V_feat`, sampled noise, oracle linear readout and Gaussian prediction, Haar U(4) | why the state readout decays with `p N T` (#305) |
 | [`fourier_expressivity/`](fourier_expressivity/README.md) | exact Fourier coefficients of the record and readout features on the `3^N` Bloch monomials: rank, degree profile, `d_eff`, selection rules; Haar, U(1), Z2, Clifford | which functions of the input the QELM can read across the MIPT (#309) |
+| [`operator_cones/`](operator_cones/README.md) | operator light cones of monitored Haar U(4) circuits: outcome-averaged Pauli weight (N = 41), exact trajectory-resolved Pauli weight of a reference qubit and purification (N = 8, 10), Krylov chain of the Floquet channel, Parker et al. `b_n`, one operator in the circuits of #314 (exact span N <= 7, one sampled branch N = 10, 12) | does operator growth (OTOC, Krylov) see the MIPT (#315) |
+| [`effect_rank/`](effect_rank/README.md) | exact rank of the effect space against `p`, one fixed circuit and mask per seed, Haar / U(1) / Z2 / Clifford, angle and dense encodings | which functions of the input the record can reach at all (#313) |
 | [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
 | [`clifford_state_readout/`](clifford_state_readout/README.md) | `S_R` and purity of the reference qubit from the final Clifford state, ridge / quadratic / MLP | can a readout of the state probe purification (#292) |
 | [`symmetry_regimes/`](symmetry_regimes/README.md) | QELM on the state, on `M` and on both, and Bayes on `M`, for six gate families (Haar, Clifford, U(1), Z2, dipole, diagonal), four encodings and the Z or X label of `R` | which tasks put the label in the state, which in the record (#311) |
@@ -1439,6 +1441,38 @@ above 1), `SKIP_DONE=1` (resume), `OUT_ROOT` / `OUT_DIR`. Each run writes
 its log next to it and is listed in `failed_runs.txt`. Cost per run at
 `N = 10`, `T = 40`: about 4 minutes of exact evolution and 15 minutes of
 trajectories.
+
+## Run the effect-space rank against p (issue #313)
+
+[`effect_rank/`](effect_rank/README.md) runs
+`experiments/effect_rank/effect_rank.py` once per size `N` and seed: one
+circuit per class (Haar, U(1), Z2, Clifford), depth `T = N`, and one fixed
+mask per seed, nested across `p` = 0, 0.05, ..., 1. Each run writes
+`N<N>_seed<seed>.json` (or `N<N>_seed<seed>_<classes>.json` with `--kinds`):
+
+```bash
+# the campaign of the README: N = 3 to 7 for all classes, N = 8 for U(1)
+# and Clifford, 10 seeds, then the figures in outputs/effect_rank/figures
+./experiments/effect_rank/effect_rank.sh
+
+# one run by hand
+uv run python experiments/effect_rank/effect_rank.py --n 6 --seed 0 \
+  --out outputs/effect_rank
+uv run python experiments/effect_rank/effect_rank.py --n 8 --seed 0 \
+  --kinds u1 clifford --out outputs/effect_rank
+
+# figures and summaries only
+uv run python experiments/effect_rank/plot_effect_rank.py outputs/effect_rank \
+  --out outputs/effect_rank/figures
+```
+
+Options of the launcher (environment variables): `OUT_DIR` (default
+`outputs/effect_rank`), `SIZES` (all classes, default `"3 4 5 6 7"`), `SEEDS`
+(default 0 to 9), `LARGE_SIZES` (default `8`) and `LARGE_KINDS` (classes run
+at those sizes, default `"u1 clifford"`). Runs that have their JSON are
+skipped. Options of the script: `--depth` (default `T = N`), `--p-step`
+(default 0.05), `--kinds`. Cost on 4 cores, per seed: seconds up to `N = 6`,
+about 10 minutes at `N = 7` (Haar), about 20 minutes at `N = 8` (U(1)).
 
 ## Check the chaos and the locality of the reservoirs (issue #243)
 
