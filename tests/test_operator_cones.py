@@ -272,6 +272,8 @@ def test_scripts_run_end_to_end(
         ],
         ["krylov", "--N", "4", "--n-max", "6", "--seeds", "2", "--p", p],
         ["parker", "--N", "5", "--n-max", "6"],
+        ["single", "--N", "3", "--seeds", "2", "--rank", "--p", p],
+        ["single", "--N", "4", "--seeds", "2", "--p", p],
     ]
     for cmd in commands:
         monkeypatch.setattr(sys, "argv", ["x", *cmd, "--out", str(tmp_path)])
@@ -286,6 +288,8 @@ def test_scripts_run_end_to_end(
         "otoc_trajectory_purification",
         "krylov_cones",
         "krylov_coefficients",
+        "single_operator_cones",
+        "single_operator_growth",
     ):
         assert (tmp_path / f"{name}.png").exists()
 
@@ -298,3 +302,24 @@ def test_trajectory_system_entropy() -> None:
     r = trajectory_cones(N, 6, 0.5, 4, np.random.default_rng(14))
     s = r.per_traj_system_entropy
     assert s[:, -1].mean() < N
+
+
+# --- C: one operator in the circuits of the effect rank (PR #314) ----------
+
+
+def test_single_operator_span_unitary_and_bounded_by_effect_rank() -> None:
+    from QELM.evaluation.effect_rank import draw_circuit, effect_rank
+    from QELM.evaluation.operator_cones import single_operator_span
+
+    n = 4
+    circuit = draw_circuit("haar", n, n, np.random.default_rng(20))
+    u = np.random.default_rng(21).random((n, n))
+    r0 = single_operator_span(circuit, u < 0.0, 2)
+    np.testing.assert_array_equal(r0.dims, 1)
+    np.testing.assert_allclose(r0.averaged_norm, 1.0)
+    np.testing.assert_allclose(r0.density, r0.averaged_density, atol=1e-12)
+    for p in (0.2, 0.5, 1.0):
+        r = single_operator_span(circuit, u < p, 2)
+        assert r.dims[-1] <= effect_rank(circuit, u < p).dense
+        assert np.all(np.diff(r.averaged_norm) <= 1e-12)
+        assert np.all(np.nan_to_num(r.density) <= 1 + 1e-12)

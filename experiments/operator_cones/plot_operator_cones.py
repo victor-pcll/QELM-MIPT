@@ -327,6 +327,85 @@ def plot_coefficients(main: dict, parker: dict | None, out: Path) -> None:
     plt.close(fig)
 
 
+def plot_single(main: dict, others: list[dict], out: Path) -> None:
+    """One operator in the circuits of the effect rank (PR #314)."""
+    N, T, x0 = main["N"], main["T"], main["x0"]
+    S = 2 * T
+    fig, axes = subplots(2, 3, figsize=(17, 10.5))
+    axes = axes.ravel()
+    im = None
+    for ax, p in zip(axes[:5], P_MAIN):
+        run = _run_at(main, p)
+        im = _heat(ax, np.asarray(run["density"]), x0)
+        ax.set_xlim(-x0 - 0.5, N - 1 - x0 + 0.5)
+        ax.set_ylim(-0.5, S + 0.5)
+        ax.set_xlabel(r"$x - x_0$")
+        ax.set_ylabel("half-layers before the final readout")
+        ax.set_title(f"p = {run['p']:g}")
+        top = ax.twiny()
+        top.plot(run["log2_dim_mean"], np.arange(S + 1), color="cyan", lw=2)
+        top.set_xlim(0, 2 * N)
+        top.set_xlabel(r"$\log_2$ dim of the span (cyan)", color="cyan")
+    assert im is not None
+    fig.colorbar(im, ax=axes[:5].tolist(), shrink=0.6, label=r"$\rho(x)$ of the span")
+    ax = axes[5]
+    for k, data in enumerate(sorted([main] + others, key=lambda d: d["N"])):
+        runs = _runs(data)
+        p = np.array([r["p"] for r in runs])
+        ax.plot(
+            p,
+            [r["log2_dim_mean"][-1] for r in runs],
+            "o-",
+            color=COLORS[k],
+            label=f"one operator, N = {data['N']}",
+        )
+        if runs[0]["effect_rank"]:
+            ax.plot(
+                p,
+                [np.mean(np.log2(r["effect_rank"])) for r in runs],
+                "s--",
+                color=COLORS[k],
+                alpha=0.7,
+                label=f"effect rank #314, N = {data['N']}",
+            )
+    ax.axvline(P_C, color="0.5", ls="--", lw=1)
+    ax.set_xlabel("p")
+    ax.set_ylabel(r"$\langle \log_2 \dim \rangle$ after T = N layers")
+    ax.legend(loc="upper left", fontsize=9)
+    ax.set_title("summary")
+    fig.suptitle(
+        f"One operator $Z_{{x_0}}$ in the circuits and masks of PR #314, Haar U(4), "
+        f"N = {N}, T = N, {main['seeds']} circuits"
+    )
+    fig.savefig(out / "single_operator_cones.png", bbox_inches="tight")
+    plt.close(fig)
+
+    fig, axes = subplots(1, 3, figsize=(18, 5.2))
+    s_ax = np.arange(S + 1)
+    for k, p in enumerate(P_MAIN):
+        run = _run_at(main, p)
+        axes[0].plot(
+            s_ax, run["log2_dim_mean"], color=COLORS[k], label=f"p = {run['p']:g}"
+        )
+        axes[1].semilogy(s_ax, np.maximum(run["averaged_norm"], 1e-16), color=COLORS[k])
+        D = np.asarray(run["averaged_density"])[-1]
+        axes[2].plot(np.arange(N) - x0, D, "o-", color=COLORS[k])
+    axes[0].set_xlabel("half-layers before the final readout")
+    axes[0].set_ylabel(r"$\langle \log_2 \dim \rangle$")
+    axes[0].set_title(f"record-resolved: the span grows, N = {N}")
+    axes[0].legend()
+    axes[1].set_xlabel("half-layers before the final readout")
+    axes[1].set_ylabel(r"$\|Z_{x_0}\|^2$ under the averaged channel")
+    axes[1].set_title("outcome-averaged: one operator, norm lost")
+    axes[2].set_xlabel(r"$x - x_0$")
+    axes[2].set_ylabel(r"$\rho(x)$, averaged channel, input time")
+    axes[2].axhline(RHO_SAT, color="0.6", ls=":")
+    axes[2].set_title("averaged operator at the input")
+    fig.tight_layout()
+    fig.savefig(out / "single_operator_growth.png", bbox_inches="tight")
+    plt.close(fig)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--data", type=Path, default=Path("outputs/operator_cones"))
@@ -351,6 +430,12 @@ def main() -> None:
     if kry:
         plot_krylov(kry[-1], kry[:-1], out)
         plot_coefficients(kry[-1], _load(args.data / "parker.json"), out)
+    single = sorted(
+        (d for d in (_load(f) for f in args.data.glob("single_N*.json")) if d),
+        key=lambda d: d["N"],
+    )
+    if single:
+        plot_single(single[-1], single[:-1], out)
     print(f"figures in {out}")
 
 

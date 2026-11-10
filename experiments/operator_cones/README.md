@@ -27,7 +27,7 @@ at N <= 10 they cross over smoothly too.
 | Control parameter | `p` in {0, 0.05, 0.17, 0.35, 0.65} for the five-panel figures; grid {0, 0.025, 0.05, 0.1, 0.13, 0.17, 0.21, 0.25, 0.35, 0.5, 0.65} for the summaries |
 | Initial operator | `Z` on the middle site `x0 = N // 2` (A1, B); Pauli images of a reference qubit `R` maximally entangled with `x0` (A2) |
 | ML task | none: a diagnostic of the reservoir dynamics |
-| Issues / PRs | #315; reuses `brickwork_bonds` of #243 (`QELM.evaluation.chaos_locality`) |
+| Issues / PRs | #315; reuses `brickwork_bonds` of #243 (`QELM.evaluation.chaos_locality`) and the effect-rank recursion of #313 / PR #314 (`QELM.evaluation.effect_rank`) |
 
 ## Methodology
 
@@ -83,6 +83,23 @@ no exponential growth of `K`, the maximally chaotic case is `K(t) = t`. For
 slowest mode of `Phi` (modulus `|lambda_1|`, from the Ritz values) and
 `K(t)` saturates: this is the truncation of the Krylov chain by the
 measurements. `Phi` is again the outcome-averaged dynamics, linear.
+
+**C. One operator in the circuits of the effect rank (PR #314)**
+(`single_operator_span`, subcommand `single`). Same Haar circuits, same
+fixed masks and same seeds as `experiments/effect_rank` (depth `T = N`, one
+layer = even then odd bonds, then the measurements), but the backward
+(Heisenberg) recursion of #314 starts from the one operator `Z_{x0}` of the
+final readout instead of the whole readout `{I, Z}^N`. A gate rotates the
+operator; a measurement of site `i` splits `E = I (x) A + Z (x) B + ...` into
+the two branches `P_0 (x) (A + B)` and `P_1 (x) (A - B)`, one per outcome.
+The record-resolved images of the operator span a space whose dimension is
+recorded after every half-layer, with its Pauli-weight density (mean over an
+orthonormal basis, basis independent). Next to it, the same operator under
+the outcome-averaged channel of B (`E -> I (x) A + Z (x) B`): one operator
+that only loses norm. This is the single-operator view of #314; a Krylov
+chain proper does not exist here, since the gates and the mask change from
+layer to layer. N = 5, 6 (with the dense rank of #314 on the same circuits)
+and 7, 10 seeds.
 
 **Parker reference** (`liouvillian_lanczos`, `free_fermion_lanczos`).
 Lanczos coefficients of `X_{N/2}` under the Ising chain `H = - sum Z Z -
@@ -144,6 +161,25 @@ time as in the docstring of `operator_cones.py`.
   0.65 at N = 8; the slowest mode has `|lambda_1|` = 0.77, 0.60, 0.48, 0.44
   for `p > 0`. N = 6 gives the same values within 10 % (Figure 4, Figure 5). The saturated `K` and the decay rate
   `-ln |lambda_1|` vary smoothly through `p_c`.
+- **C, one operator in the dynamics of #314: the measurements make it
+  branch.** Followed backwards with its record-resolved branches, the one
+  operator `Z_{x0}` stays one operator at `p = 0` (dimension 1) and
+  spreads in space as usual. Each measurement splits it into one branch per
+  outcome, so the dimension of its span grows layer after layer (Figure 6):
+  after `T = N` layers, geometric mean over 10 circuits, 1, 3, 30, 158, 79
+  at N = 5 and 1, 4, 208, 1261, 676 at N = 7 for `p` = 0, 0.05, 0.17, 0.35,
+  0.65. It peaks at `p ~ 0.35` and falls at larger `p`, where measurements
+  repeat on the same sites and branches coincide. Against the full effect
+  rank of #314 on the same circuits and masks (N = 5, 6), one operator
+  reaches a small fraction of it at small `p` (30 of 181 at N = 5, 74 of 724
+  at N = 6, `p = 0.17`), almost all of it at `p = 0.35` (158 of 181, 416 of
+  478) and exactly all of it for `p >= 0.5`: in the area-law regime, one
+  final operator and its branches already generate every function of the
+  input that the record can read. Under the outcome-averaged channel the
+  same operator only loses norm (`||Z_{x0}||^2` = 1, 0.51, 0.059, 0.0017,
+  2e-5 at N = 7): averaging over outcomes erases exactly the branching that
+  makes the rank of #314 rise. This is why the Krylov chain of B, built on
+  the averaged channel, shows only the truncation and never the peak.
 - **Parker et al. reproduced.** For the chaotic Ising chain at N = 10,
   `b_n` grows linearly, slope `alpha = 0.39` for `n = 6..25`, up to a
   finite-size plateau `b ~ 15` at `n ~ 33`; the integrable chain saturates
@@ -222,3 +258,26 @@ against `t` with the bound `K = t` (grey dashed). (c) Reference of Parker
 et al.: Lanczos `b_n` of `X_{N/2}` in the Ising chain, chaotic (`h_z = 0.5`,
 solid, N = 8 and 10) and integrable (`h_z = 0`, dashed, N = 8, 10, 200).
 `plot_operator_cones.py`, issue #315.
+
+![One operator in the circuits of #314](figures/single_operator_cones.png)
+
+**Figure 6. One operator `Z_{x0}` in the circuits and masks of PR #314, N =
+7.** Five panels: Pauli-weight density of the span of the record-resolved
+images of `Z_{x0}` (color, 0 to 3/4) against `x - x0` and the number of
+half-layers before the final readout (0 at the readout, `2T` at the
+input), mean over 10 circuits; cyan curve, top axis: mean `log2` of the
+dimension of the span. A measured site adds the projectors `P_0, P_1`, of
+weight 1/2 on that site, so weight appears off the light cone at `p > 0`.
+Summary panel: mean `log2 dim` after `T = N` layers against `p` for N = 5, 6,
+7 (solid) and the dense effect rank of #314 on the same circuits and masks
+for N = 5, 6 (dashed); vertical dashed line `p_c = 0.17`.
+`plot_operator_cones.py`, issue #315, PR #314.
+
+![Branching against averaging](figures/single_operator_growth.png)
+
+**Figure 7. Branching against averaging, N = 7.** (a) Mean `log2` of the
+dimension of the span against the half-layers before the readout, for the
+five `p`. (b) Squared norm of the same operator under the outcome-averaged
+channel (log scale). (c) Pauli-weight density of the averaged operator at
+the input against `x - x0` (dotted: 3/4). `plot_operator_cones.py`,
+issue #315.

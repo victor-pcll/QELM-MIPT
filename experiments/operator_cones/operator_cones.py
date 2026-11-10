@@ -42,6 +42,7 @@ from QELM.evaluation.operator_cones import (
     krylov_wavefunction,
     liouvillian_lanczos,
     pauli_weight_chain,
+    single_operator_span,
     site_operator,
     slowest_mode_modulus,
     trajectory_cones,
@@ -215,6 +216,51 @@ def run_krylov(args: argparse.Namespace) -> None:
     )
 
 
+def run_single(args: argparse.Namespace) -> None:
+    """One operator in the circuits and masks of the effect rank (PR #314).
+
+    Same draws as ``experiments/effect_rank/effect_rank.py``: for each seed,
+    ``u = default_rng((seed, N, 1000)).random((T, N))``, mask ``u < p``,
+    Haar circuit from ``default_rng((seed, N, 0))``, depth ``T = N``. With
+    ``--rank``, the dense effect rank of #314 on the same circuit and mask.
+    """
+    from QELM.evaluation.effect_rank import draw_circuit, effect_rank
+
+    N, T = args.N, args.N
+    runs = {}
+    for p in sorted(set(args.p)):
+        t0 = time.time()
+        dims, dens, adens, anorm, ranks = [], [], [], [], []
+        for seed in range(args.seeds):
+            u = np.random.default_rng((seed, N, 1000)).random((T, N))
+            circuit = draw_circuit("haar", N, T, np.random.default_rng((seed, N, 0)))
+            r = single_operator_span(circuit, u < p, N // 2)
+            dims.append(r.dims)
+            dens.append(r.density)
+            adens.append(r.averaged_density)
+            anorm.append(r.averaged_norm)
+            if args.rank:
+                ranks.append(effect_rank(circuit, u < p).dense)
+        d = np.asarray(dims, dtype=float)
+        runs[f"{p:g}"] = {
+            "p": p,
+            "dims": d.tolist(),
+            "log2_dim_mean": np.log2(d).mean(axis=0).tolist(),
+            "density": np.nanmean(dens, axis=0).tolist(),
+            "averaged_density": np.nanmean(adens, axis=0).tolist(),
+            "averaged_norm": np.mean(anorm, axis=0).tolist(),
+            "effect_rank": ranks,
+        }
+        print(
+            f"single N={N} p={p:g}: {time.time() - t0:.0f} s, dim={d[:, -1].mean():.0f}"
+        )
+    _write(
+        args.out,
+        f"single_N{N}.json",
+        {"N": N, "T": T, "x0": N // 2, "seeds": args.seeds, "runs": runs},
+    )
+
+
 def run_parker(args: argparse.Namespace) -> None:
     """Lanczos ``b_n`` of ``X_{N/2}`` in the Ising chain, chaotic and integrable.
 
@@ -265,6 +311,13 @@ def main() -> None:
     k.add_argument("--seeds", type=int, default=10)
     k.add_argument("--p", type=_floats, default=_floats(grid), help=p_help)
     k.set_defaults(func=run_krylov)
+
+    g = sub.add_parser("single", parents=[common])
+    g.add_argument("--N", type=int, default=7)
+    g.add_argument("--seeds", type=int, default=10)
+    g.add_argument("--rank", action="store_true", help="also the #314 rank")
+    g.add_argument("--p", type=_floats, default=_floats(grid), help=p_help)
+    g.set_defaults(func=run_single)
 
     q = sub.add_parser("parker", parents=[common])
     q.add_argument("--N", type=int, default=10)
