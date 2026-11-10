@@ -856,4 +856,3 @@ def single_branch(
             vec = apply_gate(vec, n, left_site, transfer)
         dens.append(_span_density(vec, n))
     return np.asarray(dens)
-
