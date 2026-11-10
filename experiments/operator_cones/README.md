@@ -115,21 +115,34 @@ time as in the docstring of `operator_cones.py`.
   with the time at which one looks; it is not a phase transition and does
   not sit at `p_c = 0.17` (Figure 1). The pasted figure's "collapse at
   `p_c`" is not reproduced.
-- **A2, trajectory-resolved: the cone does not narrow, it empties.** At N =
-  8, the normalized profile `E[w rho] / E[w]` at t = N/2 stays flat and
-  scrambled across the chain (maximum 0.69 at `p = 0`, 0.67 at `0.17`, 0.63
-  at `0.65`): the quantum part of the image of `R`, when it survives, is
-  spread over the whole system. What changes with `p` is its weight, `E[w]`
-  at t = N/2 = 1, 0.71, 0.31, 0.11, 0.01 for `p` = 0, 0.05, 0.17, 0.35, 0.65
-  (Figures 2 and 3). The purification order parameter `S_sys / N` at
-  `t = 1.5 N` falls smoothly, 1, 0.63, 0.23, 0.03, 0.00 at N = 8;
-  N10_PLACEHOLDER
+- **A2, trajectory-resolved: the cone does not narrow, it empties.** The
+  normalized profile `E[w rho] / E[w]` at `t = N/2` keeps the same shape and
+  height for all `p` (maximum 0.72 at `p = 0`, 0.68 at `0.17`, 0.65 at
+  `0.65` for N = 10): the quantum part of the image of `R`, when it
+  survives, is as spread as at `p = 0`. What changes with `p` is its weight,
+  `E[w]` at `t = N/2` = 1, 0.57, 0.24, 0.06, 0.003 for `p` = 0, 0.05, 0.17,
+  0.35, 0.65 at N = 10 (Figures 2 and 3). The width of the absolute cone
+  `E[w rho] >= 3/8` thus vanishes already at `p = 0.1` for both sizes, a
+  threshold effect of the decaying weight, not a geometric collapse at
+  `p_c`. The purification order parameter `S_sys / N` at `t = 1.5 N` falls
+  smoothly, 1, 0.57, 0.18, 0.01, 0.00 at N = 10 (1, 0.63, 0.23, 0.03, 0.00 at
+  N = 8). The N = 10 curve lies below the N = 8 curve at every `p > 0`: no
+  crossing at these sizes and times, so N <= 10 and `t = 1.5 N` cannot
+  locate the purification transition (its signature is a purification time
+  exponential in N for `p < p_c`, which needs longer times and larger N, for
+  instance with Clifford circuits). The entropy of `R` does not go to zero
+  at large `p` (0.50 bits at `p = 0.65`): with the other sites at infinite
+  temperature, the measurements swap the entanglement of `R` onto the
+  purifier of the system, which no measurement reaches.
 - **B, Krylov: the measurements truncate the Krylov chain, smoothly.** At
   `p = 0` the Floquet Haar circuit is maximally chaotic in the Krylov sense:
   `h_{n+1,n} = 1.000` and `K(t) = t` (57.8 at t = 59 for N = 6), the wave
   packet rides the light cone `n = t` of the chain. For `p > 0`, `K(t)`
   saturates and the packet stays in a band of the first `~ 2 K` sites:
-  KRYLOV_PLACEHOLDER (Figure 4). The saturated `K` and the decay rate
+  `K(t = 59)` = 58.9, 34.6, 15.2, 7.9, 5.3 and the hopping plateau
+  `h_{n+1,n}` = 1.00, 0.69, 0.44, 0.25, 0.09 for `p` = 0, 0.05, 0.17, 0.35,
+  0.65 at N = 8; the slowest mode has `|lambda_1|` = 0.77, 0.60, 0.48, 0.44
+  for `p > 0`. N = 6 gives the same values within 10 % (Figure 4, Figure 5). The saturated `K` and the decay rate
   `-ln |lambda_1|` vary smoothly through `p_c`.
 - **Parker et al. reproduced.** For the chaotic Ising chain at N = 10,
   `b_n` grows linearly, slope `alpha = 0.39` for `n = 6..25`, up to a
