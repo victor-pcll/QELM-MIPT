@@ -438,7 +438,8 @@ def plot_branch(main: dict, others: list[dict], out: Path) -> None:
     for k, data in enumerate(sorted([main] + others, key=lambda d: d["N"])):
         runs = [r for r in _runs(data) if any(np.isclose(r["p"], q) for q in P_MAIN)]
         p = [r["p"] for r in runs]
-        for s, ls, mk in ((2, "--", "s"), (data["N"] // 2, "-", "o")):
+        # Second time: N / 2 half-layers, at most 8 (MPS rows are exact up to 8).
+        for s, ls, mk in ((2, "--", "s"), (min(data["N"] // 2, 8), "-", "o")):
             ax.errorbar(
                 p,
                 [r["size"][s] / data["N"] for r in runs],

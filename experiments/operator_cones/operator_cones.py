@@ -271,29 +271,46 @@ def run_branch(args: argparse.Namespace) -> None:
     records per circuit. Cheap at ``N = 10`` for every ``p``. With
     ``--chi`` the operator is a truncated MPS (:func:`single_branch_mps`),
     for ``N`` beyond the dense ``4**N`` vector; the mean discarded weight is
-    saved with the map.
+    saved with the map, and each finished circuit is cached so that a rerun
+    resumes.
     """
     from QELM.evaluation.effect_rank import draw_circuit
 
     N, T = args.N, args.N
     runs = {}
+    # MPS runs are long: each circuit is saved as it ends, and a rerun with
+    # the same arguments resumes from there (and merges runs split over p).
+    parts = Path(args.out) / f"branch_N{N}_chi{args.chi}_parts"
+    if args.chi:
+        parts.mkdir(parents=True, exist_ok=True)
     for p in sorted(set(args.p)):
         t0 = time.time()
         dens: list[np.ndarray] = []
         lost: list[np.ndarray] = []
         bonds: list[np.ndarray] = []
-        for seed in range(args.seeds):
+        for seed in range(args.seed_from, args.seeds):
+            part = parts / f"p{p:g}_seed{seed}_b{args.branches}.npz"
+            if part.exists():
+                with np.load(part) as z:
+                    dens += list(z["density"])
+                    lost += list(z["discarded"]) if args.chi else []
+                    bonds += list(z["max_bond"]) if args.chi else []
+                continue
             u = np.random.default_rng((seed, N, 1000)).random((T, N))
             circuit = draw_circuit("haar", N, T, np.random.default_rng((seed, N, 0)))
             rng = np.random.default_rng((seed, N, 2000))
+            d, lo, bo = [], [], []
             for _ in range(args.branches):
                 if args.chi:
                     r = single_branch_mps(circuit, u < p, N // 2, rng, args.chi)
-                    dens.append(r.density)
-                    lost.append(r.discarded)
-                    bonds.append(r.max_bond)
+                    d.append(r.density)
+                    lo.append(r.discarded)
+                    bo.append(r.max_bond)
                 else:
-                    dens.append(single_branch(circuit, u < p, N // 2, rng))
+                    d.append(single_branch(circuit, u < p, N // 2, rng))
+            if args.chi:
+                np.savez(part, density=d, discarded=lo, max_bond=bo)
+            dens, lost, bonds = dens + d, lost + lo, bonds + bo
         D = np.asarray(dens)
         runs[f"{p:g}"] = {
             "p": p,
@@ -382,6 +399,9 @@ def main() -> None:
     b.add_argument("--seeds", type=int, default=10)
     b.add_argument("--branches", type=int, default=5, help="records per circuit")
     b.add_argument("--chi", type=int, default=0, help="MPS bond (0: dense vector)")
+    b.add_argument(
+        "--seed-from", dest="seed_from", type=int, default=0, help="first seed"
+    )
     b.add_argument("--p", type=_floats, default=_floats(grid), help=p_help)
     b.set_defaults(func=run_branch)
 

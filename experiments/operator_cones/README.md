@@ -23,7 +23,7 @@ at N <= 10 they cross over smoothly too.
 | Script(s) | `experiments/operator_cones/operator_cones.py` (subcommands `chain`, `traj`, `krylov`, `single`, `branch`, `parker`), launcher `operator_cones.sh`, figures `plot_operator_cones.py` |
 | Module | `QELM.evaluation.operator_cones` |
 | Physical model | open brickwork chain of Haar U(4) gates, one half-layer per time step (`v_LR = 1` site per step), each qubit measured in Z with probability `p` after every half-layer, as in Zabalo et al., PRB 101, 060301 (2020) |
-| System sizes `N` | 41 (A1), 8 and 10 (A2), 6 and 8 (B), 5 to 7 (C), 10 and 12 (C, one branch), 8 and 10 (Parker reference) |
+| System sizes `N` | 41 (A1), 8 and 10 (A2), 6 and 8 (B), 5 to 7 (C), 10, 12 and 20 (C, one branch; 20 as an MPS), 8 and 10 (Parker reference) |
 | Control parameter | `p` in {0, 0.05, 0.17, 0.35, 0.65} for the five-panel figures; grid {0, 0.025, 0.05, 0.1, 0.13, 0.17, 0.21, 0.25, 0.35, 0.5, 0.65} for the summaries |
 | Initial operator | `Z` on the middle site `x0 = N // 2` (A1, B); Pauli images of a reference qubit `R` maximally entangled with `x0` (A2) |
 | ML task | none: a diagnostic of the reservoir dynamics |
@@ -111,7 +111,13 @@ of A2) and renormalized. The result is the single operator of one record,
 a vector of `4^N` numbers, whose Pauli-weight map `(x, t)` is averaged over
 10 circuits x 5 records (same circuits, masks and seeds as C). This gives
 the cone at N = 10 (11 values of `p`) and N = 12 (the five `p`), but not
-the dimension curve.
+the dimension curve. At N = 20 the `4^N` vector (8 TB) is replaced by a
+real MPS of the Pauli coefficients (`single_branch_mps`, `--chi 256`):
+each gate is applied to two sites and truncated to the 256 largest Schmidt
+values, then renormalized, and the discarded weight is accumulated. At
+full bond it equals `single_branch` to rounding (tested); against the exact
+N = 12 branch at bond 256 it is exact up to 9 half-layers at `p = 0`.
+Each finished circuit is cached, so a run resumes after an interruption.
 
 **Parker reference** (`liouvillian_lanczos`, `free_fermion_lanczos`).
 Lanczos coefficients of `X_{N/2}` under the Ising chain `H = - sum Z Z -
@@ -209,6 +215,20 @@ time as in the docstring of `operator_cones.py`.
   agree. A single branch is the operator of one record and does not see
   how many records there are: the branching that makes the rank of #314
   rise is visible only in the span (Figures 6 and 7).
+- **C, one branch at N = 20 (MPS, bond 256).** Up to 8 half-layers before
+  the readout the truncation is negligible at every `p` (discarded weight
+  below 0.006), and the picture of N = 10 and 12 holds (Figure 10). At `p =
+  0` the front moves at about 0.6 site per half-layer (size 2.7 and 8.0 at 2
+  and 8 half-layers), and with measurements the edges fill (size 2.7, 3.3,
+  5.8, 7.7, 10.9 at 2 half-layers for the five `p`). Further back, the bond
+  256 is far too small at `p <= 0.17` (the operator of a volume-law branch
+  needs a bond up to `4^10`): the discarded weight exceeds 1 % from 9
+  half-layers on, and the hatched rows of Figure 10 are not reliable (at `p
+  = 0` the size drops to 0.46 N instead of 3/4 N). At `p = 0.35` the
+  truncation stays small up to 15 half-layers (6.8 % discarded at the
+  input), and at `p = 0.65` it is negligible over the whole circuit (bond
+  256 is never limiting): in the area-law regime, the single branch of one
+  record has bounded operator entanglement.
 - **Parker et al. reproduced.** For the chaotic Ising chain at N = 10,
   `b_n` grows linearly, slope `alpha = 0.39` for `n = 6..25`, up to a
   finite-size plateau `b ~ 15` at `n ~ 33`; the integrable chain saturates
@@ -321,11 +341,20 @@ operator of one record (color, 0 to 3/4) against `x - x0` and the
 half-layers before the final readout (0 at the readout, `2T = 20` at the
 input), mean over 10 circuits x 5 records; cyan dashed: light cone `|x -
 x0| = t`. Summary panel: size `sum_x rho / N` against `p`, two half-layers
-(dashed) and `N / 2` half-layers (solid) before the readout, for N = 10 and
-12; dotted: 3/4; vertical dashed line `p_c = 0.17`. `plot_operator_cones.py`,
+(dashed) and `min(N / 2, 8)` half-layers (solid) before the readout, for N
+= 10, 12 and 20; dotted: 3/4; vertical dashed line `p_c = 0.17`. `plot_operator_cones.py`,
 issue #315.
 
 ![One branch, N = 12](figures/single_operator_branch_N12.png)
 
 **Figure 9. Same as Figure 8 at N = 12** (`2T = 24`, 10 circuits x 5
 records, five values of `p`). `plot_operator_cones.py`, issue #315.
+
+![One branch, N = 20](figures/single_operator_branch_N20.png)
+
+**Figure 10. Same as Figure 8 at N = 20, operator as an MPS of bond 256**
+(`2T = 40`, 10 circuits x 5 records). Hatched rows, above the white line:
+mean discarded weight above 0.01, not reliable (from 9 half-layers at `p <=
+0.17`, 16 at `p = 0.35`, never at `p = 0.65`). The summary panel uses 2 and
+`min(N / 2, 8)` half-layers, inside the reliable rows. `plot_operator_cones.py`,
+issue #315.

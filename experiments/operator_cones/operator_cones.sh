@@ -15,7 +15,9 @@
 #
 # Cost on 4 cores, about: chain 10 s, parker 1 min, trajectories N = 8
 # 8 min and N = 10 45 min, Krylov N = 8 6 min and N = 6 1 min, one operator
-# N <= 7 about 20 min, one branch N = 10 7 min and N = 12 about 90 min.
+# N <= 7 about 20 min, one branch N = 10 7 min, N = 12 about 90 min and
+# N = 20 (MPS, bond 256) about 9 h on one core (3 h when the (p, seed)
+# pairs are split over 4 processes with --seed-from).
 
 set -euo pipefail
 
@@ -45,5 +47,6 @@ uv run python "$SCRIPT" single --N 6 --rank --out "$OUT_DIR"
 uv run python "$SCRIPT" single --N 7 --out "$OUT_DIR"
 uv run python "$SCRIPT" branch --N 10 --out "$OUT_DIR"
 uv run python "$SCRIPT" branch --N 12 --p 0,0.05,0.17,0.35,0.65 --out "$OUT_DIR"
+uv run python "$SCRIPT" branch --N 20 --chi 256 --p 0,0.05,0.17,0.35,0.65 --out "$OUT_DIR"
 uv run python experiments/operator_cones/plot_operator_cones.py --data "$OUT_DIR"
 echo "Done: $OUT_DIR"
