@@ -77,16 +77,18 @@ rank `2^10` alone would take 8 GB.
 - **Angle encoding, near the bound.** At the peak, the angle rank reaches a
   fraction of its bound that grows with `N` for Haar (0.69, 0.76, 0.78, 0.86,
   0.89 of `3^N` from `N = 3` to 7) and Z2 (0.84 to 0.95 of `(3^N + 1) / 2`).
-  U(1) stays near 0.6 of the same bound (0.67 at `N = 3`, 0.60 at `N = 7` and
-  `N = 8`): with the same bound as Z2, U(1) reaches less of it.
+  U(1) stays between 0.53 and 0.68 of the same bound with no trend (0.67 at
+  `N = 3`, 0.60 at `N = 7`, 0.65 at `N = 8`): with the same bound as Z2, U(1)
+  reaches less of it.
 - **Dense encoding, far from the bound.** The dense fraction falls with `N`:
-  0.31 to 0.17 of `4^N` for Haar, 0.47 to 0.15 of `C(2N, N)` for U(1), 0.43
+  0.31 to 0.17 of `4^N` for Haar, 0.47 to 0.17 of `C(2N, N)` for U(1), 0.43
   to 0.19 of `4^N / 2` for Z2 (`N = 3` to 7, U(1) to 8). A fixed mask leaves
   most of the `4^N` directions out of reach.
 - **Clifford.** The dense rank is exactly `2^N` for every `p` and seed: the
   effects stay in the span of one stabilizer group. The angle rank is far
-  below `2^N` (5 at `N = 3`, about 30 to 70 at `N = 7, 8` against 128, 256),
-  with no clear peak.
+  below `2^N` (about 4 at `N = 3`, 16 to 34 at `N = 7` and 25 to 46 at
+  `N = 8`, against 128 and 256), with no clear peak and large spread between
+  circuits.
 - **Caveats.** Ranks are exact up to a relative tolerance of `10^-6` on the
   singular values; the brute-force test validates it at `N = 3`. These are
   infinite-shot ranks: how many of these directions survive a finite number
