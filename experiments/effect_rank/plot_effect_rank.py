@@ -40,11 +40,6 @@ BOUND_LABEL = {
     "dense": {"none": "$4^N$", "u1": "$\\binom{2N}{N}$", "z2": "$4^N/2$"},
 }
 
-SUPTITLE = {
-    "angle": "Bound: $3^N$ (Haar, Clifford), $(3^N+1)/2$ (U(1), Z$_2$)",
-    "dense": "Bound: $4^N$ (Haar, Clifford), $\\binom{2N}{N}$ (U(1)), $4^N/2$ (Z$_2$)",
-}
-
 
 def load(folder: Path) -> dict[int, list[dict]]:
     """Runs grouped by size ``N``, the files of one (N, seed) merged.
@@ -89,14 +84,14 @@ def summarise(runs: dict[int, list[dict]], encoding: str) -> dict:
 def colours(sizes: list[int]) -> dict[int, tuple]:
     """One blue per size, light (small N) to dark (large N)."""
     cmap = plt.get_cmap("Blues")
-    steps = np.linspace(0.38, 1.0, len(sizes))
+    steps = np.linspace(0.45, 1.0, len(sizes))
     return {n: cmap(s) for n, s in zip(sizes, steps)}
 
 
 def plot(summary: dict, encoding: str, out: Path, normalised: bool) -> None:
     sizes = [int(n) for n in summary]
     col = colours(sizes)
-    fig, axes = plt.subplots(1, 4, figsize=(19, 4.8), sharey=normalised)
+    fig, axes = plt.subplots(1, 4, figsize=(19, 5.4), sharey=normalised)
     for ax, kind in zip(axes, KINDS):
         key = BOUND_KEY[kind]
         for n in sizes:
@@ -117,29 +112,42 @@ def plot(summary: dict, encoding: str, out: Path, normalised: bool) -> None:
                 marker="o",
                 ms=3.5,
                 capsize=2,
-                label=f"N = {n} ({s[kind]['seeds']} seeds)",
             )
             readout = s["bounds"]["readout"] / scale
             if not normalised:
                 ax.axhline(bound, color=col[n], ls="--", lw=1)
             ax.axhline(readout, color=col[n], ls=":", lw=1)
-        ax.set_title(f"{TITLES[kind]}, T = N, {encoding} encoding")
+        bound_txt = BOUND_LABEL[encoding][key]
+        title = f"{TITLES[kind]}, T = N, {encoding} encoding"
+        if not normalised:
+            title += f"\ndashed: bound {bound_txt}, dotted: $2^N$"
+        else:
+            title += f"\nrank / {bound_txt}, dotted: $2^N$ / {bound_txt}"
+        ax.set_title(title, fontsize=11)
         ax.set_xlabel("p")
         ax.set_yscale("log")
         ax.grid(alpha=0.25, which="major")
-        handles, labels = ax.get_legend_handles_labels()
-        bound_txt = BOUND_LABEL[encoding][key]
-        extra = [Line2D([], [], color="grey", ls=":", lw=1)]
-        extra_lab = ["final readout only: $2^N$" + (" / bound" if normalised else "")]
-        if not normalised:
-            extra.insert(0, Line2D([], [], color="grey", ls="--", lw=1))
-            extra_lab.insert(0, f"bound {bound_txt}")
-        ax.legend(handles + extra, labels + extra_lab, fontsize=7.5, loc="best")
     ylabel = "rank / bound of the class" if normalised else "rank of the effect span"
     axes[0].set_ylabel(ylabel + "\n(one circuit, one fixed mask per seed)")
-    if normalised:
-        fig.suptitle(SUPTITLE[encoding], fontsize=10)
-    fig.tight_layout()
+    handles = []
+    for n in sizes:
+        s = summary[str(n)]
+        have = [k for k in KINDS if k in s]
+        seeds = max(s[k]["seeds"] for k in have)
+        label = f"N = {n} ({seeds} seeds)"
+        if len(have) < len(KINDS):
+            label += ", " + " and ".join(TITLES[k] for k in have) + " only"
+        handles.append(
+            Line2D([], [], color=col[n], lw=2, marker="o", ms=4, label=label)
+        )
+    fig.legend(
+        handles=handles,
+        loc="lower center",
+        ncol=len(handles),
+        fontsize=9.5,
+        frameon=False,
+    )
+    fig.tight_layout(rect=(0, 0.07, 1, 1))
     fig.savefig(out, dpi=150)
     plt.close(fig)
 
