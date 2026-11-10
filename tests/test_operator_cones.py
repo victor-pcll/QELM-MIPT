@@ -275,6 +275,19 @@ def test_scripts_run_end_to_end(
         ["single", "--N", "3", "--seeds", "2", "--rank", "--p", p],
         ["single", "--N", "4", "--seeds", "2", "--p", p],
         ["branch", "--N", "4", "--seeds", "2", "--branches", "2", "--p", p],
+        [
+            "branch",
+            "--N",
+            "5",
+            "--seeds",
+            "1",
+            "--branches",
+            "2",
+            "--chi",
+            "4",
+            "--p",
+            p,
+        ],
     ]
     for cmd in commands:
         monkeypatch.setattr(sys, "argv", ["x", *cmd, "--out", str(tmp_path)])
@@ -292,6 +305,7 @@ def test_scripts_run_end_to_end(
         "single_operator_cones",
         "single_operator_growth",
         "single_operator_branch_N4",
+        "single_operator_branch_N5",
     ):
         assert (tmp_path / f"{name}.png").exists()
 
@@ -341,3 +355,22 @@ def test_single_branch_matches_span_at_p0_and_is_reproducible() -> None:
     b = single_branch(circuit, u < 0.5, 2, np.random.default_rng(1))
     np.testing.assert_array_equal(a, b)
     assert np.all((a >= -1e-12) & (a <= 1 + 1e-12))
+
+
+def test_single_branch_mps_exact_at_full_bond_and_truncation_tracked() -> None:
+    from QELM.evaluation.effect_rank import draw_circuit
+    from QELM.evaluation.operator_cones import single_branch, single_branch_mps
+
+    n = 6
+    circuit = draw_circuit("haar", n, n, np.random.default_rng(40))
+    u = np.random.default_rng(41).random((n, n))
+    for p in (0.0, 0.3):
+        exact = single_branch(circuit, u < p, 3, np.random.default_rng(2))
+        full = single_branch_mps(circuit, u < p, 3, np.random.default_rng(2), 4**3)
+        np.testing.assert_allclose(full.density, exact, atol=1e-10)
+        assert full.discarded[-1] < 1e-20
+        assert full.max_bond.max() <= 4**3
+    cut = single_branch_mps(circuit, u < 0.0, 3, np.random.default_rng(2), 4)
+    assert cut.max_bond.max() == 4
+    assert cut.discarded[-1] > 0.0
+    assert np.all(np.diff(cut.discarded) >= 0.0)

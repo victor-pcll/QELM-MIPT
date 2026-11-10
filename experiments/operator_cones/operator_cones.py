@@ -43,6 +43,7 @@ from QELM.evaluation.operator_cones import (
     liouvillian_lanczos,
     pauli_weight_chain,
     single_branch,
+    single_branch_mps,
     single_operator_span,
     site_operator,
     slowest_mode_modulus,
@@ -267,7 +268,10 @@ def run_branch(args: argparse.Namespace) -> None:
 
     Same draws as :func:`run_single` (seed ``s`` gives the circuit and mask
     of seed ``s`` of ``experiments/effect_rank``), ``--branches`` sampled
-    records per circuit. Cheap at ``N = 10`` for every ``p``.
+    records per circuit. Cheap at ``N = 10`` for every ``p``. With
+    ``--chi`` the operator is a truncated MPS (:func:`single_branch_mps`),
+    for ``N`` beyond the dense ``4**N`` vector; the mean discarded weight is
+    saved with the map.
     """
     from QELM.evaluation.effect_rank import draw_circuit
 
@@ -275,16 +279,26 @@ def run_branch(args: argparse.Namespace) -> None:
     runs = {}
     for p in sorted(set(args.p)):
         t0 = time.time()
-        dens = []
+        dens: list[np.ndarray] = []
+        lost: list[np.ndarray] = []
+        bonds: list[np.ndarray] = []
         for seed in range(args.seeds):
             u = np.random.default_rng((seed, N, 1000)).random((T, N))
             circuit = draw_circuit("haar", N, T, np.random.default_rng((seed, N, 0)))
             rng = np.random.default_rng((seed, N, 2000))
             for _ in range(args.branches):
-                dens.append(single_branch(circuit, u < p, N // 2, rng))
+                if args.chi:
+                    r = single_branch_mps(circuit, u < p, N // 2, rng, args.chi)
+                    dens.append(r.density)
+                    lost.append(r.discarded)
+                    bonds.append(r.max_bond)
+                else:
+                    dens.append(single_branch(circuit, u < p, N // 2, rng))
         D = np.asarray(dens)
         runs[f"{p:g}"] = {
             "p": p,
+            "discarded": np.mean(lost, axis=0).tolist() if lost else None,
+            "max_bond": np.max(bonds, axis=0).tolist() if bonds else None,
             "density": D.mean(axis=0).tolist(),
             "size": D.sum(axis=2).mean(axis=0).tolist(),
             "size_err": (D.sum(axis=2).std(axis=0, ddof=1) / np.sqrt(len(D))).tolist(),
@@ -299,6 +313,7 @@ def run_branch(args: argparse.Namespace) -> None:
             "x0": N // 2,
             "seeds": args.seeds,
             "branches": args.branches,
+            "chi": args.chi,
             "runs": runs,
         },
     )
@@ -366,6 +381,7 @@ def main() -> None:
     b.add_argument("--N", type=int, default=10)
     b.add_argument("--seeds", type=int, default=10)
     b.add_argument("--branches", type=int, default=5, help="records per circuit")
+    b.add_argument("--chi", type=int, default=0, help="MPS bond (0: dense vector)")
     b.add_argument("--p", type=_floats, default=_floats(grid), help=p_help)
     b.set_defaults(func=run_branch)
 

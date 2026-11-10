@@ -856,3 +856,139 @@ def single_branch(
             vec = apply_gate(vec, n, left_site, transfer)
         dens.append(_span_density(vec, n))
     return np.asarray(dens)
+
+
+@dataclass
+class BranchMPSResult:
+    """One sampled branch of an operator, evolved as a truncated MPS.
+
+    Attributes:
+        density: Pauli-weight density, shape ``(2T + 1, N)``, rows as in
+            :func:`single_branch`.
+        discarded: total squared weight discarded by the truncations (the
+            operator is renormalized after each one), per row.
+        max_bond: largest bond dimension reached, per row.
+    """
+
+    density: np.ndarray
+    discarded: np.ndarray
+    max_bond: np.ndarray
+
+
+class _PauliMPS:
+    """Real MPS of the Pauli coefficients of an operator, local dimension 4.
+
+    Kept in mixed canonical form with the orthogonality center ``self.c``,
+    so the norm and the local weights are read on the center tensor only.
+    """
+
+    def __init__(self, n: int, x0: int, pauli: int) -> None:
+        self.n = n
+        self.t = []
+        for q in range(n):
+            a = np.zeros((1, 4, 1))
+            a[0, pauli if q == x0 else 0, 0] = 1.0
+            self.t.append(a)
+        self.c = 0
+
+    def move(self, j: int) -> None:
+        while self.c < j:
+            a = self.t[self.c]
+            dl, d, dr = a.shape
+            q, r = np.linalg.qr(a.reshape(dl * d, dr))
+            self.t[self.c] = q.reshape(dl, d, -1)
+            self.t[self.c + 1] = np.einsum("ab,bdc->adc", r, self.t[self.c + 1])
+            self.c += 1
+        while self.c > j:
+            a = self.t[self.c]
+            dl, d, dr = a.shape
+            q, r = np.linalg.qr(a.reshape(dl, d * dr).T)
+            self.t[self.c] = q.T.reshape(-1, d, dr)
+            self.t[self.c - 1] = np.einsum("adb,cb->adc", self.t[self.c - 1], r)
+            self.c -= 1
+
+    def gate(self, i: int, transfer: np.ndarray, chi: int) -> float:
+        """Apply a 16 x 16 transfer on ``(i, i + 1)``; return discarded weight."""
+        self.move(i)
+        theta = np.einsum("adb,bec->adec", self.t[i], self.t[i + 1])
+        dl, dr = theta.shape[0], theta.shape[3]
+        theta = np.einsum("fg,agc->afc", transfer, theta.reshape(dl, 16, dr))
+        u, s, vt = np.linalg.svd(theta.reshape(dl * 4, 4 * dr), full_matrices=False)
+        total = float((s**2).sum())
+        keep = max(1, min(chi, int((s > 1e-14 * s[0]).sum())))
+        lost = float((s[keep:] ** 2).sum()) / total
+        s = s[:keep] / np.sqrt(float((s[:keep] ** 2).sum()))
+        self.t[i] = u[:, :keep].reshape(dl, 4, keep)
+        self.t[i + 1] = (s[:, None] * vt[:keep]).reshape(keep, 4, dr)
+        self.c = i + 1
+        return lost
+
+    def measure(self, i: int, rng: np.random.Generator) -> None:
+        """Keep one branch ``P_s (x) (A +- B)``, Hilbert-Schmidt Born rule."""
+        self.move(i)
+        a, b = self.t[i][:, 0, :], self.t[i][:, 3, :]
+        w0 = float(((a + b) ** 2).sum())
+        w1 = float(((a - b) ** 2).sum())
+        if w0 + w1 <= 0.0:
+            raise ValueError("the operator vanished at a measurement")
+        sign = 1.0 if rng.random() < w0 / (w0 + w1) else -1.0
+        branch = (a + sign * b) / np.sqrt(w0 if sign > 0 else w1)
+        out = np.zeros_like(self.t[i])
+        out[:, 0, :] = branch / np.sqrt(2)
+        out[:, 3, :] = sign * branch / np.sqrt(2)
+        self.t[i] = out
+
+    def density(self) -> np.ndarray:
+        out = np.empty(self.n)
+        self.move(0 if self.c < self.n / 2 else self.n - 1)
+        order = range(self.n) if self.c == 0 else range(self.n - 1, -1, -1)
+        for x in order:
+            self.move(x)
+            a = self.t[x]
+            out[x] = 1.0 - float((a[:, 0, :] ** 2).sum()) / float((a**2).sum())
+        return out
+
+    def bond(self) -> int:
+        return max(a.shape[2] for a in self.t)
+
+
+def single_branch_mps(
+    transfers: Sequence[Sequence[np.ndarray]],
+    masks: np.ndarray,
+    x0: int,
+    rng: np.random.Generator,
+    chi: int,
+    pauli: int = Z_,
+) -> BranchMPSResult:
+    """:func:`single_branch` with the operator as an MPS of bond ``<= chi``.
+
+    Same circuit order and same branch sampling, so with ``chi`` large
+    enough (``4**(N // 2)``) and the same ``rng`` it reproduces
+    :func:`single_branch` exactly. With a smaller ``chi`` each gate keeps
+    the ``chi`` largest Schmidt values of the operator and renormalizes;
+    ``discarded`` accumulates the lost weight.
+    """
+    from QELM.evaluation.effect_rank import brick_pairs
+
+    masks = np.asarray(masks, dtype=bool)
+    depth, n = masks.shape
+    pairs = brick_pairs(n)
+    n_even = len(range(0, n - 1, 2))
+    mps = _PauliMPS(n, x0, pauli)
+    dens, lost, bonds = [mps.density()], [0.0], [1]
+    acc = 0.0
+    for t in reversed(range(depth)):
+        for site in np.flatnonzero(masks[t]):
+            mps.measure(int(site), rng)
+        layer = list(zip(pairs, transfers[t]))
+        for half in (layer[n_even:], layer[:n_even]):
+            for left_site, transfer in sorted(half, key=lambda g: g[0]):
+                acc += mps.gate(left_site, transfer, chi)
+            dens.append(mps.density())
+            lost.append(acc)
+            bonds.append(mps.bond())
+    return BranchMPSResult(
+        density=np.asarray(dens),
+        discarded=np.asarray(lost),
+        max_bond=np.asarray(bonds),
+    )

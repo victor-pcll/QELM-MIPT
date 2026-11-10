@@ -34,6 +34,7 @@ from QELM.utils.plots.style import COLORS, subplots  # noqa: E402
 
 P_MAIN = [0.0, 0.05, 0.17, 0.35, 0.65]
 RHO_SAT = 0.75  # Pauli-weight density of a scrambled site, 3/4
+MPS_TOL = 0.01  # discarded weight above which an MPS row is hatched
 THRESHOLD = RHO_SAT / 2
 V_B = 0.6  # (q^2 - 1) / (q^2 + 1), q = 2: butterfly velocity of Haar U(4)
 P_C = 0.17  # MIPT of the Haar qubit brickwork (Zabalo et al., PRB 101, 060301)
@@ -419,6 +420,13 @@ def plot_branch(main: dict, others: list[dict], out: Path) -> None:
         im = _heat(ax, np.asarray(run["density"]), x0)
         for sign in (-1, 1):
             ax.plot(sign * s_ax, s_ax, color="cyan", ls="--", lw=1.2)
+        if run.get("discarded") is not None:
+            bad = np.flatnonzero(np.asarray(run["discarded"]) > MPS_TOL)
+            if bad.size:
+                ax.axhspan(
+                    bad[0] - 0.5, S + 0.5, fc="none", ec="0.85", hatch="//", lw=0
+                )
+                ax.axhline(bad[0] - 0.5, color="white", lw=1.5)
         ax.set_xlim(-x0 - 0.5, N - 1 - x0 + 0.5)
         ax.set_ylim(-0.5, S + 0.5)
         ax.set_xlabel(r"$x - x_0$")
@@ -445,9 +453,11 @@ def plot_branch(main: dict, others: list[dict], out: Path) -> None:
     ax.set_ylabel(r"size $\sum_x \rho / N$ of one branch")
     ax.legend(fontsize=9)
     ax.set_title("summary")
+    mps = f", MPS bond {main['chi']}" if main.get("chi") else ""
     fig.suptitle(
         f"One sampled branch of $Z_{{x_0}}$ per record, circuits and masks of PR #314, "
         f"Haar U(4), N = {N}, {main['seeds']} circuits x {main['branches']} records"
+        + mps
     )
     fig.savefig(out / f"single_operator_branch_N{N}.png", bbox_inches="tight")
     plt.close(fig)
