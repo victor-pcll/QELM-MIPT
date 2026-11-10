@@ -803,3 +803,57 @@ def single_operator_span(
         averaged_density=np.asarray(adens),
         averaged_norm=np.asarray(anorm),
     )
+
+
+def single_branch(
+    transfers: Sequence[Sequence[np.ndarray]],
+    masks: np.ndarray,
+    x0: int,
+    rng: np.random.Generator,
+    pauli: int = Z_,
+) -> np.ndarray:
+    """Pauli-weight map of one sampled branch of the operator, backwards.
+
+    Same recursion as :func:`single_operator_span`, but at each measurement
+    only one of the two branches ``P_0 (x) (A + B)`` and ``P_1 (x) (A - B)``
+    is kept, drawn with probability proportional to its squared norm, and
+    renormalized: one operator of one record, a vector of ``4**N`` numbers,
+    so ``N = 10`` is cheap whatever ``p``.
+
+    Returns:
+        Pauli-weight density, shape ``(2T + 1, N)``, rows as in
+        :func:`single_operator_span`.
+    """
+    from QELM.evaluation.effect_rank import apply_gate, brick_pairs
+
+    masks = np.asarray(masks, dtype=bool)
+    depth, n = masks.shape
+    pairs = brick_pairs(n)
+    n_even = len(range(0, n - 1, 2))
+    vec = pauli_vector(n, x0, pauli)
+    dens = [_span_density(vec, n)]
+    h = 1 / np.sqrt(2)
+    for t in reversed(range(depth)):
+        for site in np.flatnonzero(masks[t]):
+            left, right = 4 ** int(site), 4 ** (n - int(site) - 1)
+            v = vec.reshape(left, 4, right)
+            a, b = v[:, 0, :], v[:, 3, :]
+            w0 = float(((a + b) ** 2).sum())
+            w1 = float(((a - b) ** 2).sum())
+            if w0 + w1 <= 0.0:
+                raise ValueError("the operator vanished at a measurement")
+            sign = 1.0 if rng.random() < w0 / (w0 + w1) else -1.0
+            branch = (a + sign * b) / np.sqrt(w0 if sign > 0 else w1)
+            out = np.zeros_like(v)
+            out[:, 0, :] = h * branch
+            out[:, 3, :] = sign * h * branch
+            vec = out.reshape(1, 4**n)
+        layer = list(zip(pairs, transfers[t]))
+        for left_site, transfer in reversed(layer[n_even:]):
+            vec = apply_gate(vec, n, left_site, transfer)
+        dens.append(_span_density(vec, n))
+        for left_site, transfer in reversed(layer[:n_even]):
+            vec = apply_gate(vec, n, left_site, transfer)
+        dens.append(_span_density(vec, n))
+    return np.asarray(dens)
+

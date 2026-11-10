@@ -406,6 +406,53 @@ def plot_single(main: dict, others: list[dict], out: Path) -> None:
     plt.close(fig)
 
 
+def plot_branch(main: dict, others: list[dict], out: Path) -> None:
+    """One sampled branch of ``Z_x0`` per record, circuits of PR #314."""
+    N, T, x0 = main["N"], main["T"], main["x0"]
+    S = 2 * T
+    fig, axes = subplots(2, 3, figsize=(17, 10.5))
+    axes = axes.ravel()
+    im = None
+    s_ax = np.arange(S + 1)
+    for ax, p in zip(axes[:5], P_MAIN):
+        run = _run_at(main, p)
+        im = _heat(ax, np.asarray(run["density"]), x0)
+        for sign in (-1, 1):
+            ax.plot(sign * s_ax, s_ax, color="cyan", ls="--", lw=1.2)
+        ax.set_xlim(-x0 - 0.5, N - 1 - x0 + 0.5)
+        ax.set_ylim(-0.5, S + 0.5)
+        ax.set_xlabel(r"$x - x_0$")
+        ax.set_ylabel("half-layers before the final readout")
+        ax.set_title(f"p = {run['p']:g}")
+    assert im is not None
+    fig.colorbar(im, ax=axes[:5].tolist(), shrink=0.6, label=r"$\rho(x)$ of one branch")
+    ax = axes[5]
+    for k, data in enumerate(sorted([main] + others, key=lambda d: d["N"])):
+        runs = [r for r in _runs(data) if any(np.isclose(r["p"], q) for q in P_MAIN)]
+        p = [r["p"] for r in runs]
+        for s, ls, mk in ((2, "--", "s"), (data["N"] // 2, "-", "o")):
+            ax.errorbar(
+                p,
+                [r["size"][s] / data["N"] for r in runs],
+                yerr=[r["size_err"][s] / data["N"] for r in runs],
+                fmt=mk + ls,
+                color=COLORS[k],
+                label=f"N = {data['N']}, {s} half-layers",
+            )
+    ax.axvline(P_C, color="0.5", ls="--", lw=1)
+    ax.axhline(RHO_SAT, color="0.6", ls=":")
+    ax.set_xlabel("p")
+    ax.set_ylabel(r"size $\sum_x \rho / N$ of one branch")
+    ax.legend(fontsize=9)
+    ax.set_title("summary")
+    fig.suptitle(
+        f"One sampled branch of $Z_{{x_0}}$ per record, circuits and masks of PR #314, "
+        f"Haar U(4), N = {N}, {main['seeds']} circuits x {main['branches']} records"
+    )
+    fig.savefig(out / f"single_operator_branch_N{N}.png", bbox_inches="tight")
+    plt.close(fig)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--data", type=Path, default=Path("outputs/operator_cones"))
@@ -434,8 +481,15 @@ def main() -> None:
         (d for d in (_load(f) for f in args.data.glob("single_N*.json")) if d),
         key=lambda d: d["N"],
     )
-    if single:
-        plot_single(single[-1], single[:-1], out)
+    full = [d for d in single if all(f"{p:g}" in d["runs"] for p in P_MAIN)]
+    if full:
+        plot_single(full[-1], full[:-1], out)
+    branch = sorted(
+        (d for d in (_load(f) for f in args.data.glob("branch_N*.json")) if d),
+        key=lambda d: d["N"],
+    )
+    for data in branch:
+        plot_branch(data, [d for d in branch if d is not data], out)
     print(f"figures in {out}")
 
 

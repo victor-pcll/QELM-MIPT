@@ -42,6 +42,7 @@ from QELM.evaluation.operator_cones import (
     krylov_wavefunction,
     liouvillian_lanczos,
     pauli_weight_chain,
+    single_branch,
     single_operator_span,
     site_operator,
     slowest_mode_modulus,
@@ -261,6 +262,48 @@ def run_single(args: argparse.Namespace) -> None:
     )
 
 
+def run_branch(args: argparse.Namespace) -> None:
+    """One sampled branch of ``Z_x0`` per draw, circuits and masks of #314.
+
+    Same draws as :func:`run_single` (seed ``s`` gives the circuit and mask
+    of seed ``s`` of ``experiments/effect_rank``), ``--branches`` sampled
+    records per circuit. Cheap at ``N = 10`` for every ``p``.
+    """
+    from QELM.evaluation.effect_rank import draw_circuit
+
+    N, T = args.N, args.N
+    runs = {}
+    for p in sorted(set(args.p)):
+        t0 = time.time()
+        dens = []
+        for seed in range(args.seeds):
+            u = np.random.default_rng((seed, N, 1000)).random((T, N))
+            circuit = draw_circuit("haar", N, T, np.random.default_rng((seed, N, 0)))
+            rng = np.random.default_rng((seed, N, 2000))
+            for _ in range(args.branches):
+                dens.append(single_branch(circuit, u < p, N // 2, rng))
+        D = np.asarray(dens)
+        runs[f"{p:g}"] = {
+            "p": p,
+            "density": D.mean(axis=0).tolist(),
+            "size": D.sum(axis=2).mean(axis=0).tolist(),
+            "size_err": (D.sum(axis=2).std(axis=0, ddof=1) / np.sqrt(len(D))).tolist(),
+        }
+        print(f"branch N={N} p={p:g}: {time.time() - t0:.0f} s")
+    _write(
+        args.out,
+        f"branch_N{N}.json",
+        {
+            "N": N,
+            "T": T,
+            "x0": N // 2,
+            "seeds": args.seeds,
+            "branches": args.branches,
+            "runs": runs,
+        },
+    )
+
+
 def run_parker(args: argparse.Namespace) -> None:
     """Lanczos ``b_n`` of ``X_{N/2}`` in the Ising chain, chaotic and integrable.
 
@@ -318,6 +361,13 @@ def main() -> None:
     g.add_argument("--rank", action="store_true", help="also the #314 rank")
     g.add_argument("--p", type=_floats, default=_floats(grid), help=p_help)
     g.set_defaults(func=run_single)
+
+    b = sub.add_parser("branch", parents=[common])
+    b.add_argument("--N", type=int, default=10)
+    b.add_argument("--seeds", type=int, default=10)
+    b.add_argument("--branches", type=int, default=5, help="records per circuit")
+    b.add_argument("--p", type=_floats, default=_floats(grid), help=p_help)
+    b.set_defaults(func=run_branch)
 
     q = sub.add_parser("parker", parents=[common])
     q.add_argument("--N", type=int, default=10)

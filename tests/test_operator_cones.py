@@ -274,6 +274,7 @@ def test_scripts_run_end_to_end(
         ["parker", "--N", "5", "--n-max", "6"],
         ["single", "--N", "3", "--seeds", "2", "--rank", "--p", p],
         ["single", "--N", "4", "--seeds", "2", "--p", p],
+        ["branch", "--N", "4", "--seeds", "2", "--branches", "2", "--p", p],
     ]
     for cmd in commands:
         monkeypatch.setattr(sys, "argv", ["x", *cmd, "--out", str(tmp_path)])
@@ -290,6 +291,7 @@ def test_scripts_run_end_to_end(
         "krylov_coefficients",
         "single_operator_cones",
         "single_operator_growth",
+        "single_operator_branch_N4",
     ):
         assert (tmp_path / f"{name}.png").exists()
 
@@ -323,3 +325,19 @@ def test_single_operator_span_unitary_and_bounded_by_effect_rank() -> None:
         assert r.dims[-1] <= effect_rank(circuit, u < p).dense
         assert np.all(np.diff(r.averaged_norm) <= 1e-12)
         assert np.all(np.nan_to_num(r.density) <= 1 + 1e-12)
+
+
+def test_single_branch_matches_span_at_p0_and_is_reproducible() -> None:
+    from QELM.evaluation.effect_rank import draw_circuit
+    from QELM.evaluation.operator_cones import single_branch, single_operator_span
+
+    n = 4
+    circuit = draw_circuit("haar", n, n, np.random.default_rng(30))
+    u = np.random.default_rng(31).random((n, n))
+    span = single_operator_span(circuit, u < 0.0, 2)
+    branch = single_branch(circuit, u < 0.0, 2, np.random.default_rng(0))
+    np.testing.assert_allclose(branch, span.density, atol=1e-12)
+    a = single_branch(circuit, u < 0.5, 2, np.random.default_rng(1))
+    b = single_branch(circuit, u < 0.5, 2, np.random.default_rng(1))
+    np.testing.assert_array_equal(a, b)
+    assert np.all((a >= -1e-12) & (a <= 1 + 1e-12))

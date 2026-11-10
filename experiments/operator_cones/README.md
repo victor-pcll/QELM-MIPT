@@ -20,10 +20,10 @@ at N <= 10 they cross over smoothly too.
 
 | | |
 | --- | --- |
-| Script(s) | `experiments/operator_cones/operator_cones.py` (subcommands `chain`, `traj`, `krylov`, `parker`), launcher `operator_cones.sh`, figures `plot_operator_cones.py` |
+| Script(s) | `experiments/operator_cones/operator_cones.py` (subcommands `chain`, `traj`, `krylov`, `single`, `branch`, `parker`), launcher `operator_cones.sh`, figures `plot_operator_cones.py` |
 | Module | `QELM.evaluation.operator_cones` |
 | Physical model | open brickwork chain of Haar U(4) gates, one half-layer per time step (`v_LR = 1` site per step), each qubit measured in Z with probability `p` after every half-layer, as in Zabalo et al., PRB 101, 060301 (2020) |
-| System sizes `N` | 41 (A1), 8 and 10 (A2), 6 and 8 (B), 8 and 10 (Parker reference) |
+| System sizes `N` | 41 (A1), 8 and 10 (A2), 6 and 8 (B), 5 to 7 (C), 10 and 12 (C, one branch), 8 and 10 (Parker reference) |
 | Control parameter | `p` in {0, 0.05, 0.17, 0.35, 0.65} for the five-panel figures; grid {0, 0.025, 0.05, 0.1, 0.13, 0.17, 0.21, 0.25, 0.35, 0.5, 0.65} for the summaries |
 | Initial operator | `Z` on the middle site `x0 = N // 2` (A1, B); Pauli images of a reference qubit `R` maximally entangled with `x0` (A2) |
 | ML task | none: a diagnostic of the reservoir dynamics |
@@ -100,6 +100,18 @@ that only loses norm. This is the single-operator view of #314; a Krylov
 chain proper does not exist here, since the gates and the mask change from
 layer to layer. N = 5, 6 (with the dense rank of #314 on the same circuits)
 and 7, 10 seeds.
+
+**C, one branch** (`single_branch`, subcommand `branch`). The exact span
+of C costs up to `dim x 4^N` numbers and is out of reach at N = 10 for
+`p >= 0.17`. To see the spatial cone at larger N, the same recursion keeps
+one branch per measurement: of `P_0 (x) (A + B)` and `P_1 (x) (A - B)`,
+one is drawn with probability proportional to its squared Hilbert-Schmidt
+norm (Born rule for the operator seen as a state, as for the Choi weight
+of A2) and renormalized. The result is the single operator of one record,
+a vector of `4^N` numbers, whose Pauli-weight map `(x, t)` is averaged over
+10 circuits x 5 records (same circuits, masks and seeds as C). This gives
+the cone at N = 10 (11 values of `p`) and N = 12 (the five `p`), but not
+the dimension curve.
 
 **Parker reference** (`liouvillian_lanczos`, `free_fermion_lanczos`).
 Lanczos coefficients of `X_{N/2}` under the Ising chain `H = - sum Z Z -
@@ -180,6 +192,23 @@ time as in the docstring of `operator_cones.py`.
   2e-5 at N = 7): averaging over outcomes erases exactly the branching that
   makes the rank of #314 rise. This is why the Krylov chain of B, built on
   the averaged channel, shows only the truncation and never the peak.
+- **C, one branch at N = 10 and 12: the cone does not shrink, it is filled
+  by the measurements.** Following the single operator of one sampled
+  record (Figures 8 and 9), the cone inside the light cone `|x - x0| <= t`
+  looks the same at all `p`. What changes is outside it: a measured site
+  carries the projectors `P_0, P_1` (weight 1/2 on that site), so weight
+  appears off the light cone as soon as `p > 0`. Two half-layers before the
+  readout, the mean density on the three edge sites is 0, 0.02, 0.16, 0.28,
+  0.45 at N = 12 for `p` = 0, 0.05, 0.17, 0.35, 0.65, and the size
+  `sum_x rho / N` is 0.21, 0.23, 0.33, 0.41, 0.53. After `N / 2`
+  half-layers it is 0.50, 0.53, 0.61, 0.64, 0.66 (N = 12; N = 10 within
+  0.07). Deep in the circuit the branch saturates slightly below the Haar
+  value 3/4 (`sum_x rho / N` = 0.75 at `p = 0`, 0.68 at `p = 0.65`), the
+  same mild deficit as the normalized trajectory profile of A2 (Figure 3d).
+  All of this is smooth in `p`, with no feature at `p_c`, and N = 10 and 12
+  agree. A single branch is the operator of one record and does not see
+  how many records there are: the branching that makes the rank of #314
+  rise is visible only in the span (Figures 6 and 7).
 - **Parker et al. reproduced.** For the chaotic Ising chain at N = 10,
   `b_n` grows linearly, slope `alpha = 0.39` for `n = 6..25`, up to a
   finite-size plateau `b ~ 15` at `n ~ 33`; the integrable chain saturates
@@ -196,7 +225,9 @@ time as in the docstring of `operator_cones.py`.
   0`, the cone fills with `rho = 3/4` and the operator spreads over
   exponentially many strings, but this was not tested here against the
   variance of a QELM feature.
-- **Caveats.** A2 is exact but small (N <= 10, open chain, the cone reaches
+- **Caveats.** The branches of C are drawn with the Hilbert-Schmidt weight
+  of the operator, not with the Born probability of a given input state,
+  and 50 branches per `p` give the map to about 0.01. A2 is exact but small (N <= 10, open chain, the cone reaches
   the edges at t ~ 0.6 N / 2); its crossing analysis is limited to two sizes.
   B uses a Floquet circuit (needed for a Krylov chain), whereas A1 and A2
   draw new gates at every step. A1 averages `|c_P|^2` over measurement
@@ -281,3 +312,20 @@ five `p`. (b) Squared norm of the same operator under the outcome-averaged
 channel (log scale). (c) Pauli-weight density of the averaged operator at
 the input against `x - x0` (dotted: 3/4). `plot_operator_cones.py`,
 issue #315.
+
+![One branch, N = 10](figures/single_operator_branch_N10.png)
+
+**Figure 8. One sampled branch of `Z_{x0}` per record, circuits and masks of
+PR #314, N = 10.** Five panels: Pauli-weight density `rho(x)` of the single
+operator of one record (color, 0 to 3/4) against `x - x0` and the
+half-layers before the final readout (0 at the readout, `2T = 20` at the
+input), mean over 10 circuits x 5 records; cyan dashed: light cone `|x -
+x0| = t`. Summary panel: size `sum_x rho / N` against `p`, two half-layers
+(dashed) and `N / 2` half-layers (solid) before the readout, for N = 10 and
+12; dotted: 3/4; vertical dashed line `p_c = 0.17`. `plot_operator_cones.py`,
+issue #315.
+
+![One branch, N = 12](figures/single_operator_branch_N12.png)
+
+**Figure 9. Same as Figure 8 at N = 12** (`2T = 24`, 10 circuits x 5
+records, five values of `p`). `plot_operator_cones.py`, issue #315.
