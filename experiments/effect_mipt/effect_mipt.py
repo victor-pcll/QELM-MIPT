@@ -36,8 +36,10 @@ import numpy as np
 from QELM.evaluation.effect_mipt import (
     clifford_purification,
     draw_haar_circuit,
+    fourier_weight,
     frame_potential,
     haar_reference_entropy,
+    sample_kraus,
 )
 from QELM.evaluation.effect_rank import mincut_bits
 
@@ -135,9 +137,44 @@ def run_frame(
     return out
 
 
+def run_weight(
+    n: int, ps: list[float], samples: int, seeds: list[int], ratio: int
+) -> dict:
+    """Per-record Fourier weight, in bits, for each seed and ``p``.
+
+    For each circuit and ``p``, ``samples`` mid-circuit records are drawn;
+    the run stores the mean over records of ``log2(1 + W)`` for the dense
+    and the angle encodings, and the min cut of the mask.
+    """
+    depth = ratio * n
+    out: dict = {
+        "probe": "weight",
+        "n": n,
+        "depth": depth,
+        "p": ps,
+        "samples": samples,
+        "runs": [],
+    }
+    for seed in seeds:
+        u = np.random.default_rng((seed, n, 1000)).random((depth, n))
+        gates = draw_haar_circuit(n, depth, np.random.default_rng((seed, n, 0)))
+        rng = np.random.default_rng((seed, n, 14))
+        run: dict = {"seed": seed, "dense_bits": [], "angle_bits": [], "cut": []}
+        for p in ps:
+            w = [
+                fourier_weight(sample_kraus(gates, u < p, rng)) for _ in range(samples)
+            ]
+            run["dense_bits"].append(float(np.mean([np.log2(1 + x.dense) for x in w])))
+            run["angle_bits"].append(float(np.mean([np.log2(1 + x.angle) for x in w])))
+            run["cut"].append(mincut_bits(u < p))
+            print(f"weight N={n} T={depth} seed={seed} p={p}", flush=True)
+        out["runs"].append(run)
+    return out
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("probe", choices=("clifford", "haar", "frame"))
+    parser.add_argument("probe", choices=("clifford", "haar", "frame", "weight"))
     parser.add_argument("--n", type=int, required=True)
     parser.add_argument("--p", type=float, nargs="+", default=P_GRID)
     parser.add_argument("--samples", type=int, required=True)
@@ -152,6 +189,8 @@ def main() -> None:
         )
     elif args.probe == "haar":
         result = run_haar(args.n, args.p, args.samples, args.seeds[0], args.ratio or 2)
+    elif args.probe == "weight":
+        result = run_weight(args.n, args.p, args.samples, args.seeds, args.ratio or 1)
     else:
         result = run_frame(args.n, args.p, args.samples, args.seeds, args.ratio or 1)
     args.out.mkdir(parents=True, exist_ok=True)

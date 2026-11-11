@@ -41,7 +41,7 @@ from dataclasses import dataclass
 import numpy as np
 import stim  # type: ignore[import-untyped]
 
-from QELM.evaluation.effect_rank import brick_pairs
+from QELM.evaluation.effect_rank import brick_pairs, no_y_columns
 from QELM.models.circuits.clifford import clifford_group_2q
 from QELM.models.circuits.haar import haar_gate
 from QELM.models.circuits.stabilizer import (
@@ -369,3 +369,104 @@ def haar_reference_entropy(
         lam = np.clip(np.linalg.eigvalsh(rho), 1e-15, 1.0)
         out[t] = float(-(lam * np.log2(lam)).sum())
     return out
+
+
+# ---------------------------------------------------------------------------
+# Per-record Fourier weight
+# ---------------------------------------------------------------------------
+
+# _TO_PAULI[P, 2 r + c] = P[c, r] / 2, so that the coefficient of the Pauli
+# string P in the operator E is Tr[P E] / 2^N.
+_TO_PAULI = (
+    np.array(
+        [
+            [1, 0, 0, 1],
+            [0, 1, 1, 0],
+            [0, 1j, -1j, 0],
+            [1, 0, 0, -1],
+        ],
+        dtype=complex,
+    )
+    / 2
+)
+
+
+def pauli_coefficients(op: np.ndarray) -> np.ndarray:
+    """Coefficients ``Tr[P op] / 2^N`` of a Hermitian operator, all ``4^N`` strings.
+
+    Args:
+        op: Hermitian matrix ``(2**n, 2**n)``, qubit 0 the most significant bit.
+
+    Returns:
+        Real array of length ``4**n``; the index of a string is its digits
+        in base 4 with ``I, X, Y, Z = 0, 1, 2, 3``, site 0 first.
+    """
+    dim = op.shape[0]
+    n = dim.bit_length() - 1
+    t = np.asarray(op, dtype=complex).reshape((2,) * (2 * n))
+    order = [k for site in range(n) for k in (site, n + site)]
+    t = np.ascontiguousarray(t.transpose(order)).reshape((4,) * n)
+    for site in range(n):
+        t = np.moveaxis(np.tensordot(_TO_PAULI, t, axes=(1, site)), 0, site)
+    return np.asarray(t.real).reshape(-1)
+
+
+def sample_kraus(
+    gates: Sequence[Sequence[np.ndarray]],
+    masks: np.ndarray,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Kraus operator ``K_m`` of one mid-circuit record, Born rule, mixed input.
+
+    The record ``m`` is drawn with the probability ``Tr[K_m^dagger K_m] / 2^N``
+    of the maximally mixed input; no final readout.
+
+    Returns:
+        ``K_m`` as a ``(2**n, 2**n)`` matrix, normalised to ``Tr[K^dagger K] = 1``.
+    """
+    masks = np.asarray(masks, dtype=bool)
+    depth, n = masks.shape
+    dim = 2**n
+    pairs = brick_pairs(n)
+    # Column j of k is the evolution of the basis state |j>; rows of k.T are
+    # batched state vectors.
+    kt = np.eye(dim, dtype=complex) / np.sqrt(dim)
+    for t in range(depth):
+        for site, gate in zip(pairs, gates[t], strict=True):
+            kt = apply_gate(kt, n, site, gate)
+        for site in np.flatnonzero(masks[t]).tolist():
+            v = kt.reshape(dim, 2**site, 2, 2 ** (n - site - 1))
+            p0 = float(np.sum(np.abs(v[:, :, 0, :]) ** 2))
+            o = 0 if rng.random() < p0 else 1
+            kt = project(kt, n, site, o) / np.sqrt(p0 if o == 0 else 1 - p0)
+    return np.asarray(kt.T)
+
+
+@dataclass(frozen=True)
+class FourierWeight:
+    """Fourier weight of ``x -> Pr(m | x)`` outside the constant mode.
+
+    Attributes:
+        dense: ``W = sum_{a != 0} c_a^2 / c_0^2`` over the ``4^N`` strings.
+            ``1 + W = 2^N Tr[E^2] / Tr[E]^2``.
+        angle: the same sum over the ``3^N`` strings without ``Y``.
+    """
+
+    dense: float
+    angle: float
+
+
+def fourier_weight(kraus: np.ndarray) -> FourierWeight:
+    """Per-record Fourier weight of the effect ``E = K^dagger K``.
+
+    ``Pr(m | x) = Tr[E rho(x)]`` is ``sum_a c_a B_a(x)`` on the Bloch
+    monomials, with ``c_a`` the Pauli coefficients of ``E``; the constant
+    mode is ``c_0 = Tr[E] / 2^N``.
+    """
+    effect = kraus.conj().T @ kraus
+    n = effect.shape[0].bit_length() - 1
+    c = pauli_coefficients(effect)
+    sq = c**2
+    dense = float((sq.sum() - sq[0]) / sq[0])
+    angle = float((sq[no_y_columns(n)].sum() - sq[0]) / sq[0])
+    return FourierWeight(dense=dense, angle=angle)
