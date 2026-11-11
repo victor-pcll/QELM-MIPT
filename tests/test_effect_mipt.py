@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import itertools
+
 import numpy as np
 import pytest
 
@@ -14,10 +16,12 @@ from QELM.evaluation.effect_mipt import (
     draw_haar_circuit,
     draw_open_half_layers,
     draw_periodic_half_layers,
+    effect_stabilizers,
     fourier_weight,
     frame_potential,
     frame_potential_exact,
     haar_reference_entropy,
+    interval_counts,
     pauli_coefficients,
     prob_zero,
     project,
@@ -241,3 +245,59 @@ def test_dense_weight_bits_limits_and_checkpoints() -> None:
     ).tolist() == [n, n]
     ks = dense_weight_bits(draw_periodic_half_layers(n, 0.3, 40, rng), [5, 10, 20, 40])
     assert np.all((ks >= 0) & (ks <= n))
+
+
+def _group_elements(gens: np.ndarray) -> np.ndarray:
+    """All ``2^k`` elements (signs dropped) of the group spanned by ``gens``."""
+    out = []
+    for bits in itertools.product([0, 1], repeat=len(gens)):
+        v = np.zeros(gens.shape[1], dtype=np.uint8)
+        for b, row in zip(bits, gens, strict=True):
+            if b:
+                v ^= row
+        out.append(v)
+    return np.array(out)
+
+
+def _pauli_index(v: np.ndarray, n: int) -> int:
+    """Index of a string in :func:`pauli_coefficients` (I, X, Y, Z = 0..3)."""
+    digit = {(0, 0): 0, (1, 0): 1, (1, 1): 2, (0, 1): 3}
+    return sum(digit[(int(v[s]), int(v[n + s]))] * 4 ** (n - 1 - s) for s in range(n))
+
+
+@pytest.mark.parametrize("n", [4, 6])
+def test_effect_stabilizers_are_the_fourier_support(n: int) -> None:
+    rng = np.random.default_rng(n + 10)
+    for p in (0.2, 0.5):
+        circuits = [
+            draw_periodic_half_layers(n, p, 6, rng),
+            draw_open_half_layers(n, rng.random((3, n)) < p, rng),
+        ]
+        for circuit in circuits:
+            t = len(circuit.bonds) - 1  # a record that stops before the end
+            gens = effect_stabilizers(circuit, t)
+            truncated = CliffordHalfLayers(
+                n, circuit.bonds[:t], circuit.gates[:t], circuit.measured[:t]
+            )
+            kraus = _explicit_kraus(truncated, rng)
+            c = pauli_coefficients(kraus.conj().T @ kraus)
+            support = set(np.flatnonzero(np.abs(c) > 1e-9).tolist())
+            elements = {_pauli_index(v, n) for v in _group_elements(gens)}
+            assert support == elements
+            np.testing.assert_allclose(np.abs(c[sorted(support)]), abs(c[0]), atol=1e-9)
+
+
+def test_interval_counts_match_brute_force() -> None:
+    rng = np.random.default_rng(4)
+    n = 6
+    circuit = draw_periodic_half_layers(n, 0.3, 8, rng)
+    gens = effect_stabilizers(circuit, 8)
+    elements = _group_elements(gens)
+    occupied = (elements[:, :n] | elements[:, n:]).astype(bool)
+    for start in (0, 4):
+        counts = interval_counts(gens, n, start)
+        for ell in range(n + 1):
+            inside = np.zeros(n, dtype=bool)
+            inside[[(start + i) % n for i in range(ell)]] = True
+            number = int(np.sum(~np.any(occupied & ~inside, axis=1)))
+            assert 2 ** counts[ell] == number

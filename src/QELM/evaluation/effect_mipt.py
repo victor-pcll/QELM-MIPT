@@ -587,27 +587,110 @@ def dense_weight_bits(
     for t, (bonds, gate_ids, sites) in enumerate(
         zip(circuit.bonds, circuit.gates, circuit.measured, strict=True)
     ):
-        if len(bonds) and len(gens):
-            cols = np.concatenate([bonds, bonds + n], axis=1)  # (g, 4)
-            block = gens[:, cols].astype(np.int64)  # (r, g, 4)
-            gens[:, cols] = (
-                np.einsum("rgi,gij->rgj", block, sym[gate_ids]) % 2
-            ).astype(np.uint8)
-        for j in sites.tolist():
-            anti = np.flatnonzero(gens[:, j])
-            z = np.zeros(2 * n, dtype=np.uint8)
-            z[n + j] = 1
-            if anti.size:
-                pivot = anti[0]
-                gens[anti[1:]] ^= gens[pivot]
-                gens[pivot] = z
-            else:
-                gens = np.vstack([gens, z])
+        _conjugate(gens, bonds, sym[gate_ids], n)
+        gens = _measure_z(gens, sites, n)
         if len(gens) > n:
             gens = _gf2_basis(gens)
         if t + 1 in marks:
             out[t + 1] = int(len(_gf2_basis(gens)))
     return np.array([out[c] for c in checkpoints], dtype=int)
+
+
+def _conjugate(gens: np.ndarray, bonds: np.ndarray, mats: np.ndarray, n: int) -> None:
+    """Conjugate the generators (in place) by gates of symplectic matrices ``mats``."""
+    if len(bonds) == 0 or len(gens) == 0:
+        return
+    cols = np.concatenate([bonds, bonds + n], axis=1)  # (g, 4)
+    block = gens[:, cols].astype(np.int64)  # (r, g, 4)
+    gens[:, cols] = (np.einsum("rgi,gij->rgj", block, mats) % 2).astype(np.uint8)
+
+
+def _measure_z(gens: np.ndarray, sites: np.ndarray, n: int) -> np.ndarray:
+    """Generators after measuring ``Z`` on ``sites`` (mixed stabilizer group)."""
+    for j in np.asarray(sites).tolist():
+        anti = np.flatnonzero(gens[:, j])
+        z = np.zeros(2 * n, dtype=np.uint8)
+        z[n + j] = 1
+        if anti.size:
+            pivot = anti[0]
+            gens[anti[1:]] ^= gens[pivot]
+            gens[pivot] = z
+        else:
+            gens = np.vstack([gens, z])
+    return gens
+
+
+def effect_stabilizers(circuit: CliffordHalfLayers, t: int) -> np.ndarray:
+    """Pauli strings carrying the Fourier spectrum of a record of ``t`` half-layers.
+
+    For Clifford gates and ``Z`` measurements, ``E_m = K^dagger K`` is
+    proportional to a stabilizer projector, so ``c_a(m) != 0`` exactly on
+    the ``2^k`` strings of its stabilizer group ``S_m`` (all with
+    ``c_a^2 = c_0^2``). ``E_m`` is the output of the reversed circuit
+    ``K^dagger`` on the maximally mixed state; ``S_m`` is tracked like in
+    :func:`dense_weight_bits`, half-layers from ``t`` down to 1, each one
+    measurement first, then the inverse gates. Signs are dropped.
+
+    Args:
+        circuit: The half-layers.
+        t: Number of half-layers in the record.
+
+    Returns:
+        A basis of ``S_m`` over GF(2), shape ``(k, 2 n)``, columns
+        ``(x_0..x_{n-1}, z_0..z_{n-1})``.
+    """
+    n = circuit.n
+    sym = clifford_symplectic()
+    omega = np.block(
+        [[np.zeros((2, 2), dtype=np.uint8), np.eye(2, dtype=np.uint8)],
+         [np.eye(2, dtype=np.uint8), np.zeros((2, 2), dtype=np.uint8)]]
+    )  # fmt: skip
+    gens = np.zeros((0, 2 * n), dtype=np.uint8)
+    for s in range(t - 1, -1, -1):
+        gens = _measure_z(gens, circuit.measured[s], n)
+        # Inverse of a symplectic matrix over GF(2): Omega M^T Omega.
+        inverse = omega @ np.transpose(sym[circuit.gates[s]], (0, 2, 1)) @ omega % 2
+        _conjugate(gens, circuit.bonds[s], inverse.astype(np.uint8), n)
+        if len(gens) > n:
+            gens = _gf2_basis(gens)
+    return _gf2_basis(gens)
+
+
+def interval_counts(gens: np.ndarray, n: int, start: int) -> np.ndarray:
+    """Independent strings of a group supported in ``[start, start + l)``, all ``l``.
+
+    ``1 + W_A = 2^(k_A)`` is the Fourier weight carried by the modes supported
+    in the interval ``A`` (periodic). ``k_A`` is the rank of the group minus
+    the rank of its restriction to the complement; one elimination with the
+    sites ordered from ``start + n - 1`` down to ``start`` gives every ``l``.
+
+    Args:
+        gens: A basis of the group, shape ``(k, 2 n)``.
+        n: Number of sites.
+        start: First site of the intervals.
+
+    Returns:
+        ``k_A`` for ``l = 0, ..., n``, ``int`` array of length ``n + 1``.
+    """
+    k = len(gens)
+    order = [(start + n - 1 - i) % n for i in range(n)]
+    cols = np.array([[s, s + n] for s in order]).ravel()
+    a = gens[:, cols].copy()
+    pivots = np.zeros(2 * n + 1, dtype=int)  # pivots among the first c columns
+    r = 0
+    for c in range(2 * n):
+        if r < k:
+            nz = np.flatnonzero(a[r:, c])
+            if nz.size:
+                piv = r + nz[0]
+                if piv != r:
+                    a[[r, piv]] = a[[piv, r]]
+                below = r + 1 + np.flatnonzero(a[r + 1 :, c])
+                a[below] ^= a[r]
+                r += 1
+        pivots[c + 1] = r
+    # The complement of [start, start + l) is the first n - l sites of ``order``.
+    return np.array([k - pivots[2 * (n - ell)] for ell in range(n + 1)], dtype=int)
 
 
 def _gf2_basis(rows: np.ndarray) -> np.ndarray:
