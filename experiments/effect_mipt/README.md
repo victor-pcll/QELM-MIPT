@@ -280,6 +280,50 @@ of the measurement-induced transition: `log2(1 + W)` is extensive and
 independent crossing and a collapse at the literature exponent. The rank
 of the same circuits (number of modes spanned) has no such crossing.
 
+### Fourier cone
+
+For Clifford gates the Fourier spectrum of one record is flat on the
+stabilizer group `S_m` of its effect: `c_a(m) != 0` exactly on its `2^k`
+strings, all with `c_a^2 = c_0^2`. `effect_stabilizers` obtains `S_m` by
+running the same tracker on the reversed circuit `K^dagger` (Heisenberg
+image of the record, no ancilla). For an interval `A` of the input,
+`1 + W_A = 2^(k_A)` is the weight of the modes supported in `A`
+(`interval_counts`). Both are tested against the explicit Pauli
+coefficients and a brute-force count.
+
+```bash
+uv run python experiments/effect_mipt/fourier_cone.py --n 64 --p 0.12 --samples 300
+uv run python experiments/effect_mipt/plot_fourier_cone.py outputs/effect_mipt
+```
+
+![Fourier cone](figures/fourier_cone.png)
+
+**Figure 9. Fourier cone, literature circuit, `N = 64`**, 300 trajectories
+per `p`, record lengths `t = 2` to `2N` half-layers, intervals at 8 random
+positions per record. `I(l, t) = k(N) - k(l) - k(N - l)` counts the modes
+that straddle the two ends of an interval of length `l`, that is the
+Fourier weight correlating inputs on both sides.
+- **Maps (top):** number of modes per end longer than `l`,
+  `n(l, t) = dI/dl / 2`, log colour, and their mean range
+  `xi(t) = sum_l n(l, t) / n(0, t)` (orange). At early times modes exist
+  only up to a range that grows with `t` (the white wedge at the bottom
+  right of each map is outside the cone). In the pure phase the cone stops
+  at a finite range; in the mixed phase a tail of long modes keeps filling
+  in.
+- **Bottom left:** `xi(t)`. All `p` share the same initial growth; it
+  saturates at `xi ≈ 2.7` sites (`p = 0.24`) and 3.6 (`p = 0.20`), and is
+  still growing at `t = 2N` for `p <= 0.14`.
+- **Bottom centre:** `I(N/2, t)`, the modes straddling a cut of the input in
+  two halves. Same picture: a plateau of 3.9 and 5.6 modes for
+  `p = 0.24, 0.20`, still rising (12 to 14 modes) for `p <= 0.12`.
+- **Bottom right:** `I(N/2, 2N)` against `p`, with its steepest fall at
+  `p_c = 0.16`.
+
+**Reading.** Below `p_c` the record keeps building Fourier modes that
+correlate distant inputs; above `p_c` it only builds modes of a finite
+range, set by `p`. One size only: whether the plateau length diverges at
+`p_c` needs `N = 32` and 128 as well.
+
 ## Caveats
 
 - `D_2` is estimated from 600 records. Its in-sample standard error grows
