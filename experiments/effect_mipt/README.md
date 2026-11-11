@@ -216,6 +216,70 @@ the literature circuit it reproduces the known critical point and exponent.
 It is the quantity of Figure 5 restricted to one encoded qubit, where
 Clifford sizes are large enough to resolve the crossing.
 
+## Dense-encoding Fourier weight at large N, Clifford (issue #327)
+
+Back to the dense encoding on the `N` input qubits, without ancilla:
+`Pr(m | x) = Tr[E_m rho(x)]` and `W(m) = sum_{a != 0} c_a^2 / c_0^2` over the
+`4^N` Pauli strings, as in Figure 5. With Clifford gates and `Z`
+measurements, `E_m` is proportional to a stabilizer projector of rank
+`2^(N - k)`, so `1 + W(m) = 2^N Tr[E_m^2] / Tr[E_m]^2 = 2^k` exactly. As
+`E_m = K^dagger K` has the spectrum of `K K^dagger`, `k` is the number of
+independent stabilizers of the output of the maximally mixed input,
+tracked forward without ancilla by `dense_weight_bits`: a gate conjugates
+the generators; a measured `Z_j` replaces an anticommuting generator (`k`
+unchanged) or else joins the group. `k` does not depend on the outcomes,
+so one record per trajectory gives the exact Born average.
+`Delta = N - log2(1 + W)` is the Renyi-2 purification entropy. The test
+`test_dense_weight_bits_matches_pauli_coefficients` checks `k` against the
+explicit Pauli coefficients of the record's effect (`fourier_weight`) for
+`N = 4, 6` in both conventions.
+
+```bash
+uv run python experiments/effect_mipt/dense_weight.py periodic --n 64 --samples 2000
+uv run python experiments/effect_mipt/dense_weight.py open --n 64 --samples 2000
+uv run python experiments/effect_mipt/plot_dense_weight.py outputs/effect_mipt
+```
+
+Trajectories per point: 4000 (`N = 16, 32`), 2000 (`N = 64`), 800
+(`N = 128`); one fresh circuit and measurement pattern each, no final
+readout. Numbers in `figures/dense_summary.json`.
+
+![Dense weight, literature circuit](figures/dense_periodic_2N.png)
+
+**Figure 7. Literature circuit** (periodic brickwork, measurement of each
+site with probability `p` after every half-layer), after `2N` half-layers.
+- `log2(1 + W) / N` rises with `p` and tends to 1: one record fixes almost
+  all of the dense input above `p_c`.
+- `Delta` grows like `N` below the transition and falls to zero above it,
+  faster for larger `N`. The curves cross at one point.
+- The six pairwise crossings lie in 0.165 to 0.166, with no drift with size
+  (0.165 to 0.168 after `4N` half-layers, `dense_periodic_4N.png`).
+- The collapse with the literature `p_c = 0.16`, `nu = 1.3`, nothing
+  fitted, puts all sizes on one curve over three decades of `Delta`. A free
+  collapse gives `p_c = 0.161`, `nu = 1.30` (`2N`) and `0.161`, `1.38`
+  (`4N`).
+- The crossings sit 0.005 above the collapse and above the reference-qubit
+  crossing of Figure 6 (0.160); their spread is far smaller than that
+  offset, which is a finite-time correction of the crossing at fixed
+  `t / N` rather than noise.
+
+![Dense weight, #314 convention](figures/dense_open_2N.png)
+
+**Figure 8. Convention of #314** (open brickwork, measurement after every
+layer of two half-layers), after `2N` half-layers.
+- Same picture. The pairwise crossings lie in 0.299 to 0.307 (0.297 to
+  0.311 after `4N`), drifting slightly up with size, inside the
+  `0.29 +- 0.02` of the reference probes of #324 (grey band).
+- The collapse uses the mean crossing `p_c = 0.305` and the literature
+  `nu = 1.3`; a free collapse gives `p_c = 0.302`, `nu = 1.36`.
+
+**Reading.** In the dense encoding of the Fourier framework, the
+per-record weight `W(m)` outside the constant mode is an order parameter
+of the measurement-induced transition: `log2(1 + W)` is extensive and
+`Delta = N - log2(1 + W)` vanishes in the pure phase, with a size-
+independent crossing and a collapse at the literature exponent. The rank
+of the same circuits (number of modes spanned) has no such crossing.
+
 ## Caveats
 
 - `D_2` is estimated from 600 records. Its in-sample standard error grows
