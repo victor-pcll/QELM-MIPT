@@ -257,6 +257,125 @@ def frame_figure(data: dict[int, dict], pcs: dict[str, float], path: Path) -> di
     return out
 
 
+def load_weight(folder: Path) -> dict[int, dict[int, dict]]:
+    """Weight runs by ``T / N`` then ``N``, merged across files."""
+    out: dict[int, dict[int, dict]] = {}
+    for path in sorted(folder.glob("weight_N*.json")):
+        d = json.loads(path.read_text())
+        n = int(d["n"])
+        block = out.setdefault(d["depth"] // n, {}).setdefault(
+            n, {"p": d["p"], "runs": []}
+        )
+        block["runs"] += d["runs"]
+    return {r: dict(sorted(v.items())) for r, v in sorted(out.items())}
+
+
+def weight_figure(
+    data: dict[int, dict[int, dict]], pcs: dict[str, float], path: Path
+) -> dict:
+    """Missing Fourier weight (dense), angle weight and rank, per ``T / N``."""
+    ratios = list(data)
+    sizes = sorted({n for r in ratios for n in data[r]})
+    col = blues(sizes)
+    out: dict = {}
+    fig, axes = plt.subplots(
+        3, len(ratios), figsize=(4.6 * len(ratios), 10.5), squeeze=False
+    )
+    for j, ratio in enumerate(ratios):
+        curves = {}
+        for n, block in data[ratio].items():
+            runs = block["runs"]
+            p = np.array(block["p"])
+            k = len(runs)
+            delta = n - np.array([r["dense_bits"] for r in runs])
+            angle = np.array([r["angle_bits"] for r in runs]) / n
+            cut = (np.array([r["cut"] for r in runs]) - n) / n
+            sem = lambda a, k=k: a.std(0, ddof=1) / np.sqrt(k)  # noqa: E731
+            curves[n] = (p, delta.mean(0), sem(delta))
+            lab = f"N = {n} ({k} circuits)"
+            axes[0, j].errorbar(
+                p,
+                delta.mean(0),
+                yerr=sem(delta),
+                color=col[n],
+                marker="o",
+                ms=3,
+                lw=1.5,
+                capsize=2,
+                label=lab,
+            )
+            axes[1, j].errorbar(
+                p,
+                angle.mean(0),
+                yerr=sem(angle),
+                color=col[n],
+                marker="o",
+                ms=3,
+                lw=1.5,
+                capsize=2,
+                label=lab,
+            )
+            axes[2, j].errorbar(
+                p,
+                cut.mean(0),
+                yerr=sem(cut),
+                color=col[n],
+                marker="o",
+                ms=3,
+                lw=1.5,
+                capsize=2,
+                label=lab,
+            )
+            out.setdefault(f"T={ratio}N", {})[str(n)] = {
+                "p": p.tolist(),
+                "circuits": k,
+                "delta": delta.mean(0).tolist(),
+                "delta_sem": sem(delta).tolist(),
+                "angle_bits_per_site": angle.mean(0).tolist(),
+                "angle_sem": sem(angle).tolist(),
+                "rank_excess": cut.mean(0).tolist(),
+            }
+        ns = list(curves)
+        cross = []
+        for n1, n2 in zip(ns, ns[1:], strict=False):
+            p1, p2 = curves[n1][0], curves[n2][0]
+            k1, k2 = np.isin(p1, p2), np.isin(p2, p1)
+            c = crossing(
+                p1[k1],
+                curves[n1][1][k1],
+                curves[n1][2][k1],
+                curves[n2][1][k2],
+                curves[n2][2][k2],
+            )
+            if c is not None:
+                cross.append({"N": [n1, n2], **c})
+        out[f"T={ratio}N"]["crossings"] = cross
+        text = ", ".join(f"{c['N'][0]}/{c['N'][1]}: {c['p']:.2f}" for c in cross)
+        axes[0, j].set_yscale("log")
+        axes[0, j].set_ylim(0.02, 12)
+        axes[0, j].set_title(
+            f"T = {ratio}N — Δ = N − ⟨log$_2$(1 + W)⟩, dense\ncrossings {text}",
+            fontsize=9.5,
+        )
+        axes[1, j].set_title("angle: ⟨log$_2$(1 + W$_{angle}$)⟩ / N", fontsize=9.5)
+        axes[2, j].set_title(
+            "rank of the same circuits: log$_2$(rank / 2$^N$) / N", fontsize=9.5
+        )
+        for i in range(3):
+            for pc in pcs.values():
+                axes[i, j].axvline(pc, color="0.4", ls="--", lw=1)
+            axes[i, j].grid(alpha=0.25)
+            axes[i, j].set_xlabel("p")
+        axes[0, j].legend(fontsize=7.5, frameon=False)
+    axes[0, 0].set_ylabel("missing Fourier weight Δ (bits)")
+    axes[1, 0].set_ylabel("bits per site")
+    axes[2, 0].set_ylabel("extra bits per site")
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    return out
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("folder", type=Path)
@@ -294,6 +413,11 @@ def main() -> None:
     frame = load(args.folder, "frame")
     if frame:
         summary["frame"] = frame_figure(frame, pcs, args.out / "frame_dimension.png")
+    weight = load_weight(args.folder)
+    if weight:
+        summary["weight"] = weight_figure(weight, pcs, args.out / "fourier_weight.png")
+        for name, block in summary["weight"].items():
+            print("weight", name, block["crossings"])
     (args.out / "summary.json").write_text(json.dumps(summary, indent=1))
     for name in ("clifford", "clifford_reference", "haar"):
         if name in summary:

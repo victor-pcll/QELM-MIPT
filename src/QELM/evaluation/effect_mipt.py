@@ -69,8 +69,7 @@ def apply_gate(psi: np.ndarray, n: int, site: int, gate: np.ndarray) -> np.ndarr
     """
     lead = psi.shape[:-1]
     v = psi.reshape(*lead, 2**site, 4, 2 ** (n - site - 2))
-    out = np.einsum("ab,...lbr->...lar", gate, v)
-    return np.asarray(out).reshape(psi.shape)
+    return np.asarray(np.matmul(gate, v)).reshape(psi.shape)
 
 
 def project(psi: np.ndarray, n: int, site: int, outcome: int) -> np.ndarray:
