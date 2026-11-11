@@ -299,7 +299,8 @@ uv run python experiments/effect_mipt/plot_fourier_cone.py outputs/effect_mipt
 ![Fourier cone](figures/fourier_cone.png)
 
 **Figure 9. Fourier cone, literature circuit, `N = 64`**, 300 trajectories
-per `p`, record lengths `t = 2` to `2N` half-layers, intervals at 8 random
+per `p` (`p = 0.04` to 0.32, maps at 0.04, 0.08, 0.16, 0.24, 0.32; blues
+for the mixed phase, oranges for the pure phase), record lengths `t = 2` to `2N` half-layers, intervals at 8 random
 positions per record. `I(l, t) = k(N) - k(l) - k(N - l)` counts the modes
 that straddle the two ends of an interval of length `l`, that is the
 Fourier weight correlating inputs on both sides.
@@ -311,13 +312,15 @@ Fourier weight correlating inputs on both sides.
   at a finite range; in the mixed phase a tail of long modes keeps filling
   in.
 - **Bottom left:** `xi(t)`. All `p` share the same initial growth; it
-  saturates at `xi ≈ 2.7` sites (`p = 0.24`) and 3.6 (`p = 0.20`), and is
-  still growing at `t = 2N` for `p <= 0.14`.
+  saturates at `xi ≈ 1.9`, 2.2, 2.7 and 3.6 sites (`p = 0.32`, 0.28, 0.24,
+  0.20), and is still growing at `t = 2N` for `p <= 0.14`.
 - **Bottom centre:** `I(N/2, t)`, the modes straddling a cut of the input in
-  two halves. Same picture: a plateau of 3.9 and 5.6 modes for
-  `p = 0.24, 0.20`, still rising (12 to 14 modes) for `p <= 0.12`.
+  two halves. Same picture: a plateau of 2.3 to 5.6 modes for
+  `p = 0.32` to 0.20, still rising (12 to 14 modes) for `p <= 0.12`.
 - **Bottom right:** `I(N/2, 2N)` against `p`, with its steepest fall at
-  `p_c = 0.16`.
+  `p_c = 0.16`. It is maximal at `p = 0.08` and lower at 0.04: with very
+  few measurements the record holds few modes at all after `2N`
+  half-layers.
 
 **Reading.** Below `p_c` the record keeps building Fourier modes that
 correlate distant inputs; above `p_c` it only builds modes of a finite
