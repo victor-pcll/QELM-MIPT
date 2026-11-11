@@ -350,14 +350,12 @@ def weight_figure(
             if c is not None:
                 cross.append({"N": [n1, n2], **c})
         out[f"T={ratio}N"]["crossings"] = cross
-        text = ", ".join(f"{c['N'][0]}/{c['N'][1]}: {c['p']:.2f}" for c in cross)
         axes[0, j].set_yscale("log")
         axes[0, j].set_ylim(0.02, 12)
         axes[0, j].set_title(
-            f"T = {ratio}N — Δ = N − ⟨log$_2$(1 + W)⟩, dense\ncrossings {text}",
-            fontsize=9.5,
+            f"T = {ratio}N: Δ = N − mean log$_2$(1 + W), dense", fontsize=9.5
         )
-        axes[1, j].set_title("angle: ⟨log$_2$(1 + W$_{angle}$)⟩ / N", fontsize=9.5)
+        axes[1, j].set_title("angle: mean log$_2$(1 + W$_{angle}$) / N", fontsize=9.5)
         axes[2, j].set_title(
             "rank of the same circuits: log$_2$(rank / 2$^N$) / N", fontsize=9.5
         )
