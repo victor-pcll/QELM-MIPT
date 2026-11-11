@@ -173,6 +173,49 @@ each row of `A` (how far one record's function is from the constant), not
 in the number of modes the rows span. At Haar sizes `N <= 12` this is a
 trend, not a resolved crossing; the resolved evidence is the Clifford run.
 
+## The Fourier weight recovers the literature Clifford transition (issue #325)
+
+To compare with the literature, the encoded input is reduced to one qubit
+and the circuit is the reference-qubit probe of Gullans & Huse (PRL 125,
+070606 (2020)), already in `QELM.models.circuits.stabilizer`: periodic
+brickwork of random two-qubit Clifford gates, the qubit `x` entangled with
+the middle site, `2N` half-layers without measurement, then `2N` half-layers
+with a `Z` measurement of each site with probability `p` after every
+half-layer. For one encoded qubit, `Pr(m | x) = c_0 (1 + r_m . b(x))` with
+`b(x)` the Bloch vector of the input, so `W(m) = |r_m|^2` and
+`log2(1 + W) = 1 - S_2` with `S_2` the Renyi-2 entropy of the reference
+qubit. For a stabilizer state `W` is 0 or 1 for every record, and
+`<W> = 1 - <S_R>`.
+
+```bash
+uv run python experiments/effect_mipt/clifford_weight.py --n 64 --samples 4000
+uv run python experiments/effect_mipt/plot_clifford_weight.py outputs/effect_mipt
+```
+
+![Clifford Fourier weight](figures/clifford_weight.png)
+
+**Figure 6. Fourier weight of the encoded qubit, Clifford, `N = 16, 32, 64,
+128`.** 4000 trajectories per point (4500 at `N = 128`), `p = 0.08` to 0.24
+in steps of 0.01. Numbers in `figures/clifford_weight_summary.json`.
+- **Left: `<W>` against `p`.** Below `p_c` the record carries no weight on
+  the input (the information is hidden in the volume-law state), above it
+  the record fixes the input completely. The curves sharpen with `N` and
+  cross at one point.
+- **Middle: crossing of every pair of sizes** (zero of a weighted line
+  through the difference on the four grid points around the sign change).
+  All six lie between 0.158 and 0.162, with no drift with size; their
+  weighted mean is 0.160, the literature value `p_c ≈ 0.16`.
+- **Right: collapse against `(p - p_c) N^(1/nu)` with the literature
+  `p_c = 0.16` and `nu = 1.3`**, nothing fitted. A free two-parameter
+  collapse (polynomial of degree 5, `|x| < 2`) gives `p_c = 0.160`,
+  `nu = 1.38`, as a check.
+
+**Reading.** The per-record Fourier weight of the encoded input is an order
+parameter of the MIPT: it is the second Renyi purification entropy, and on
+the literature circuit it reproduces the known critical point and exponent.
+It is the quantity of Figure 5 restricted to one encoded qubit, where
+Clifford sizes are large enough to resolve the crossing.
+
 ## Caveats
 
 - `D_2` is estimated from 600 records. Its in-sample standard error grows
