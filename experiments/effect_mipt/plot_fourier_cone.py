@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.colors import LogNorm  # noqa: E402
 
-MAPS = (0.08, 0.14, 0.16, 0.20, 0.24)
+MAPS = (0.04, 0.08, 0.16, 0.24, 0.32)
 P_C = 0.16
 
 plt.rcParams.update(
@@ -62,6 +62,20 @@ def load(folder: Path) -> dict[float, dict]:
     return dict(sorted(out.items()))
 
 
+def phase_colors(ps: list[float]) -> dict[float, tuple]:
+    """Blues for the mixed phase (darker deeper), oranges for the pure phase."""
+    below = [p for p in ps if p < P_C - 1e-9]
+    above = [p for p in ps if p > P_C + 1e-9]
+    out: dict[float, tuple] = {}
+    blues = plt.get_cmap("Blues")(np.linspace(0.95, 0.45, max(len(below), 1)))
+    oranges = plt.get_cmap("Oranges")(np.linspace(0.45, 0.95, max(len(above), 1)))
+    out.update(zip(below, map(tuple, blues), strict=False))
+    out.update(zip(above, map(tuple, oranges), strict=False))
+    for p in ps:
+        out.setdefault(p, (0.1, 0.1, 0.1, 1.0))
+    return out
+
+
 def figure(data: dict[float, dict], path: Path) -> dict:
     fig = plt.figure(figsize=(17, 8.2), constrained_layout=True)
     grid = fig.add_gridspec(2, len(MAPS))
@@ -79,20 +93,20 @@ def figure(data: dict[float, dict], path: Path) -> dict:
             cmap="Blues",
             shading="nearest",
         )
-        ax.plot(d["xi"], times, color="#c2410c", lw=1.4, label=r"mean range $\xi(t)$")
+        ax.plot(d["xi"], times, color="#111827", lw=1.6, label=r"mean range $\xi(t)$")
         ax.set_xlim(0, n // 2)
         ax.set_xlabel("range of the Fourier modes, l (sites)")
         if i == 0:
             ax.set_ylabel("record length t (half-layers)")
             ax.legend(frameon=False, loc="upper right")
         phase = "mixed" if p < P_C else ("critical" if p == P_C else "pure")
-        ax.set_title(f"p = {p:.2f} ({phase})", loc="left", fontsize=10)
+        title_color = {"mixed": "#1d4ed8", "critical": "0.1", "pure": "#c2410c"}[phase]
+        ax.set_title(f"p = {p:.2f} ({phase})", loc="left", fontsize=11,
+                     color=title_color, fontweight="bold")  # fmt: skip
     fig.colorbar(image, ax=fig.axes[: len(MAPS)], shrink=0.9,
                  label="modes longer than l, per end")  # fmt: skip
 
-    colors = dict(
-        zip(data, plt.get_cmap("viridis")(np.linspace(0, 0.9, len(data))), strict=True)
-    )
+    colors = phase_colors(list(data))
     ax = fig.add_subplot(grid[1, :2])
     for p, d in data.items():
         ax.plot(d["times"], d["xi"], color=colors[p], lw=1.6, label=f"p = {p:.2f}")
@@ -113,7 +127,13 @@ def figure(data: dict[float, dict], path: Path) -> dict:
 
     ax = fig.add_subplot(grid[1, 4])
     last = [d["straddle"][-1, -1] for d in data.values()]
-    ax.plot(list(data), last, color="0.3", marker="o")
+    ax.plot(list(data), last, color="0.6", lw=1, zorder=0)
+    ax.scatter(list(data), last, c=[colors[p] for p in data], s=40, zorder=1)
+    ax.axvspan(0, P_C, color="#dbeafe", zorder=-1)
+    ax.axvspan(P_C, 1, color="#ffedd5", zorder=-1)
+    ax.set_xlim(min(data) - 0.02, max(data) + 0.02)
+    ax.text(0.03, 0.05, "mixed", transform=ax.transAxes, color="#1d4ed8")
+    ax.text(0.97, 0.9, "pure", transform=ax.transAxes, color="#c2410c", ha="right")
     ax.axvline(P_C, color="0.6", lw=1, ls="--")
     ax.set_xlabel("measurement rate p")
     ax.set_ylabel(r"$I(N/2, 2N)$ (modes)")
