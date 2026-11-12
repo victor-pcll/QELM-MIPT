@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import cache
 
 import numpy as np
 import stim  # type: ignore[import-untyped]
@@ -46,6 +47,7 @@ from QELM.models.circuits.clifford import clifford_group_2q
 from QELM.models.circuits.haar import haar_gate
 from QELM.models.circuits.stabilizer import (
     clifford_gate_programs,
+    periodic_bonds,
     stabilizer_entropy,
     stabilizer_matrix,
 )
@@ -469,3 +471,242 @@ def fourier_weight(kraus: np.ndarray) -> FourierWeight:
     dense = float((sq.sum() - sq[0]) / sq[0])
     angle = float((sq[no_y_columns(n)].sum() - sq[0]) / sq[0])
     return FourierWeight(dense=dense, angle=angle)
+
+
+# ---------------------------------------------------------------------------
+# Dense-encoding Fourier weight of Clifford circuits (mixed stabilizer group)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CliffordHalfLayers:
+    """A Clifford circuit as a list of half-layers.
+
+    Attributes:
+        n: Number of qubits.
+        bonds: Per half-layer, the ``(g, 2)`` array of disjoint gate supports.
+        gates: Per half-layer, the ``g`` gate indices in
+            :func:`~QELM.models.circuits.clifford.clifford_group_2q`.
+        measured: Per half-layer, the sites measured in ``Z`` after its gates.
+    """
+
+    n: int
+    bonds: list[np.ndarray]
+    gates: list[np.ndarray]
+    measured: list[np.ndarray]
+
+
+@cache
+def clifford_symplectic() -> np.ndarray:
+    """Binary symplectic matrix of each two-qubit Clifford gate, signs dropped.
+
+    Element ``k`` maps the row vector ``(x_a, x_b, z_a, z_b)`` of a Pauli
+    string on the two qubits of the gate to that of its conjugate by gate
+    ``k`` of :func:`~QELM.models.circuits.clifford.clifford_group_2q` (the
+    first qubit ``a`` is the most significant bit of the gate index).
+
+    Returns:
+        ``uint8`` array of shape ``(11520, 4, 4)``.
+    """
+    out = np.zeros((len(clifford_gate_programs()), 4, 4), dtype=np.uint8)
+    for k, program in enumerate(clifford_gate_programs()):
+        tab = stim.Tableau.from_circuit(stim.Circuit(program.format(a=0, b=1)))
+        images = [tab.x_output(0), tab.x_output(1), tab.z_output(0), tab.z_output(1)]
+        for row, pauli in enumerate(images):
+            xs, zs = pauli.to_numpy()
+            out[k, row] = np.concatenate([xs, zs]).astype(np.uint8)
+    return out
+
+
+def draw_periodic_half_layers(
+    n: int, p: float, half_layers: int, rng: np.random.Generator
+) -> CliffordHalfLayers:
+    """Literature circuit: periodic brickwork, measurement after every half-layer.
+
+    Half-layer ``t`` acts on :func:`periodic_bonds` ``(n, t)``; each site is
+    then measured with probability ``p``, independently.
+    """
+    size = len(clifford_gate_programs())
+    bonds = [np.array(periodic_bonds(n, t)) for t in range(half_layers)]
+    gates = [rng.integers(size, size=n // 2) for _ in range(half_layers)]
+    measured = [np.flatnonzero(rng.random(n) < p) for _ in range(half_layers)]
+    return CliffordHalfLayers(n=n, bonds=bonds, gates=gates, measured=measured)
+
+
+def draw_open_half_layers(
+    n: int, masks: np.ndarray, rng: np.random.Generator
+) -> CliffordHalfLayers:
+    """Convention of :mod:`QELM.evaluation.effect_rank` with Clifford gates.
+
+    Open brickwork; one layer of ``masks`` is the even half-layer, the odd
+    half-layer, then the ``Z`` measurement of the masked sites, so ``T``
+    layers are ``2 T`` half-layers.
+    """
+    masks = np.asarray(masks, dtype=bool)
+    size = len(clifford_gate_programs())
+    even = np.array([(i, i + 1) for i in range(0, n - 1, 2)])
+    odd = np.array([(i, i + 1) for i in range(1, n - 1, 2)]).reshape(-1, 2)
+    bonds, gates, measured = [], [], []
+    for row in masks:
+        bonds += [even, odd]
+        gates += [rng.integers(size, size=len(even)), rng.integers(size, size=len(odd))]
+        measured += [np.zeros(0, dtype=int), np.flatnonzero(row)]
+    return CliffordHalfLayers(n=n, bonds=bonds, gates=gates, measured=measured)
+
+
+def dense_weight_bits(
+    circuit: CliffordHalfLayers, checkpoints: Sequence[int]
+) -> np.ndarray:
+    """``log2(1 + W(m))`` of the dense encoding after given numbers of half-layers.
+
+    For Clifford gates and ``Z`` measurements, the effect ``E_m`` of a
+    mid-circuit record is proportional to a stabilizer projector of rank
+    ``2^(N - k)``, and ``1 + W(m) = 2^N Tr[E_m^2] / Tr[E_m]^2 = 2^k``.
+    ``E_m = K^dagger K`` has the spectrum of ``K K^dagger``, the output of
+    the maximally mixed input, so ``k`` is the number of independent
+    stabilizers of that output. They are tracked forward without ancilla:
+    a gate conjugates the generators; a measured ``Z_j`` replaces a
+    generator that anticommutes with it (``k`` unchanged) or else joins the
+    group (``k + 1`` if independent). ``k`` does not depend on the outcomes,
+    so no outcome is drawn and signs are dropped.
+
+    Args:
+        circuit: The half-layers.
+        checkpoints: Numbers of half-layers after which ``k`` is returned.
+
+    Returns:
+        ``k`` at each checkpoint, ``int`` array.
+    """
+    n = circuit.n
+    sym = clifford_symplectic()
+    gens = np.zeros((0, 2 * n), dtype=np.uint8)
+    marks = set(checkpoints)
+    out: dict[int, int] = {}
+    if 0 in marks:
+        out[0] = 0
+    for t, (bonds, gate_ids, sites) in enumerate(
+        zip(circuit.bonds, circuit.gates, circuit.measured, strict=True)
+    ):
+        _conjugate(gens, bonds, sym[gate_ids], n)
+        gens = _measure_z(gens, sites, n)
+        if len(gens) > n:
+            gens = _gf2_basis(gens)
+        if t + 1 in marks:
+            out[t + 1] = int(len(_gf2_basis(gens)))
+    return np.array([out[c] for c in checkpoints], dtype=int)
+
+
+def _conjugate(gens: np.ndarray, bonds: np.ndarray, mats: np.ndarray, n: int) -> None:
+    """Conjugate the generators (in place) by gates of symplectic matrices ``mats``."""
+    if len(bonds) == 0 or len(gens) == 0:
+        return
+    cols = np.concatenate([bonds, bonds + n], axis=1)  # (g, 4)
+    block = gens[:, cols].astype(np.int64)  # (r, g, 4)
+    gens[:, cols] = (np.einsum("rgi,gij->rgj", block, mats) % 2).astype(np.uint8)
+
+
+def _measure_z(gens: np.ndarray, sites: np.ndarray, n: int) -> np.ndarray:
+    """Generators after measuring ``Z`` on ``sites`` (mixed stabilizer group)."""
+    for j in np.asarray(sites).tolist():
+        anti = np.flatnonzero(gens[:, j])
+        z = np.zeros(2 * n, dtype=np.uint8)
+        z[n + j] = 1
+        if anti.size:
+            pivot = anti[0]
+            gens[anti[1:]] ^= gens[pivot]
+            gens[pivot] = z
+        else:
+            gens = np.vstack([gens, z])
+    return gens
+
+
+def effect_stabilizers(circuit: CliffordHalfLayers, t: int) -> np.ndarray:
+    """Pauli strings carrying the Fourier spectrum of a record of ``t`` half-layers.
+
+    For Clifford gates and ``Z`` measurements, ``E_m = K^dagger K`` is
+    proportional to a stabilizer projector, so ``c_a(m) != 0`` exactly on
+    the ``2^k`` strings of its stabilizer group ``S_m`` (all with
+    ``c_a^2 = c_0^2``). ``E_m`` is the output of the reversed circuit
+    ``K^dagger`` on the maximally mixed state; ``S_m`` is tracked like in
+    :func:`dense_weight_bits`, half-layers from ``t`` down to 1, each one
+    measurement first, then the inverse gates. Signs are dropped.
+
+    Args:
+        circuit: The half-layers.
+        t: Number of half-layers in the record.
+
+    Returns:
+        A basis of ``S_m`` over GF(2), shape ``(k, 2 n)``, columns
+        ``(x_0..x_{n-1}, z_0..z_{n-1})``.
+    """
+    n = circuit.n
+    sym = clifford_symplectic()
+    omega = np.block(
+        [[np.zeros((2, 2), dtype=np.uint8), np.eye(2, dtype=np.uint8)],
+         [np.eye(2, dtype=np.uint8), np.zeros((2, 2), dtype=np.uint8)]]
+    )  # fmt: skip
+    gens = np.zeros((0, 2 * n), dtype=np.uint8)
+    for s in range(t - 1, -1, -1):
+        gens = _measure_z(gens, circuit.measured[s], n)
+        # Inverse of a symplectic matrix over GF(2): Omega M^T Omega.
+        inverse = omega @ np.transpose(sym[circuit.gates[s]], (0, 2, 1)) @ omega % 2
+        _conjugate(gens, circuit.bonds[s], inverse.astype(np.uint8), n)
+        if len(gens) > n:
+            gens = _gf2_basis(gens)
+    return _gf2_basis(gens)
+
+
+def interval_counts(gens: np.ndarray, n: int, start: int) -> np.ndarray:
+    """Independent strings of a group supported in ``[start, start + l)``, all ``l``.
+
+    ``1 + W_A = 2^(k_A)`` is the Fourier weight carried by the modes supported
+    in the interval ``A`` (periodic). ``k_A`` is the rank of the group minus
+    the rank of its restriction to the complement; one elimination with the
+    sites ordered from ``start + n - 1`` down to ``start`` gives every ``l``.
+
+    Args:
+        gens: A basis of the group, shape ``(k, 2 n)``.
+        n: Number of sites.
+        start: First site of the intervals.
+
+    Returns:
+        ``k_A`` for ``l = 0, ..., n``, ``int`` array of length ``n + 1``.
+    """
+    k = len(gens)
+    order = [(start + n - 1 - i) % n for i in range(n)]
+    cols = np.array([[s, s + n] for s in order]).ravel()
+    a = gens[:, cols].copy()
+    pivots = np.zeros(2 * n + 1, dtype=int)  # pivots among the first c columns
+    r = 0
+    for c in range(2 * n):
+        if r < k:
+            nz = np.flatnonzero(a[r:, c])
+            if nz.size:
+                piv = r + nz[0]
+                if piv != r:
+                    a[[r, piv]] = a[[piv, r]]
+                below = r + 1 + np.flatnonzero(a[r + 1 :, c])
+                a[below] ^= a[r]
+                r += 1
+        pivots[c + 1] = r
+    # The complement of [start, start + l) is the first n - l sites of ``order``.
+    return np.array([k - pivots[2 * (n - ell)] for ell in range(n + 1)], dtype=int)
+
+
+def _gf2_basis(rows: np.ndarray) -> np.ndarray:
+    """A basis of the row span over GF(2) (row echelon form)."""
+    a = rows.copy()
+    r = 0
+    for c in range(a.shape[1]):
+        if r == len(a):
+            break
+        nz = np.flatnonzero(a[r:, c])
+        if nz.size == 0:
+            continue
+        piv = r + nz[0]
+        if piv != r:
+            a[[r, piv]] = a[[piv, r]]
+        below = r + 1 + np.flatnonzero(a[r + 1 :, c])
+        a[below] ^= a[r]
+        r += 1
+    return a[:r]

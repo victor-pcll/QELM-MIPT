@@ -216,6 +216,117 @@ the literature circuit it reproduces the known critical point and exponent.
 It is the quantity of Figure 5 restricted to one encoded qubit, where
 Clifford sizes are large enough to resolve the crossing.
 
+## Dense-encoding Fourier weight at large N, Clifford (issue #327)
+
+Back to the dense encoding on the `N` input qubits, without ancilla:
+`Pr(m | x) = Tr[E_m rho(x)]` and `W(m) = sum_{a != 0} c_a^2 / c_0^2` over the
+`4^N` Pauli strings, as in Figure 5. With Clifford gates and `Z`
+measurements, `E_m` is proportional to a stabilizer projector of rank
+`2^(N - k)`, so `1 + W(m) = 2^N Tr[E_m^2] / Tr[E_m]^2 = 2^k` exactly. As
+`E_m = K^dagger K` has the spectrum of `K K^dagger`, `k` is the number of
+independent stabilizers of the output of the maximally mixed input,
+tracked forward without ancilla by `dense_weight_bits`: a gate conjugates
+the generators; a measured `Z_j` replaces an anticommuting generator (`k`
+unchanged) or else joins the group. `k` does not depend on the outcomes,
+so one record per trajectory gives the exact Born average.
+`Delta = N - log2(1 + W)` is the Renyi-2 purification entropy. The test
+`test_dense_weight_bits_matches_pauli_coefficients` checks `k` against the
+explicit Pauli coefficients of the record's effect (`fourier_weight`) for
+`N = 4, 6` in both conventions.
+
+```bash
+uv run python experiments/effect_mipt/dense_weight.py periodic --n 64 --samples 2000
+uv run python experiments/effect_mipt/dense_weight.py open --n 64 --samples 2000
+uv run python experiments/effect_mipt/plot_dense_weight.py outputs/effect_mipt
+```
+
+Trajectories per point: 4000 (`N = 16, 32`), 2000 (`N = 64`), 800
+(`N = 128`); one fresh circuit and measurement pattern each, no final
+readout. Numbers in `figures/dense_summary.json`.
+
+![Dense weight, literature circuit](figures/dense_periodic_2N.png)
+
+**Figure 7. Literature circuit** (periodic brickwork, measurement of each
+site with probability `p` after every half-layer), after `2N` half-layers.
+- `Delta / N = (N - log2(1 + W)) / N` falls with `p` and tends to 0: one
+  record fixes almost all of the dense input above `p_c`.
+- `Delta` grows like `N` below the transition and falls to zero above it,
+  faster for larger `N`. The curves cross at one point.
+- The six pairwise crossings lie in 0.165 to 0.166, with no drift with size
+  (0.165 to 0.168 after `4N` half-layers, `dense_periodic_4N.png`).
+- The collapse with the literature `p_c = 0.16`, `nu = 1.3`, nothing
+  fitted, puts all sizes on one curve over three decades of `Delta`. A free
+  collapse gives `p_c = 0.161`, `nu = 1.30` (`2N`) and `0.161`, `1.38`
+  (`4N`).
+- The crossings sit 0.005 above the collapse and above the reference-qubit
+  crossing of Figure 6 (0.160); their spread is far smaller than that
+  offset, which is a finite-time correction of the crossing at fixed
+  `t / N` rather than noise.
+
+![Dense weight, #314 convention](figures/dense_open_2N.png)
+
+**Figure 8. Convention of #314** (open brickwork, measurement after every
+layer of two half-layers), after `2N` half-layers.
+- Same picture. The pairwise crossings lie in 0.299 to 0.307 (0.297 to
+  0.311 after `4N`), drifting slightly up with size, inside the
+  `0.29 +- 0.02` of the reference probes of #324 (grey band).
+- The collapse uses the mean crossing `p_c = 0.305` and the literature
+  `nu = 1.3`; a free collapse gives `p_c = 0.302`, `nu = 1.36`.
+
+**Reading.** In the dense encoding of the Fourier framework, the
+per-record weight `W(m)` outside the constant mode is an order parameter
+of the measurement-induced transition: `log2(1 + W)` is extensive and
+`Delta = N - log2(1 + W)` vanishes in the pure phase, with a size-
+independent crossing and a collapse at the literature exponent. The rank
+of the same circuits (number of modes spanned) has no such crossing.
+
+### Fourier cone
+
+For Clifford gates the Fourier spectrum of one record is flat on the
+stabilizer group `S_m` of its effect: `c_a(m) != 0` exactly on its `2^k`
+strings, all with `c_a^2 = c_0^2`. `effect_stabilizers` obtains `S_m` by
+running the same tracker on the reversed circuit `K^dagger` (Heisenberg
+image of the record, no ancilla). For an interval `A` of the input,
+`1 + W_A = 2^(k_A)` is the weight of the modes supported in `A`
+(`interval_counts`). Both are tested against the explicit Pauli
+coefficients and a brute-force count.
+
+```bash
+uv run python experiments/effect_mipt/fourier_cone.py --n 64 --p 0.12 --samples 300
+uv run python experiments/effect_mipt/plot_fourier_cone.py outputs/effect_mipt
+```
+
+![Fourier cone](figures/fourier_cone.png)
+
+**Figure 9. Fourier cone, literature circuit, `N = 64`**, 300 trajectories
+per `p` (`p = 0.04` to 0.32, maps at 0.04, 0.08, 0.16, 0.24, 0.32; blues
+for the mixed phase, oranges for the pure phase), record lengths `t = 2` to `2N` half-layers, intervals at 8 random
+positions per record. `I(l, t) = k(N) - k(l) - k(N - l)` counts the modes
+that straddle the two ends of an interval of length `l`, that is the
+Fourier weight correlating inputs on both sides.
+- **Maps (top):** number of modes per end longer than `l`,
+  `n(l, t) = dI/dl / 2`, log colour, and their mean range
+  `xi(t) = sum_l n(l, t) / n(0, t)` (orange). At early times modes exist
+  only up to a range that grows with `t` (the white wedge at the bottom
+  right of each map is outside the cone). In the pure phase the cone stops
+  at a finite range; in the mixed phase a tail of long modes keeps filling
+  in.
+- **Bottom left:** `xi(t)`. All `p` share the same initial growth; it
+  saturates at `xi ≈ 1.9`, 2.2, 2.7 and 3.6 sites (`p = 0.32`, 0.28, 0.24,
+  0.20), and is still growing at `t = 2N` for `p <= 0.14`.
+- **Bottom centre:** `I(N/2, t)`, the modes straddling a cut of the input in
+  two halves. Same picture: a plateau of 2.3 to 5.6 modes for
+  `p = 0.32` to 0.20, still rising (12 to 14 modes) for `p <= 0.12`.
+- **Bottom right:** `I(N/2, 2N)` against `p`, with its steepest fall at
+  `p_c = 0.16`. It is maximal at `p = 0.08` and lower at 0.04: with very
+  few measurements the record holds few modes at all after `2N`
+  half-layers.
+
+**Reading.** Below `p_c` the record keeps building Fourier modes that
+correlate distant inputs; above `p_c` it only builds modes of a finite
+range, set by `p`. One size only: whether the plateau length diverges at
+`p_c` needs `N = 32` and 128 as well.
+
 ## Caveats
 
 - `D_2` is estimated from 600 records. Its in-sample standard error grows

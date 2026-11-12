@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
+import itertools
+
 import numpy as np
 import pytest
 
 from QELM.evaluation.effect_mipt import (
+    CliffordHalfLayers,
     apply_gate,
     clifford_purification,
+    clifford_symplectic,
+    dense_weight_bits,
     draw_haar_circuit,
+    draw_open_half_layers,
+    draw_periodic_half_layers,
+    effect_stabilizers,
     fourier_weight,
     frame_potential,
     frame_potential_exact,
     haar_reference_entropy,
+    interval_counts,
     pauli_coefficients,
     prob_zero,
     project,
@@ -170,3 +179,125 @@ def test_sample_kraus_follows_the_born_rule() -> None:
     assert abs(same - 0.5) < 0.1
     other = next(e for e in effects if not np.allclose(e, first))
     np.testing.assert_allclose((first + other) / 2, np.eye(4) / 4, atol=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# Dense-encoding Fourier weight of Clifford circuits (#327)
+# ---------------------------------------------------------------------------
+
+
+def _explicit_kraus(
+    circuit: CliffordHalfLayers, rng: np.random.Generator
+) -> np.ndarray:
+    """Kraus operator of one Born-drawn record, by dense matrices (small ``n``)."""
+    n, dim = circuit.n, 2**circuit.n
+    group = clifford_group_2q()
+    # Axes 0..n-1: output qubits (qubit 0 most significant); last axis: input.
+    t = (np.eye(dim, dtype=complex) / np.sqrt(dim)).reshape([2] * n + [dim])
+    for bonds, gate_ids, sites in zip(
+        circuit.bonds, circuit.gates, circuit.measured, strict=True
+    ):
+        for (a, b), g in zip(bonds.tolist(), gate_ids.tolist(), strict=True):
+            u = group[g].reshape(2, 2, 2, 2)
+            t = np.moveaxis(np.tensordot(u, t, axes=([2, 3], [a, b])), [0, 1], [a, b])
+        for j in sites.tolist():
+            p0 = float(np.sum(np.abs(np.take(t, 0, axis=j)) ** 2))
+            o = 0 if rng.random() < p0 else 1
+            index: list = [slice(None)] * (n + 1)
+            index[j] = 1 - o
+            t = t.copy()
+            t[tuple(index)] = 0
+            t = t / np.sqrt(p0 if o == 0 else 1 - p0)
+    return t.reshape(dim, dim)
+
+
+def test_clifford_symplectic_preserves_the_symplectic_form() -> None:
+    sym = clifford_symplectic().astype(int)
+    omega = np.block([[np.zeros((2, 2)), np.eye(2)], [np.eye(2), np.zeros((2, 2))]])
+    for k in (0, 1, 777, 11519):
+        np.testing.assert_array_equal((sym[k] @ omega @ sym[k].T) % 2, omega)
+    assert len({m.tobytes() for m in clifford_symplectic()}) == 720
+
+
+@pytest.mark.parametrize("n", [4, 6])
+@pytest.mark.parametrize("p", [0.15, 0.4, 0.8])
+def test_dense_weight_bits_matches_pauli_coefficients(n: int, p: float) -> None:
+    rng = np.random.default_rng((n, int(100 * p)))
+    circuits = [
+        draw_periodic_half_layers(n, p, 6, rng),
+        draw_open_half_layers(n, rng.random((3, n)) < p, rng),
+    ]
+    for circuit in circuits:
+        k = dense_weight_bits(circuit, [len(circuit.bonds)])[0]
+        for _ in range(2):  # k does not depend on the outcomes
+            w = fourier_weight(_explicit_kraus(circuit, rng)).dense
+            assert np.log2(1 + w) == pytest.approx(k, abs=1e-9)
+
+
+def test_dense_weight_bits_limits_and_checkpoints() -> None:
+    rng = np.random.default_rng(3)
+    n = 8
+    assert dense_weight_bits(
+        draw_periodic_half_layers(n, 0.0, 10, rng), [0, 10]
+    ).tolist() == [0, 0]
+    assert dense_weight_bits(
+        draw_periodic_half_layers(n, 1.0, 3, rng), [1, 3]
+    ).tolist() == [n, n]
+    ks = dense_weight_bits(draw_periodic_half_layers(n, 0.3, 40, rng), [5, 10, 20, 40])
+    assert np.all((ks >= 0) & (ks <= n))
+
+
+def _group_elements(gens: np.ndarray) -> np.ndarray:
+    """All ``2^k`` elements (signs dropped) of the group spanned by ``gens``."""
+    out = []
+    for bits in itertools.product([0, 1], repeat=len(gens)):
+        v = np.zeros(gens.shape[1], dtype=np.uint8)
+        for b, row in zip(bits, gens, strict=True):
+            if b:
+                v ^= row
+        out.append(v)
+    return np.array(out)
+
+
+def _pauli_index(v: np.ndarray, n: int) -> int:
+    """Index of a string in :func:`pauli_coefficients` (I, X, Y, Z = 0..3)."""
+    digit = {(0, 0): 0, (1, 0): 1, (1, 1): 2, (0, 1): 3}
+    return sum(digit[(int(v[s]), int(v[n + s]))] * 4 ** (n - 1 - s) for s in range(n))
+
+
+@pytest.mark.parametrize("n", [4, 6])
+def test_effect_stabilizers_are_the_fourier_support(n: int) -> None:
+    rng = np.random.default_rng(n + 10)
+    for p in (0.2, 0.5):
+        circuits = [
+            draw_periodic_half_layers(n, p, 6, rng),
+            draw_open_half_layers(n, rng.random((3, n)) < p, rng),
+        ]
+        for circuit in circuits:
+            t = len(circuit.bonds) - 1  # a record that stops before the end
+            gens = effect_stabilizers(circuit, t)
+            truncated = CliffordHalfLayers(
+                n, circuit.bonds[:t], circuit.gates[:t], circuit.measured[:t]
+            )
+            kraus = _explicit_kraus(truncated, rng)
+            c = pauli_coefficients(kraus.conj().T @ kraus)
+            support = set(np.flatnonzero(np.abs(c) > 1e-9).tolist())
+            elements = {_pauli_index(v, n) for v in _group_elements(gens)}
+            assert support == elements
+            np.testing.assert_allclose(np.abs(c[sorted(support)]), abs(c[0]), atol=1e-9)
+
+
+def test_interval_counts_match_brute_force() -> None:
+    rng = np.random.default_rng(4)
+    n = 6
+    circuit = draw_periodic_half_layers(n, 0.3, 8, rng)
+    gens = effect_stabilizers(circuit, 8)
+    elements = _group_elements(gens)
+    occupied = (elements[:, :n] | elements[:, n:]).astype(bool)
+    for start in (0, 4):
+        counts = interval_counts(gens, n, start)
+        for ell in range(n + 1):
+            inside = np.zeros(n, dtype=bool)
+            inside[[(start + i) % n for i in range(ell)]] = True
+            number = int(np.sum(~np.any(occupied & ~inside, axis=1)))
+            assert 2 ** counts[ell] == number
