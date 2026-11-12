@@ -16,3 +16,4 @@ Scientific notes:
 - [État des lieux des sondes de la MIPT](notes/etat-des-lieux-sondes-mipt.md) — note en français : quelles sondes ont été testées, avec quel décodeur, et la suite
 - [Le QELM voit-il la MIPT ?](notes/qelm-voit-il-la-mipt.md) — note en français : ce qui est prouvé, mesuré ou conjecturé, le critère de taille finie, le verdict par cas et les calculs manquants (#303)
 - [Rang de l'espace des effets : l'algorithme exact](notes/rang-espace-des-effets.md) — note en français : le calcul exact du rang de l'espace des effets, étape par étape avec preuves, pseudo-code et exemples à la main (#317)
+- [Bibliographie vérifiée et liste de lecture](bibliographie.md) — note en français : vérification de chaque citation du dépôt (arXiv, DOI) et liste de lecture par thème et par priorité
