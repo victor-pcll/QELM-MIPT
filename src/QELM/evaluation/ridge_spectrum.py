@@ -237,22 +237,20 @@ def single_shot_r2(v: np.ndarray, beta: np.ndarray) -> float:
     return float(np.mean(cond**2))
 
 
-def effect_span(
+def effect_operator_basis(
     gates: Sequence[Sequence[np.ndarray]],
     masks: np.ndarray,
     final: bool,
     tol: float = 1e-6,
 ) -> np.ndarray:
-    """Orthonormal basis of the span of the effects seen by the angle encoding.
+    """Orthonormal basis of ``Span{E_m}`` in the Pauli coefficients.
 
     Backward recursion of :func:`QELM.evaluation.effect_rank.effect_rank`,
     started from the diagonal strings (``final``) or the identity alone
-    (mid-circuit record only), then projected on the strings without ``Y``
-    and orthonormalised in the coordinates ``f_a`` (weights ``sqrt(w_a)``).
+    (mid-circuit record only).
 
     Returns:
-        Rows of shape ``(rank, 3^n)`` in the coordinates ``f_a`` (the
-        constant included).
+        Rows of shape ``(rank, 4^n)``; ``rank`` is the dense rank.
     """
     masks = np.asarray(masks, dtype=bool)
     depth, n = masks.shape
@@ -267,8 +265,62 @@ def effect_span(
             basis = measure_site(basis, n, int(measured), tol)
         for left, gate in zip(reversed(pairs), reversed(gates[t]), strict=True):
             basis = apply_gate(basis, n, left, heisenberg_transfer(gate))
+    return basis
+
+
+def angle_span(basis: np.ndarray, n: int, tol: float = 1e-6) -> np.ndarray:
+    """Projection of an operator basis on the strings without ``Y``.
+
+    Orthonormalised in the coordinates ``f_a`` (weights ``sqrt(w_a)``).
+
+    Returns:
+        Rows of shape ``(rank, 3^n)`` (the constant included).
+    """
     angle = basis[:, no_y_columns(n)] * np.sqrt(circle_weights(n))
     return np.asarray(_orthonormal_rows(angle, tol))
+
+
+def effect_span(
+    gates: Sequence[Sequence[np.ndarray]],
+    masks: np.ndarray,
+    final: bool,
+    tol: float = 1e-6,
+) -> np.ndarray:
+    """Orthonormal basis of the span of the effects seen by the angle encoding.
+
+    :func:`effect_operator_basis` then :func:`angle_span`.
+
+    Returns:
+        Rows of shape ``(rank, 3^n)`` in the coordinates ``f_a`` (the
+        constant included).
+    """
+    n = np.asarray(masks).shape[1]
+    return angle_span(effect_operator_basis(gates, masks, final, tol), n, tol)
+
+
+def window_capture(span: np.ndarray, n: int, region: Sequence[int]) -> int:
+    """``dim(span ∩ V_A)``: functions of the span supported on ``region``.
+
+    ``V_A`` is spanned by the monomials (constant included) whose support
+    lies in ``A``. With orthonormal rows in the coordinates ``f_a``,
+    ``dim(S ∩ V_A) = dim S - rank(S restricted to the other monomials)``.
+    For a Clifford circuit it is the number of visible strings of the
+    group of the effect supported on ``A``.
+    """
+    digits = np.indices((3,) * n).reshape(n, -1)
+    inside = np.zeros(n, dtype=bool)
+    inside[list(region)] = True
+    outside_cols = np.any(digits[~inside] != 0, axis=0)
+    if span.shape[0] == 0:
+        return 0
+    sub = span[:, outside_cols]
+    if sub.size == 0:
+        return int(span.shape[0])
+    sv = np.linalg.svd(sub, compute_uv=False)
+    # Rows are orthonormal: singular values of the restriction lie in
+    # [0, 1]; directions inside V_A have singular value 0 there.
+    rank = int(np.sum(sv > 1e-6))
+    return int(span.shape[0]) - rank
 
 
 def approximation_bias(span: np.ndarray, beta: np.ndarray) -> float:

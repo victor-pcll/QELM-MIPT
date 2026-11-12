@@ -545,3 +545,48 @@ def effective_dimension(weights: np.ndarray, lambdas: Sequence[float]) -> np.nda
     w = 0.5 ** np.asarray(weights, dtype=float)
     lam = np.asarray(lambdas, dtype=float)
     return np.asarray((w[None, :] / (w[None, :] + lam[:, None])).sum(axis=1))
+
+
+def interval_entropies(
+    generators: np.ndarray, max_len: int | None = None
+) -> np.ndarray:
+    """Entropy ``S(A)`` of every interval of a pure stabilizer state.
+
+    For ``N`` independent generators of a pure state of ``N`` qubits,
+    ``S_A = rank(G restricted to A) - |A|``. The rank is updated site by
+    site, the two columns of each new site being reduced against an echelon
+    basis kept as Python integers (one bit per generator).
+
+    Args:
+        generators: ``[x | z]`` rows, shape ``(N, 2 N)``, independent (the
+            full-record group of :func:`effect_groups`).
+        max_len: Longest interval (default ``N``).
+
+    Returns:
+        Array ``(N, max_len + 1)``: ``S`` of the interval of length ``l``
+        starting at each site, ``l = 0 .. max_len``.
+    """
+    g = np.asarray(generators, dtype=bool)
+    n = g.shape[1] // 2
+    if g.shape[0] != n:
+        raise ValueError(f"A pure state needs {n} generators, got {g.shape[0]}.")
+    max_len = n if max_len is None else max_len
+    weights = [1 << k for k in range(n)]
+
+    def column(c: int) -> int:
+        return sum(w for w, bit in zip(weights, g[:, c], strict=True) if bit)
+
+    cols = [(column(q), column(n + q)) for q in range(n)]
+    out = np.zeros((n, max_len + 1))
+    for start in range(n):
+        pivots: dict[int, int] = {}
+        for ell in range(1, max_len + 1):
+            for v in cols[(start + ell - 1) % n]:
+                while v:
+                    top = v.bit_length() - 1
+                    if top not in pivots:
+                        pivots[top] = v
+                        break
+                    v ^= pivots[top]
+            out[start, ell] = len(pivots) - ell
+    return out

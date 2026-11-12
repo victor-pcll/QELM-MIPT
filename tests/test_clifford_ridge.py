@@ -22,6 +22,7 @@ from QELM.evaluation.clifford_ridge import (
     empirical_spectrum,
     enumerate_group,
     interval,
+    interval_entropies,
     local_visible_weights,
     monomial_values,
     population_r2,
@@ -332,3 +333,22 @@ def test_scripts_run_and_plot(tmp_path: Path) -> None:
     load("plot_population").main([str(tmp_path)])
     for name in ("order", "eperp", "range", "spectrum", "collapse"):
         assert (tmp_path / "figures" / f"population_{name}.png").is_file()
+
+
+def test_interval_entropies_match_the_local_ranks() -> None:
+    n, t = 10, 8
+    rng = np.random.default_rng(40)
+    for p in (0.1, 0.3):
+        circuit = with_mask(draw_circuit(n, t, rng), rng.random((t, n)), p)
+        full = effect_groups(circuit).full
+        basis = GroupBasis(full)
+        s = interval_entropies(full)
+        assert s.shape == (n, n + 1)
+        for start in (0, 3, 9):
+            for ell in range(n + 1):
+                k = basis.local_rank(interval(start, ell, n))
+                assert s[start, ell] == ell - k
+        np.testing.assert_array_equal(s[:, n], 0)
+        # Pure state: S of [0, l) equals S of its complement [l, n).
+        for ell in range(1, n):
+            assert s[0, ell] == s[ell, n - ell]

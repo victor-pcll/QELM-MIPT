@@ -39,6 +39,7 @@ from QELM.evaluation.clifford_ridge import (
     empirical_spectrum,
     enumerate_group,
     interval,
+    interval_entropies,
     local_visible_weights,
     mean_and_sem,
     monomial_values,
@@ -184,6 +185,38 @@ def run_population(
     return out
 
 
+def run_locality(n: int, t: int, p_grid: list[float], samples: int, seed: int) -> dict:
+    """Entropy profile ``S(l)`` of the references after the full readout.
+
+    ``2^(l - S(l))`` strings of the group of the effect fit in an interval of
+    ``l`` sites; ``S`` is averaged over the ``N`` starting sites, then over
+    the circuits.
+    """
+    out: dict = {"probe": "locality", "n": n, "t": t, "samples": samples}
+    out.update(seed=seed, p=p_grid, per_p=[])
+    for j, p in enumerate(p_grid):
+        t0 = time.time()
+        rng = np.random.default_rng((seed, n, t, j, 3390))
+        prof = []
+        for _ in range(samples):
+            circuit = with_mask(draw_circuit(n, t, rng), rng.random((t, n)), p)
+            prof.append(interval_entropies(effect_groups(circuit).full).mean(axis=0))
+        a = np.asarray(prof)
+        out["per_p"].append(
+            {
+                "p": p,
+                "s": a.mean(axis=0).tolist(),
+                "s_sem": (a.std(axis=0, ddof=1) / np.sqrt(samples)).tolist(),
+            }
+        )
+        print(
+            f"locality N={n} T={t} p={p}: S(N/2)={a[:, n // 2].mean():.2f} "
+            f"{time.time() - t0:.1f}s",
+            flush=True,
+        )
+    return out
+
+
 def run_ridge(
     n: int,
     seed: int,
@@ -303,7 +336,9 @@ def double_descent(groups: dict, y: dict, split: dict, d: int) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("probe", choices=("transition", "population", "ridge"))
+    parser.add_argument(
+        "probe", choices=("transition", "population", "locality", "ridge")
+    )
     parser.add_argument("--n", type=int, required=True)
     parser.add_argument("--t", type=int, default=None, help="steps (default 2N)")
     parser.add_argument("--seed", type=int, default=0)
@@ -325,6 +360,10 @@ def main() -> None:
         p_grid = args.p or P_POPULATION
         result = run_population(args.n, t, p_grid, args.samples, args.seed)
         name = f"population_N{args.n}_T{t}_s{args.seed}"
+    elif args.probe == "locality":
+        p_grid = args.p or P_POPULATION
+        result = run_locality(args.n, t, p_grid, args.samples, args.seed)
+        name = f"locality_N{args.n}_T{t}_s{args.seed}"
     else:
         p_grid = args.p or P_RIDGE
         result = run_ridge(
