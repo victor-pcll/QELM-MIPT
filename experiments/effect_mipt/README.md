@@ -248,8 +248,8 @@ readout. Numbers in `figures/dense_summary.json`.
 
 **Figure 7. Literature circuit** (periodic brickwork, measurement of each
 site with probability `p` after every half-layer), after `2N` half-layers.
-- `log2(1 + W) / N` rises with `p` and tends to 1: one record fixes almost
-  all of the dense input above `p_c`.
+- `Delta / N = (N - log2(1 + W)) / N` falls with `p` and tends to 0: one
+  record fixes almost all of the dense input above `p_c`.
 - `Delta` grows like `N` below the transition and falls to zero above it,
   faster for larger `N`. The curves cross at one point.
 - The six pairwise crossings lie in 0.165 to 0.166, with no drift with size

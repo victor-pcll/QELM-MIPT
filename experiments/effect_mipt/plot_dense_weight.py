@@ -4,8 +4,8 @@ Reads the ``dense_*.json`` files of ``dense_weight.py`` (files of the same
 convention and ``N`` are pooled) and writes, per convention and depth
 (``2N`` and ``4N`` half-layers), ``dense_<conv>_<depth>.png``:
 
-- ``log2(1 + W) / N`` against ``p``: the share of the dense input that one
-  record fixes;
+- ``(N - log2(1 + W)) / N`` against ``p``: the missing Fourier weight per
+  site;
 - ``Delta = N - log2(1 + W)`` (Renyi-2 purification entropy) against ``p``;
 - the crossings of ``Delta`` for every pair of sizes;
 - the collapse against ``(p - p_c) N^(1/nu)``, nothing fitted.
@@ -143,16 +143,16 @@ def figure(conv: str, data: dict[int, dict], depth_index: int, path: Path) -> di
     ax = axes[0]
     for n, c in curves.items():
         ax.errorbar(
-            c["p"], c["k"] / n, c["sem"] / n, color=colors[n], marker="o", ms=3.5,
+            c["p"], c["delta"] / n, c["sem"] / n, color=colors[n], marker="o", ms=3.5,
             lw=1.5, label=f"N = {n}",
         )  # fmt: skip
     ax.axvline(pc, color="0.6", lw=1, ls="--", zorder=0)
     ax.set_xlabel("measurement rate p")
-    ax.set_ylabel(r"$\log_2(1 + W)\,/\,N$")
+    ax.set_ylabel(r"$(N - \log_2(1 + W))\,/\,N$")
     ax.set_title(
-        "Share of the dense input fixed by one record", loc="left", fontsize=10
+        r"Missing Fourier weight per site, $\Delta / N$", loc="left", fontsize=10
     )
-    ax.legend(frameon=False, loc="lower right")
+    ax.legend(frameon=False, loc="upper right")
 
     ax = axes[1]
     for n, c in curves.items():
