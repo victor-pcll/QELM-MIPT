@@ -1774,6 +1774,9 @@ The transition probes alone: `clifford_ridge.py transition --n 32 --t 64`.
 Follow-up (issue #339), Haar against Clifford and the entropy profile `S(l)`:
 `experiments/clifford_ridge/haar_locality.sh`, then `plot_locality.py` and
 `plot_haar_span.py`.
+Follow-up (issue #341), the ridge on record features as an exact Fourier
+filter: `experiments/clifford_ridge/fourier_filter.sh`, then
+`plot_fourier_filter.py`.
 Results and reading in `experiments/clifford_ridge/README.md`.
 
 ## Draw the QELM verdict figures (issue #303)
