@@ -1734,6 +1734,31 @@ Options of the launcher (environment variables):
 
 Each run writes `<OUT_DIR>/<model>_N<N>_T<T>_seed<seed>/metrics.json`. A run that fails leaves its log next to that folder and is listed in `failed_runs.txt`.
 
+## Run the effect spectrum and ridge bias/variance (issue #334)
+
+[`ridge_spectrum/`](ridge_spectrum/README.md) measures, on the Haar circuits
+of `effect_mipt`, the spectrum of the effects of the full record (`level1`)
+and the bias/variance of the ridge readout of the local features (`level2`):
+
+```bash
+# one run of each level
+uv run python experiments/ridge_spectrum/ridge_spectrum.py level1 --n 6 --seed 0 --records 6000
+uv run python experiments/ridge_spectrum/ridge_spectrum.py level2 --n 8 --seed 0 --kmax 256
+
+# the full sweep of the README (about 3 hours on 4 cores)
+JOBS=4 ./experiments/ridge_spectrum/ridge_spectrum.sh
+
+# figures and summary.json, in outputs/ridge_spectrum/figures
+uv run python experiments/ridge_spectrum/plot_ridge_spectrum.py outputs/ridge_spectrum
+```
+
+Options of the script: `--p` (grid), `--records` (level I, Born records per
+point), `--kmax` (level II, shots per input), `--sizes` (train, validation
+and test inputs), `--max-reps` (cap on the `K`-shot repetitions), `--out`,
+`--tag`. The launcher reads `JOBS` (parallel runs, default 4) and `OUT_ROOT`
+(default `outputs`). Each run writes
+`outputs/ridge_spectrum/level<1|2>_N<n>_seed<s>.json`.
+
 ## Draw the QELM verdict figures (issue #303)
 
 `experiments/qelm_verdict/plot_verdict.py` runs no simulation. It reads

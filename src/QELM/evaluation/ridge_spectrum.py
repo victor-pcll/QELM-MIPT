@@ -300,7 +300,7 @@ def sample_shots(
     theta: np.ndarray,
     shots: int,
     rng: np.random.Generator,
-    batch: int = 4096,
+    batch: int = 512,
 ) -> np.ndarray:
     """Draw ``shots`` single-shot records of each input, with the Born rule.
 
