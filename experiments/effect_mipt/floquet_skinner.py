@@ -9,7 +9,9 @@ pattern (:func:`~QELM.evaluation.effect_mipt.floquet_record`):
   record drawn by the Born rule of the maximally mixed input;
 - ``S_2`` of the left half of the pure-state trajectory from ``|0...0>``.
 
-The file is rewritten after every ``p``.
+The file is rewritten after every ``p``. With ``--pure-only``, only the pure
+trajectory is run (cheap, larger ``N``) and ``S_2`` is the mean of the two
+central cuts, which removes the even/odd-bond parity effect between sizes.
 
 Usage::
 
@@ -25,7 +27,11 @@ from pathlib import Path
 
 import numpy as np
 
-from QELM.evaluation.effect_mipt import floquet_record, skinner_floquet_brick
+from QELM.evaluation.effect_mipt import (
+    floquet_half_chain_s2,
+    floquet_record,
+    skinner_floquet_brick,
+)
 
 P_GRID = [0.05, 0.10, 0.15, 0.18, 0.21, 0.24, 0.27, 0.30, 0.35, 0.40, 0.50]
 
@@ -38,6 +44,11 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--ratios", type=int, nargs="+", default=[2, 4])
     parser.add_argument("--out", type=Path, default=Path("outputs/effect_mipt"))
+    parser.add_argument(
+        "--pure-only",
+        action="store_true",
+        help="only the pure trajectory, S_2 at both central cuts (large N)",
+    )
     args = parser.parse_args()
     n = args.n
     checkpoints = [r * n for r in args.ratios]
@@ -45,7 +56,8 @@ def main() -> None:
     out: dict = {"n": n, "samples": args.samples, "seed": args.seed}
     out.update(checkpoints=checkpoints, p=[], rows=[])
     args.out.mkdir(parents=True, exist_ok=True)
-    path = args.out / f"floquet_N{n}_s{args.seed}.json"
+    tag = "floquet_pure" if args.pure_only else "floquet"
+    path = args.out / f"{tag}_N{n}_s{args.seed}.json"
     for j, p in enumerate(args.p):
         start = time.perf_counter()
         rng = np.random.default_rng((args.seed, n, j, 51))
@@ -53,6 +65,10 @@ def main() -> None:
         s2 = np.zeros_like(delta)
         for s in range(args.samples):
             masks = rng.random((checkpoints[-1], n)) < p
+            if args.pure_only:
+                cuts = floquet_half_chain_s2(n, masks, brick, rng, checkpoints)
+                delta[s], s2[s] = np.nan, cuts.mean(axis=1)
+                continue
             record = floquet_record(n, masks, brick, rng, checkpoints)
             delta[s], s2[s] = record.delta, record.s2_half
         root = np.sqrt(args.samples)

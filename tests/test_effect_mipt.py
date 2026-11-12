@@ -17,6 +17,7 @@ from QELM.evaluation.effect_mipt import (
     draw_open_half_layers,
     draw_periodic_half_layers,
     effect_stabilizers,
+    floquet_half_chain_s2,
     floquet_record,
     fourier_weight,
     frame_potential,
@@ -350,3 +351,19 @@ def test_floquet_record_limits() -> None:
     full = floquet_record(n, np.ones((4, n), dtype=bool), brick, rng, [4])
     assert full.delta[0] == pytest.approx(0.0, abs=1e-9)
     assert full.s2_half[0] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_floquet_half_chain_s2_cuts() -> None:
+    n = 6
+    brick = skinner_floquet_brick()
+    masks = np.zeros((6, n), dtype=bool)
+    s2 = floquet_half_chain_s2(n, masks, brick, np.random.default_rng(1), [6])
+    record = floquet_record(n, masks, brick, np.random.default_rng(1), [6])
+    assert s2[0, 0] == pytest.approx(record.s2_half[0])  # no measurement: same state
+    assert s2[0, 1] > 0
+    ones = np.ones((2, n), dtype=bool)
+    np.testing.assert_allclose(
+        floquet_half_chain_s2(n, ones, brick, np.random.default_rng(2), [2]),
+        0,
+        atol=1e-9,
+    )

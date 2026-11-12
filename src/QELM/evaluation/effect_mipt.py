@@ -812,3 +812,40 @@ def floquet_record(
             s = np.linalg.svd(psi.reshape(2 ** (n // 2), -1), compute_uv=False)
             s2[i] = -np.log2(np.sum(s**4))
     return FloquetRecord(delta=delta, s2_half=s2)
+
+
+def floquet_half_chain_s2(
+    n: int,
+    masks: np.ndarray,
+    brick: np.ndarray,
+    rng: np.random.Generator,
+    checkpoints: Sequence[int],
+) -> np.ndarray:
+    """Half-chain Renyi-2 entropies of the pure trajectory, both central cuts.
+
+    Same circuit as :func:`floquet_record`, pure state only (from
+    ``|0...0>``, Born outcomes). The two central cuts leave ``n // 2`` and
+    ``n // 2 - 1`` sites on the left: one falls on an even bond, the other
+    on an odd bond, so their mean has no parity effect between sizes.
+
+    Returns:
+        ``(len(checkpoints), 2)`` array of ``S_2`` in bits.
+    """
+    masks = np.asarray(masks, dtype=bool)
+    dim = 2**n
+    marks = {c: i for i, c in enumerate(checkpoints)}
+    out = np.zeros((len(checkpoints), 2))
+    psi = np.zeros(dim, dtype=complex)
+    psi[0] = 1.0
+    for t in range(masks.shape[0]):
+        for site in open_half_layer_sites(n, t):
+            psi = apply_gate(psi, n, site, brick)
+        for site in np.flatnonzero(masks[t]).tolist():
+            q0 = prob_zero(psi, n, site)
+            o = 0 if rng.random() < q0 else 1
+            psi = project(psi, n, site, o) / np.sqrt(q0 if o == 0 else 1 - q0)
+        if t + 1 in marks:
+            for j, left in enumerate((n // 2, n // 2 - 1)):
+                s = np.linalg.svd(psi.reshape(2**left, -1), compute_uv=False)
+                out[marks[t + 1], j] = -np.log2(np.sum(s**4))
+    return out
