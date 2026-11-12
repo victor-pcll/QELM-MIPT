@@ -23,8 +23,10 @@ from QELM.evaluation.clifford_ridge import (
     enumerate_group,
     interval,
     interval_entropies,
+    local_strings,
     local_visible_weights,
     monomial_values,
+    parity_strings,
     population_r2,
     purification,
     range_targets,
@@ -381,3 +383,65 @@ def test_locality_and_haar_scripts_run_and_plot(tmp_path: Path) -> None:
     assert res["per_kind"]["haar"][0]["full"]["dense"] == 8
     load("plot_haar_span").main([str(tmp_path)])
     assert (tmp_path / "figures" / "haar_vs_clifford.png").is_file()
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_local_strings_give_the_exact_bit_means(seed: int) -> None:
+    """|E[(-1)^m_j | rho]| = |Tr[rho O_j]| for random (also Y) product inputs."""
+    n, t = 4, 4
+    rng = np.random.default_rng(50 + seed)
+    circuit = with_mask(draw_circuit(n, t, rng), rng.random((t, n)), 0.35)
+    strings, alive = local_strings(circuit)
+    assert strings.shape == (circuit.n_mid + n, 2 * n)
+    for _ in range(3):
+        rho = np.ones((1, 1), dtype=complex)
+        for _q in range(n):
+            v = rng.normal(size=3)
+            v /= np.linalg.norm(v)
+            y = np.array([[0, -1j], [1j, 0]])
+            rho = np.kron(rho, (I2 + v[0] * X + v[1] * y + v[2] * Z) / 2)
+        rho_in = rho
+        means = []
+        for step in range(t):
+            u = _step_unitary(circuit, step)
+            rho = u @ rho @ u.conj().T
+            for site in np.flatnonzero(circuit.measured[step]):
+                means.append(np.trace(_site(Z, int(site), n) @ rho).real)
+                p0, p1 = _site(P[0], int(site), n), _site(P[1], int(site), n)
+                rho = p0 @ rho @ p0 + p1 @ rho @ p1
+        means += [np.trace(_site(Z, q, n) @ rho).real for q in range(n)]
+        predicted = [
+            abs(np.trace(rho_in @ _string(row, n)).real) if ok else 0.0
+            for row, ok in zip(strings, alive, strict=True)
+        ]
+        np.testing.assert_allclose(np.abs(means), predicted, atol=1e-10)
+
+
+@pytest.mark.parametrize("seed", [0, 1])
+def test_parity_strings_give_the_exact_parity_means(seed: int) -> None:
+    """Single bits match local_strings; pairs match the record distribution."""
+    n, t = 4, 3
+    rng = np.random.default_rng(60 + seed)
+    circuit = with_mask(draw_circuit(n, t, rng), rng.random((t, n)), 0.35)
+    n_bits = circuit.n_mid + n
+    single, ok1 = parity_strings(circuit, [[j] for j in range(n_bits)])
+    ref, ok_ref = local_strings(circuit)
+    np.testing.assert_array_equal(ok1, ok_ref)
+    np.testing.assert_array_equal(single[ok1], ref[ok_ref])
+    pairs = [[j, k] for j in range(n_bits) for k in range(j + 1, n_bits)]
+    strings, alive = parity_strings(circuit, pairs)
+    y = np.array([[0, -1j], [1j, 0]])
+    rho = np.ones((1, 1), dtype=complex)
+    for _q in range(n):
+        v = rng.normal(size=3)
+        v /= np.linalg.norm(v)
+        rho = np.kron(rho, (I2 + v[0] * X + v[1] * y + v[2] * Z) / 2)
+    probs = np.zeros(2**n_bits)
+    for m in range(2**n_bits):
+        k = _kraus(circuit, [(m >> b) & 1 for b in range(n_bits)], True)
+        probs[m] = np.trace(k @ rho @ k.conj().T).real
+    bits = (np.arange(2**n_bits)[:, None] >> np.arange(n_bits)[None, :]) & 1
+    for (j, k), row, ok in zip(pairs, strings, alive, strict=True):
+        mean = float(probs @ (1 - 2 * (bits[:, j] ^ bits[:, k])))
+        expected = abs(np.trace(rho @ _string(row, n)).real) if ok else 0.0
+        assert abs(mean) == pytest.approx(expected, abs=1e-10)
