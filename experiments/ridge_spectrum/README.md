@@ -19,7 +19,7 @@ local features of the actual QELM, read by a ridge regression.
 | Records | `mid`: mid-circuit outcomes only (effects of rank `2^Delta`); `full`: plus the final `Z` readout of every site (rank-one effects, the standard QELM) |
 | Inputs | angle encoding `prod_i (I + sin t_i X_i + cos t_i Z_i) / 2`, angles uniform on the **full circle**, so the Bloch monomials are orthogonal, `E[B_a B_b] = 2^{-abs(a)} delta_ab` |
 | Targets | `k1`, `k2`, `k3`: Gaussian weights on the monomials of degree 1, 2, 3; `x_mid`, `z_mid`: `sqrt(2) sin` and `sqrt(2) cos` of the middle input angle; all of unit variance |
-| Sizes and samples | Level I: `N = 4` (20 seeds, 5000 records per point), `N = 6` (8 seeds, 6000 records). Level II: `N = 6` (8 seeds) and `N = 8` (4 seeds), 256 shots per input, 1000 / 500 / 500 train / validation / test inputs |
+| Sizes and samples | Level I: `N = 4` (20 seeds, 5000 records per point), `N = 6` (8 seeds, 6000 records). Level II: `N = 6` (8 seeds) and `N = 8` (4 seeds), 256 shots per input, 1000 / 500 / 500 train / validation / test inputs; `N = 10` (4 seeds, `p` = 0.1, 0.25, 0.4, 32 shots, 600 / 200 / 200 inputs) |
 | Control parameters | `p` = 0.05, 0.1, ..., 0.25, 0.275, 0.3, 0.325, 0.35, 0.4, 0.5, 0.6; shots per input `K` |
 | Issues / PRs | #334; builds on #313 / #321 (rank), #322 / #325 (`Delta`), #309 (local features) |
 
@@ -160,7 +160,7 @@ is learnable with `K` shots.
 
 **Figure 4. Level II, squared bias (solid) and variance (dotted) at
 `lambda*`, against `p`.** Colours: `K = 1, 4, 16, 64, inf`. Dashed black:
-local `E_perp`. Columns: `N = 6, 8`. Rows: degree 1, `Z` and `X` of the
+local `E_perp`. Columns: `N = 6, 8, 10` (`N = 10`: three values of `p`, `K ≤ 16`). Rows: degree 1, `Z` and `X` of the
 middle qubit.
 
 - **The variance stays below 0.1 at every `p` and `K`.** The validation
@@ -208,8 +208,12 @@ seeds.**
   the `K ≥ 4096` columns are the least accurate. With half the records,
   `n_learn` changes by at most 6 % (where `n_learn ≥ 20`), and the sampled
   `1 - R2(inf)` matches the exact `E_perp` within 0.004.
-- **Not run.** Level II at `N = 10` and 12 was too slow for this sweep: a
-  reduced `N = 10` run is in progress and will be added. The learning
+- **`N = 10` is reduced.** Level II at `N = 10` has three values of `p`
+  and `K ≤ 16`: the exact transfer matrix `C(p)` takes about 25 minutes
+  per point at this size. It agrees with `N = 6, 8`: the local `E_perp` of
+  the degree-1 target is 0.27, 0.26, 0.29 at `p` = 0.1, 0.25, 0.4, and at
+  `K = 16` the error falls with `p` (1.02, 0.99, 0.96). `N = 12` was not
+  run. The learning
   curves in `S` (inputs) of the plan were not run.
 - **Masks.** Level I uses one fixed mask per seed; level II draws a fresh
   one for every shot.

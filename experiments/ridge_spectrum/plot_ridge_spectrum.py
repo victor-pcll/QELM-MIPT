@@ -69,6 +69,12 @@ def colors(count: int, cmap: str = "viridis") -> list:
     return [plt.get_cmap(cmap)(x) for x in np.linspace(0.1, 0.9, max(count, 1))]
 
 
+def k_color(k: str) -> tuple:
+    """Fixed colour of a shot budget across panels."""
+    order = ["1", "4", "16", "64", "inf"]
+    return colors(len(order), "plasma")[order.index(k)]
+
+
 def fig_spectrum(runs: dict, out: Path, summary: dict) -> None:
     """Figure 1: sorted mu_k of F (level I, largest N) per p, noise floors."""
     sizes = sorted(n for (lvl, n) in runs if lvl == 1)
@@ -281,7 +287,7 @@ def fig_level2_bias(runs: dict, out: Path, summary: dict) -> None:
         ks = [str(k) for k in rs[0]["K"]] + ["inf"]
         for row, name in enumerate(names):
             ax = axes[row, col]
-            for K, c in zip(ks, colors(len(ks), "plasma"), strict=True):
+            for K, c in ((k, k_color(k)) for k in ks):
                 b, _ = stat(
                     [
                         [
@@ -344,7 +350,7 @@ def fig_lambda(runs: dict, out: Path, summary: dict) -> None:
         ps = p_values(rs)
         ks = [str(k) for k in rs[0]["K"]] + ["inf"]
         ax = axes[0, col]
-        for K, c in zip(ks, colors(len(ks), "plasma"), strict=True):
+        for K, c in ((k, k_color(k)) for k in ks):
             lam = np.exp(
                 np.mean(
                     [
