@@ -465,7 +465,13 @@ def test_fourier_filter_scripts_run_and_plot(tmp_path: Path) -> None:
         (tmp_path / f"transfer_N{n}_s0.json").write_text(json.dumps(res))
     row = res["per_p"][1]
     assert 0 <= row["L1"]["member"]["Z"]["mean"] <= row["G_member"]["Z"]["mean"]
+    par = script.run_parities(8, [0.1, 0.3], 2, 2, 0)
+    (tmp_path / "parities_N8_s0.json").write_text(json.dumps(par))
+    k1 = par["per_p"][1]["k1"]["G_fraction"]["mean"]
+    k2 = par["per_p"][1]["k2"]["G_fraction"]["mean"]
+    assert 0 <= k1 <= k2 <= 1
     val = script.run_validate(8, [0.3], 1, 300, 16, 0)
     (tmp_path / "validate_N8_s0.json").write_text(json.dumps(val))
     load("plot_fourier_filter").main([str(tmp_path)])
     assert (tmp_path / "figures" / "fourier_filter.png").is_file()
+    assert (tmp_path / "figures" / "parities.png").is_file()

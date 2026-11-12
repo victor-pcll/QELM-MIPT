@@ -61,6 +61,54 @@ def palette(count: int, cmap: str = "viridis") -> list:
     return [plt.get_cmap(cmap)(x) for x in np.linspace(0.1, 0.9, max(count, 1))]
 
 
+def fig_parities(folder: Path, out: Path, summary: dict) -> None:
+    """Readout by parities of at most ``k`` bits, one row per ``N``."""
+    runs = {}
+    for path in sorted(folder.glob("parities_N*_s*.json")):
+        d = json.loads(path.read_text())
+        runs[d["n"]] = d
+    if not runs:
+        return
+    ns = sorted(runs)
+    fig, axes = plt.subplots(len(ns), 3, figsize=(17, 4.4 * len(ns)), squeeze=False)
+    summary["parities"] = {}
+    for row_ax, n in zip(axes, ns, strict=True):
+        run = runs[n]
+        ks = list(range(1, run["k_max"] + 1))
+        cols = palette(len(ks), "plasma")
+        p = run["p"]
+        k64 = run["K"].index(64)
+        for k, c in zip(ks, cols, strict=True):
+            frac, ef = leaf(run, f"k{k}", "G_fraction")
+            ez, ee = leaf(run, f"k{k}", "member", "Z")
+            nk = leaf(run, f"k{k}", "n_K")[0][:, k64]
+            row_ax[0].errorbar(
+                p, frac, ef, color=c, marker="o", ms=3, label=f"k <= {k}"
+            )
+            row_ax[1].errorbar(p, 1 - ez, ee, color=c, marker="o", ms=3)
+            row_ax[2].plot(p, nk, color=c, marker="o", ms=3)
+            summary["parities"][f"N{n}_k{k}"] = {
+                "G_fraction": frac.tolist(), "e_perp_Z": (1 - ez).tolist(),
+                "n_K64": nk.tolist(),
+            }  # fmt: skip
+        for ax in row_ax:
+            ax.axvline(P_C, color="0.4", ls="--", lw=1)
+            ax.set_xlabel("p")
+        row_ax[0].set_yscale("log")
+        row_ax[0].set_ylabel("fraction of the visible strings of G")
+        row_ax[0].set_title(
+            f"N = {n}: modes reached by parities of <= k bits", fontsize=10
+        )
+        row_ax[0].legend(fontsize=7)
+        row_ax[1].set_ylabel("E_perp of Z_i (K = inf)")
+        row_ax[1].set_title(f"N = {n}: single-site target", fontsize=10)
+        row_ax[2].set_ylabel("n(K = 64) per site")
+        row_ax[2].set_title(f"N = {n}: modes transmitted at K = 64", fontsize=10)
+    fig.tight_layout()
+    fig.savefig(out / "parities.png", dpi=150)
+    plt.close(fig)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("folder", type=Path)
@@ -198,6 +246,7 @@ def main(argv: list[str] | None = None) -> None:
     fig.tight_layout()
     fig.savefig(out / "fourier_filter.png", dpi=150)
     plt.close(fig)
+    fig_parities(args.folder, out, summary)
     (out / "summary_fourier_filter.json").write_text(json.dumps(summary))
     print(f"wrote {out / 'fourier_filter.png'}")
 

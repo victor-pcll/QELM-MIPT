@@ -32,6 +32,7 @@ Example::
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import time
 from pathlib import Path
@@ -178,6 +179,70 @@ def run_transfer(
     return out
 
 
+def parity_dictionary(circuit, k_max: int, chunk: int = 200_000) -> list[dict]:
+    """Visible modes reached by the parities of at most ``k`` bits, ``k = 1..k_max``.
+
+    Every ``k``-subset of the measured bits is propagated; the dictionary of
+    order ``k`` is the union of the distinct visible strings of orders 1 to
+    ``k``. Returns one :func:`dictionary_stats`-like row per order, plus the
+    fraction of the visible strings of ``G`` reached.
+    """
+    n = circuit.N
+    n_bits = circuit.n_mid + n
+    basis = GroupBasis(effect_groups(circuit).full)
+    g_visible = visible_weights(enumerate_group(basis.rows)).size
+    seen: dict[bytes, np.ndarray] = {}
+    out = []
+    for k in range(1, k_max + 1):
+        combos = itertools.combinations(range(n_bits), k)
+        while True:
+            block = list(itertools.islice(combos, chunk))
+            if not block:
+                break
+            strings, alive = parity_strings(circuit, block)
+            s = strings[alive]
+            x, z = s[:, :n], s[:, n:]
+            vis = ~(x & z).any(axis=1) & (x | z).any(axis=1)
+            for row in np.unique(s[vis], axis=0):
+                seen.setdefault(row.tobytes(), row)
+        keys = np.array(list(seen.values())) if seen else np.zeros((0, 2 * n), bool)
+        stats = dictionary_stats(keys, np.ones(len(keys), dtype=bool), n)
+        stats["G_fraction"] = len(keys) / g_visible if g_visible else 0.0
+        out.append(stats)
+    return out
+
+
+def run_parities(
+    n: int, p_grid: list[float], samples: int, k_max: int, seed: int
+) -> dict:
+    """Dictionary of the readout by parities of at most ``k`` bits."""
+    t = 2 * n
+    out: dict = {"probe": "parities", "n": n, "t": t, "samples": samples}
+    out.update(seed=seed, p=p_grid, k_max=k_max, lambdas=LAMBDAS, K=K_GRID, per_p=[])
+    for j, p in enumerate(p_grid):
+        t0 = time.time()
+        rng = np.random.default_rng((seed, n, j, 3412))
+        rows = []
+        for _ in range(samples):
+            circuit = with_mask(draw_circuit(n, t, rng), rng.random((t, n)), p)
+            rows.append(
+                {
+                    f"k{k + 1}": r
+                    for k, r in enumerate(parity_dictionary(circuit, k_max))
+                }
+            )
+        res = {"p": p, **mean_tree(rows)}  # type: ignore[dict-item]
+        out["per_p"].append(res)
+        frac = [res[f"k{k}"]["G_fraction"]["mean"] for k in range(1, k_max + 1)]
+        print(
+            f"parities N={n} p={p}: fraction of G reached for k=1..{k_max}: "
+            + " ".join(f"{f:.3f}" for f in frac)
+            + f" {time.time() - t0:.1f}s",
+            flush=True,
+        )
+    return out
+
+
 def run_validate(
     n: int, p_grid: list[float], circuits: int, inputs: int, kmax: int, seed: int
 ) -> dict:
@@ -223,11 +288,12 @@ def run_validate(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("probe", choices=("transfer", "validate"))
+    parser.add_argument("probe", choices=("transfer", "parities", "validate"))
     parser.add_argument("--n", type=int, required=True)
     parser.add_argument("--p", type=float, nargs="+", default=None)
     parser.add_argument("--samples", type=int, default=200)
     parser.add_argument("--pairs", action="store_true")
+    parser.add_argument("--k-max", type=int, default=3)
     parser.add_argument("--circuits", type=int, default=6)
     parser.add_argument("--inputs", type=int, default=3000)
     parser.add_argument("--kmax", type=int, default=256)
@@ -238,6 +304,10 @@ def main() -> None:
     if args.probe == "transfer":
         res = run_transfer(
             args.n, args.p or P_GRID, args.samples, args.pairs, args.seed
+        )
+    elif args.probe == "parities":
+        res = run_parities(
+            args.n, args.p or P_GRID, args.samples, args.k_max, args.seed
         )
     else:
         res = run_validate(
