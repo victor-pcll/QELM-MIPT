@@ -5,7 +5,8 @@
 # Level II: N = 6 (8 seeds), 8 (4 seeds) with 256 shots per input, and a
 # reduced N = 10 run (4 seeds, 6 values of p, 32 shots, 600 / 200 / 200
 # inputs): with 64 shots and 1000 / 500 / 500 inputs one point of N = 10
-# takes about 20 minutes on one core of four busy ones. JOBS runs in parallel (default 4); OUT_ROOT sets the output folder.
+# takes about 20 minutes on one core of four busy ones.
+# JOBS runs in parallel (default 4); OUT_ROOT sets the output folder.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 OUT="${OUT_ROOT:-outputs}/ridge_spectrum"
