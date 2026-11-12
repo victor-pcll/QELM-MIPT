@@ -445,3 +445,27 @@ def test_parity_strings_give_the_exact_parity_means(seed: int) -> None:
         mean = float(probs @ (1 - 2 * (bits[:, j] ^ bits[:, k])))
         expected = abs(np.trace(rho @ _string(row, n)).real) if ok else 0.0
         assert abs(mean) == pytest.approx(expected, abs=1e-10)
+
+
+def test_fourier_filter_scripts_run_and_plot(tmp_path: Path) -> None:
+    path = Path(__file__).resolve().parents[1] / "experiments" / "clifford_ridge"
+
+    def load(name: str) -> ModuleType:
+        spec = importlib.util.spec_from_file_location(name, path / f"{name}.py")
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    script = load("fourier_filter")
+    assert script.ring_range(np.array([1, 0, 0, 0, 0, 1], dtype=bool)) == 2
+    assert script.ring_range(np.array([0, 1, 0, 1, 0, 0], dtype=bool)) == 3
+    for n, pairs in ((8, True), (12, False)):
+        res = script.run_transfer(n, [0.1, 0.3], 3, pairs, 0)
+        (tmp_path / f"transfer_N{n}_s0.json").write_text(json.dumps(res))
+    row = res["per_p"][1]
+    assert 0 <= row["L1"]["member"]["Z"]["mean"] <= row["G_member"]["Z"]["mean"]
+    val = script.run_validate(8, [0.3], 1, 300, 16, 0)
+    (tmp_path / "validate_N8_s0.json").write_text(json.dumps(val))
+    load("plot_fourier_filter").main([str(tmp_path)])
+    assert (tmp_path / "figures" / "fourier_filter.png").is_file()
