@@ -41,6 +41,7 @@ from functools import cache
 
 import numpy as np
 import stim  # type: ignore[import-untyped]
+from scipy.linalg import expm
 
 from QELM.evaluation.effect_rank import brick_pairs, no_y_columns
 from QELM.models.circuits.clifford import clifford_group_2q
@@ -710,3 +711,104 @@ def _gf2_basis(rows: np.ndarray) -> np.ndarray:
         a[below] ^= a[r]
         r += 1
     return a[:r]
+
+
+# ---------------------------------------------------------------------------
+# Floquet circuit of Skinner, Ruhman & Nahum, PRX 9, 031009 (2019)
+# ---------------------------------------------------------------------------
+
+
+def skinner_floquet_brick(
+    phi_xx: float = 0.3, phi_zz: float = 0.6, theta_x: float = 0.2, theta_z: float = 0.4
+) -> np.ndarray:
+    """The fixed two-site brick of the Floquet Ising circuit (their Eq. 1).
+
+    ``U = exp{-i[phi_xx X X + theta_x (X 1 + 1 X)]}
+    exp{-i[phi_zz Z Z + theta_z (Z 1 + 1 Z)]}`` with Pauli matrices, in the
+    basis ``|q_a q_b>`` (``a`` the most significant bit), defaults from the
+    paper.
+    """
+    x = np.array([[0, 1], [1, 0]], dtype=complex)
+    z = np.diag([1.0, -1.0]).astype(complex)
+    one = np.eye(2, dtype=complex)
+    hx = phi_xx * np.kron(x, x) + theta_x * (np.kron(x, one) + np.kron(one, x))
+    hz = phi_zz * np.kron(z, z) + theta_z * (np.kron(z, one) + np.kron(one, z))
+    return np.asarray(expm(-1j * hx) @ expm(-1j * hz))
+
+
+def open_half_layer_sites(n: int, t: int) -> list[int]:
+    """Left sites of the bricks of half-layer ``t`` (even bonds if ``t`` is even)."""
+    return list(range(t % 2, n - 1, 2))
+
+
+@dataclass(frozen=True)
+class FloquetRecord:
+    """Both probes of one measurement pattern, at the checkpoints.
+
+    Attributes:
+        delta: ``N - log2(1 + W(m))`` of the dense encoding, record drawn by
+            the Born rule of the maximally mixed input.
+        s2_half: Renyi-2 entropy (bits) of the left half of the pure-state
+            trajectory from ``|0...0>``, outcomes drawn by its Born rule.
+    """
+
+    delta: np.ndarray
+    s2_half: np.ndarray
+
+
+def floquet_record(
+    n: int,
+    masks: np.ndarray,
+    brick: np.ndarray,
+    rng: np.random.Generator,
+    checkpoints: Sequence[int],
+) -> FloquetRecord:
+    """Missing Fourier weight and half-chain ``S_2`` for one measurement pattern.
+
+    Half-layer ``t`` applies ``brick`` on :func:`open_half_layer_sites`, then
+    measures in ``Z`` the sites where ``masks[t]`` is true. The dense weight
+    uses the Kraus operator ``K_m`` of the record (all ``2^N`` input basis
+    states evolved together): ``1 + W = 2^N Tr[E^2] / Tr[E]^2`` with
+    ``E = K^dagger K``, which equals the sum over Pauli strings of
+    :func:`fourier_weight`. No final readout.
+
+    Args:
+        n: Number of qubits (even).
+        masks: Boolean ``(T, n)``, one row per half-layer.
+        brick: ``4 x 4`` unitary.
+        rng: Random generator for the outcomes.
+        checkpoints: Numbers of half-layers after which both probes are read.
+
+    Returns:
+        The two probes at each checkpoint.
+    """
+    masks = np.asarray(masks, dtype=bool)
+    dim = 2**n
+    marks = {c: i for i, c in enumerate(checkpoints)}
+    delta = np.zeros(len(checkpoints))
+    s2 = np.zeros(len(checkpoints))
+    kt = np.eye(dim, dtype=complex) / np.sqrt(dim)  # rows: evolved basis states
+    psi = np.zeros(dim, dtype=complex)
+    psi[0] = 1.0
+    for t in range(masks.shape[0]):
+        for site in open_half_layer_sites(n, t):
+            kt = apply_gate(kt, n, site, brick)
+            psi = apply_gate(psi, n, site, brick)
+        for site in np.flatnonzero(masks[t]).tolist():
+            v = kt.reshape(dim, 2**site, 2, 2 ** (n - site - 1))
+            p0 = float(np.sum(np.abs(v[:, :, 0, :]) ** 2))
+            o = 0 if rng.random() < p0 else 1
+            kt = project(kt, n, site, o) / np.sqrt(p0 if o == 0 else 1 - p0)
+            q0 = prob_zero(psi, n, site)
+            o = 0 if rng.random() < q0 else 1
+            psi = project(psi, n, site, o) / np.sqrt(q0 if o == 0 else 1 - q0)
+        if t + 1 in marks:
+            i = marks[t + 1]
+            effect = kt.conj() @ kt.T  # K^dagger K up to normalisation
+            purity = (
+                float(np.vdot(effect, effect).real) / float(np.trace(effect).real) ** 2
+            )
+            delta[i] = n - np.log2(dim * purity)
+            s = np.linalg.svd(psi.reshape(2 ** (n // 2), -1), compute_uv=False)
+            s2[i] = -np.log2(np.sum(s**4))
+    return FloquetRecord(delta=delta, s2_half=s2)
