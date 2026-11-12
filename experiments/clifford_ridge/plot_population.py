@@ -74,18 +74,26 @@ def series(run: dict, *path: str) -> tuple[np.ndarray, np.ndarray]:
 
 
 def order_parameters(run: dict) -> dict[str, tuple[np.ndarray, np.ndarray]]:
-    """``Delta / N`` and the half-chain entropy of the references / N."""
+    """``Delta`` (mid record) and the half-chain entropy of the references.
+
+    ``Delta`` is the number of input bits that the mid record leaves unread;
+    at fixed ``T / N`` it grows with ``N`` below ``p_c`` and decays above, so
+    the curves of successive ``N`` cross at ``p_c``. ``S(N/2) = N/2 - k(N/2)``
+    of the references after the full readout measures how delocalised the
+    group of the effect is: ``2^{l - S(l)}`` of its strings fit in ``l`` sites.
+    """
     n = run["n"]
     rank, e_rank = series(run, "mid", "rank")
     half = run["lengths"].index(n // 2)
     k, e_k = series(run, "full", "local_rank")
     return {
-        "delta": (1 - rank / n, e_rank / n),
-        "s_half": ((n // 2 - k[:, half]) / n, e_k[:, half] / n),
+        "delta": (n - rank, e_rank),
+        "s_half": (n // 2 - k[:, half], e_k[:, half]),
     }
 
 
-def pairwise_crossings(runs: dict, ratio: int, name: str) -> list[dict]:
+def pairwise_crossings(runs: dict, ratio: int, name: str, floor: float) -> list:
+    """Crossings of successive ``N``, where both curves exceed ``floor``."""
     ns = sorted(n for (n, r) in runs if r == ratio)
     out = []
     for a, b in zip(ns[:-1], ns[1:], strict=True):
@@ -94,7 +102,9 @@ def pairwise_crossings(runs: dict, ratio: int, name: str) -> list[dict]:
             continue
         ma, ea = order_parameters(ra)[name]
         mb, eb = order_parameters(rb)[name]
-        x, ok = crossing(np.asarray(ra["p"]), ma, ea, mb, eb)
+        keep = (ma > floor) & (mb > floor)
+        p = np.asarray(ra["p"])[keep]
+        x, ok = crossing(p, ma[keep], ea[keep], mb[keep], eb[keep])
         out.append({"N": [a, b], "p": x, "resolved": ok})
     return out
 
@@ -102,26 +112,43 @@ def pairwise_crossings(runs: dict, ratio: int, name: str) -> list[dict]:
 def fig_order(runs: dict, ratio: int, out: Path, summary: dict) -> float:
     """Order parameters of the transition, from the same groups."""
     ns = sorted(n for (n, r) in runs if r == ratio)
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
-    for name, ax, title in (
-        ("delta", axes[0], "Delta / N: input bits not read by the mid record"),
-        ("s_half", axes[1], "S(N/2) / N of the references, full record"),
-    ):
-        for n, c in zip(ns, palette(len(ns)), strict=True):
-            m, e = order_parameters(runs[(n, ratio)])[name]
-            ax.errorbar(runs[(n, ratio)]["p"], m, e, color=c, ms=3, marker="o",
-                        label=f"N={n}")  # fmt: skip
-        ax.axvline(P_C_LIT, color="0.4", ls="--", lw=1)
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4.4))
+    s_half = {}
+    for n, c in zip(ns, palette(len(ns)), strict=True):
+        run = runs[(n, ratio)]
+        params = order_parameters(run)
+        for ax, name in ((axes[0], "delta"), (axes[1], "s_half")):
+            m, e = params[name]
+            ax.errorbar(run["p"], m, e, color=c, ms=3, marker="o", label=f"N={n}")
+        s_half[n] = params["s_half"][0]
+    summary["crossings_delta"] = pairwise_crossings(runs, ratio, "delta", 0.05)
+    # Mean of the crossings found (each is close to the 2-sigma limit with
+    # the sample counts used); the literature value if there is none.
+    found = [c["p"] for c in summary["crossings_delta"] if np.isfinite(c["p"])]
+    p_c = float(np.mean(found)) if found else P_C_LIT
+    summary["p_c"] = p_c
+    p = runs[(ns[0], ratio)]["p"]
+    summary["s_half_exponent"] = {}
+    pairs = list(zip(ns[:-1], ns[1:], strict=True))
+    for (a, b), c in zip(pairs, palette(len(pairs), "magma"), strict=True):
+        slope = np.log(s_half[b] / s_half[a]) / np.log(b / a)
+        axes[2].plot(p, slope, color=c, marker="o", ms=3, label=f"N={a} to {b}")
+        summary["s_half_exponent"][f"{a}_{b}"] = slope.tolist()
+    axes[0].set_yscale("log")
+    axes[0].set_ylim(1e-2, None)
+    axes[0].set_title("Delta: input bits not read by the mid record", fontsize=10)
+    axes[1].set_yscale("log")
+    axes[1].set_title("S(N/2) of the references, full record", fontsize=10)
+    axes[2].axhline(0, color="0.6", lw=0.8)
+    axes[2].axhline(1, color="0.6", lw=0.8, ls=":")
+    axes[2].set_title("growth exponent d log S(N/2) / d log N", fontsize=10)
+    for ax in axes:
+        ax.axvline(p_c, color="0.4", ls="--", lw=1)
         ax.set_xlabel("p")
-        ax.set_title(title, fontsize=10)
         ax.legend(fontsize=8)
-        summary[f"crossings_{name}"] = pairwise_crossings(runs, ratio, name)
     fig.tight_layout()
     fig.savefig(out / "population_order.png", dpi=150)
     plt.close(fig)
-    resolved = [c["p"] for c in summary["crossings_delta"] if c["resolved"]]
-    p_c = float(np.mean(resolved)) if resolved else P_C_LIT
-    summary["p_c"] = p_c
     return p_c
 
 
@@ -244,22 +271,30 @@ def fig_spectrum(runs: dict, ratio: int, out: Path, summary: dict, p_c: float) -
 
 
 def fig_collapse(runs: dict, ratio: int, out: Path, summary: dict, p_c: float) -> None:
-    """Finite-size collapse against ``(p - p_c) N^{1/nu}``."""
+    """Finite-size scaling against ``(p - p_c) N^{1/nu}``: Delta collapses,
+    the local E_perp does not depend on ``N`` at all."""
     ns = sorted(n for (n, r) in runs if r == ratio)
     fig, axes = plt.subplots(1, 3, figsize=(16, 4.4))
     for n, c in zip(ns, palette(len(ns)), strict=True):
         run = runs[(n, ratio)]
-        x = (np.asarray(run["p"]) - p_c) * n ** (1 / NU)
+        p = np.asarray(run["p"])
+        x = (p - p_c) * n ** (1 / NU)
         params = order_parameters(run)
-        axes[0].plot(x, params["delta"][0], color=c, marker="o", ms=3, label=f"N={n}")
-        axes[1].plot(x, params["s_half"][0], color=c, marker="o", ms=3)
+        axes[0].semilogy(x, params["delta"][0], color=c, marker="o", ms=3,
+                         label=f"N={n}")  # fmt: skip
+        axes[1].plot(x, params["s_half"][0] / np.log2(n), color=c, marker="o", ms=3)
         m, _ = series(run, "full", "member", "Z")
-        axes[2].plot(x, 1 - m, color=c, marker="o", ms=3)
-    titles = ("Delta / N", "S(N/2) / N", "E_perp of Z_i")
-    for ax, title in zip(axes, titles, strict=True):
+        axes[2].plot(p, 1 - m, color=c, marker="o", ms=3)
+    for ax in axes[:2]:
         ax.set_xlabel(f"(p - {p_c:.3f}) N^(1/{NU})")
-        ax.set_title(title, fontsize=10)
         ax.axvline(0, color="0.4", ls="--", lw=1)
+        ax.set_xlim(-6, 8)
+    axes[0].set_ylim(1e-2, None)
+    axes[0].set_title("Delta (mid record)", fontsize=10)
+    axes[1].set_title("S(N/2) / log2 N (references, full record)", fontsize=10)
+    axes[2].set_xlabel("p (unscaled)")
+    axes[2].axvline(p_c, color="0.4", ls="--", lw=1)
+    axes[2].set_title("E_perp of Z_i: no N dependence", fontsize=10)
     axes[0].legend(fontsize=8)
     summary["collapse"] = {"p_c": p_c, "nu": NU}
     fig.tight_layout()

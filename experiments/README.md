@@ -1759,6 +1759,20 @@ and test inputs), `--max-reps` (cap on the `K`-shot repetitions), `--out`,
 (default `outputs`). Each run writes
 `outputs/ridge_spectrum/level<1|2>_N<n>_seed<s>.json`.
 
+## Map the MIPT in the ridge readout at K = infinity (issue #337)
+
+Clifford QELM (stim): the group of the effect `G` gives the ridge with
+infinitely many shots exactly (span, `E_perp` of each monomial, spectrum of
+the covariance, locality). Run and plot:
+
+```bash
+experiments/clifford_ridge/population.sh
+uv run python experiments/clifford_ridge/plot_population.py outputs/clifford_ridge
+```
+
+The transition probes alone: `clifford_ridge.py transition --n 32 --t 64`.
+Results and reading in `experiments/clifford_ridge/README.md`.
+
 ## Draw the QELM verdict figures (issue #303)
 
 `experiments/qelm_verdict/plot_verdict.py` runs no simulation. It reads
