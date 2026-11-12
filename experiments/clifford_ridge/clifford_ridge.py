@@ -30,17 +30,25 @@ from pathlib import Path
 import numpy as np
 
 from QELM.evaluation.clifford_ridge import (
+    GroupBasis,
     degree_one_values,
     draw_circuit,
     draw_inputs,
+    effect_groups,
+    effective_dimension,
     empirical_spectrum,
+    enumerate_group,
+    interval,
+    local_visible_weights,
     mean_and_sem,
     monomial_values,
     monomial_weight,
     population_r2,
     purification,
+    range_targets,
     sample_inputs,
     targets_for,
+    visible_weights,
     with_mask,
 )
 from QELM.evaluation.ridge_spectrum import (
@@ -55,10 +63,17 @@ P_RIDGE = [0.04, 0.08, 0.12, 0.14, 0.16, 0.18, 0.2, 0.24, 0.3, 0.4]
 K_GRID = [1, 4, 16, 64]
 K_POPULATION = [1, 4, 16, 64, 256, 1024]
 LAMBDAS = np.logspace(-8, 2, 31)
+P_POPULATION = [0.02, 0.04, 0.06, *P_TRANSITION, 0.35, 0.4, 0.5]
+LAMBDAS_POP = [2.0**-k for k in range(0, 17, 2)]
+LOCAL_SPAN = 6
+ENUMERATE_MAX_N = 16
+LOCAL_STARTS = 8
 DD_FRACTIONS = [0.25, 0.5, 0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 2.0, 3.0, 4.0]
 
 
-def run_transition(n: int, t: int, p_grid: list[float], samples: int, seed: int) -> dict:
+def run_transition(
+    n: int, t: int, p_grid: list[float], samples: int, seed: int
+) -> dict:
     targets = targets_for(n)
     out: dict = {"probe": "transition", "n": n, "t": t, "samples": samples}
     out.update(seed=seed, p=p_grid, targets=targets, per_p=[])
@@ -85,6 +100,83 @@ def run_transition(n: int, t: int, p_grid: list[float], samples: int, seed: int)
         print(
             f"transition N={n} T={t} p={p}: Delta/N={res['delta_per_site'][0]:.3f} "
             f"S_mid={res['s_mid'][0]:.3f} {time.time() - t0:.1f}s",
+            flush=True,
+        )
+    return out
+
+
+def powers_of_two(n: int) -> list[int]:
+    """1, 2, 4, ... up to ``n // 2``."""
+    out, k = [], 1
+    while k <= n // 2:
+        out.append(k)
+        k *= 2
+    return out
+
+
+def population_sample(circuit, ranges: list[int], lengths: list[int]) -> dict:
+    """K = infinity probes of one circuit, mid-circuit and full records."""
+    n = circuit.N
+    groups = effect_groups(circuit)
+    targets = range_targets(n, ranges)
+    starts = np.linspace(0, n, min(LOCAL_STARTS, n), endpoint=False).astype(int)
+    out: dict = {}
+    for record, gens in (("mid", groups.mid), ("full", groups.full)):
+        basis = GroupBasis(gens)
+        row: dict = {"rank": basis.rank}
+        row["member"] = {k: float(basis.contains(v).mean()) for k, v in targets.items()}
+        row["local_rank"] = [
+            float(np.mean([basis.local_rank(interval(s, ell, n)) for s in starts]))
+            for ell in lengths
+        ]
+        hist = np.bincount(local_visible_weights(basis, LOCAL_SPAN), minlength=n + 1)
+        row["local_visible"] = hist[: LOCAL_SPAN + 1].tolist()
+        if n <= ENUMERATE_MAX_N:
+            w = visible_weights(enumerate_group(basis.rows))
+            row["visible"] = np.bincount(w, minlength=n + 1).tolist()
+            row["d_eff"] = effective_dimension(w, LAMBDAS_POP).tolist()
+            # Victor's effective rank sum_k mu_k / mu_max of the covariance.
+            row["rank_eff"] = float((0.5**w).sum() / 0.5 ** w.min()) if w.size else 0.0
+        out[record] = row
+    return out
+
+
+def _mean_tree(rows: list) -> object:
+    """Mean and SEM of every leaf of a list of identically shaped trees."""
+    first = rows[0]
+    if isinstance(first, dict):
+        return {k: _mean_tree([r[k] for r in rows]) for k in first}
+    a = np.asarray(rows, dtype=float)
+    m = a.mean(axis=0)
+    e = a.std(axis=0, ddof=1) / np.sqrt(len(rows)) if len(rows) > 1 else 0 * m
+    return {"mean": np.asarray(m).tolist(), "sem": np.asarray(e).tolist()}
+
+
+def run_population(
+    n: int, t: int, p_grid: list[float], samples: int, seed: int
+) -> dict:
+    """Ridge at K = infinity, lambda -> 0+: the group of the effect."""
+    ranges = powers_of_two(n)
+    lengths = [*powers_of_two(n), n]
+    out: dict = {"probe": "population", "n": n, "t": t, "samples": samples}
+    out.update(seed=seed, p=p_grid, ranges=ranges, lengths=lengths)
+    out.update(local_span=LOCAL_SPAN, lambdas=LAMBDAS_POP, per_p=[])
+    for j, p in enumerate(p_grid):
+        t0 = time.time()
+        rng = np.random.default_rng((seed, n, t, j, 3370))
+        rows = []
+        for _ in range(samples):
+            gates = draw_circuit(n, t, rng)
+            u = rng.random((t, n))
+            rows.append(population_sample(with_mask(gates, u, p), ranges, lengths))
+        res: dict = {"p": p, **_mean_tree(rows)}  # type: ignore[dict-item]
+        out["per_p"].append(res)
+        mid, full = res["mid"], res["full"]
+        print(
+            f"population N={n} T={t} p={p}: Delta/N="
+            f"{1 - mid['rank']['mean'] / n:.3f} "
+            f"Z in G_full={full['member']['Z']['mean']:.3f} "
+            f"Z in G_mid={mid['member']['Z']['mean']:.3f} {time.time() - t0:.1f}s",
             flush=True,
         )
     return out
@@ -209,7 +301,7 @@ def double_descent(groups: dict, y: dict, split: dict, d: int) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("probe", choices=("transition", "ridge"))
+    parser.add_argument("probe", choices=("transition", "population", "ridge"))
     parser.add_argument("--n", type=int, required=True)
     parser.add_argument("--t", type=int, default=None, help="steps (default 2N)")
     parser.add_argument("--seed", type=int, default=0)
@@ -227,6 +319,10 @@ def main() -> None:
         p_grid = args.p or P_TRANSITION
         result = run_transition(args.n, t, p_grid, args.samples, args.seed)
         name = f"transition_N{args.n}_T{t}_s{args.seed}"
+    elif args.probe == "population":
+        p_grid = args.p or P_POPULATION
+        result = run_population(args.n, t, p_grid, args.samples, args.seed)
+        name = f"population_N{args.n}_T{t}_s{args.seed}"
     else:
         p_grid = args.p or P_RIDGE
         result = run_ridge(

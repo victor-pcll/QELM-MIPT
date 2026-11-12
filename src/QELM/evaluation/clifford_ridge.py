@@ -227,7 +227,7 @@ def monomial_weight(ops: dict[int, str]) -> float:
 
 
 def draw_inputs(n_inputs: int, N: int, rng: np.random.Generator) -> np.ndarray:
-    """Random Pauli eigenstates per site: codes 0, 1, 2, 3 for ``|0>, |1>, |+>, |->``."""
+    """Random Pauli eigenstates per site: codes 0-3 for ``|0>, |1>, |+>, |->``."""
     return rng.integers(4, size=(n_inputs, N))
 
 
@@ -333,3 +333,215 @@ def mean_and_sem(values: Sequence[float]) -> tuple[float, float]:
     a = np.asarray(values, dtype=float)
     sem = float(a.std(ddof=1) / np.sqrt(a.size)) if a.size > 1 else 0.0
     return float(a.mean()), sem
+
+
+# ---------------------------------------------------------------------------
+# Step 2 at K = infinity: the ridge readout is the group of the effect
+# ---------------------------------------------------------------------------
+#
+# With infinitely many shots, the features of an input are the Born
+# probabilities Pr(m | x) = Tr[E_m rho(x)] of the records. For a stabilizer
+# circuit, E_m = Tr(E_m) 2^{-r} sum_{g in G} s_g(m) g^T: the Pauli support G
+# of the effect is a group of 2^r strings that does not depend on m, only
+# the signs s_g(m) = +-1 do, and they are characters of the record. Hence:
+#
+# - Span{E_m}_m is the span of the strings of G, of dimension 2^r, with
+#   r = N - Delta (r = N with the final readout);
+# - a string g containing Y gives Tr[g rho(x)] = 0 for every input of the
+#   XZ-plane encoding, so the function space of the features is spanned by
+#   the monomials B_g of the Y-free strings of G (the visible strings);
+# - the population covariance of the features is diagonal in that basis,
+#   with eigenvalue proportional to w_g = E[B_g^2] = 2^{-|g|};
+# - the population ridge with lambda -> 0+ is the projector on that span:
+#   the R2 of a unit-variance target sum_a c_a B_a / sqrt(w_a) is
+#   sum_{a in G} c_a^2 / sum_a c_a^2, and E_perp = 1 - R2. For a monomial
+#   target, E_perp is 0 or 1.
+#
+# The elements of G supported on a set A of references form a subgroup of
+# rank k_A = r - rank(G restricted to the complement of A). For the pure
+# state of system and references, k_A = |A| - S_A, with S_A the
+# entanglement entropy of A.
+
+
+@dataclass(frozen=True)
+class EffectGroups:
+    """Groups of the effect of one circuit, as ``[x | z]`` generator rows.
+
+    Attributes:
+        mid: Generators of ``G`` for the mid-circuit record only,
+            shape ``(N - Delta, 2 N)``.
+        full: Same with the final readout, shape ``(N, 2 N)``.
+    """
+
+    mid: np.ndarray
+    full: np.ndarray
+
+
+def effect_groups(circuit: CliffordQELM, seed: int = 0) -> EffectGroups:
+    """Groups of the effect, mid-circuit record and full record.
+
+    Args:
+        circuit: Gates and mask.
+        seed: Seed of the outcomes; the groups do not depend on it.
+    """
+    N = circuit.N
+    sim = stim.TableauSimulator(seed=seed)
+    prep = "\n".join(f"H {N + i}\nCX {N + i} {i}" for i in range(N))
+    sim.do_circuit(stim.Circuit(prep))
+    sim.do_circuit(stim.Circuit(body_program(circuit, final=False)))
+    mid = _reference_group(stabilizer_matrix(sim), N)
+    sim.do_circuit(stim.Circuit("M " + " ".join(str(k) for k in range(N))))
+    full = _reference_group(stabilizer_matrix(sim), N)
+    return EffectGroups(mid=mid, full=full)
+
+
+class GroupBasis:
+    """Reduced row echelon basis of a group of Pauli strings (up to sign).
+
+    Args:
+        generators: ``[x | z]`` rows, shape ``(r, 2 n)``; they need not be
+            independent.
+    """
+
+    def __init__(self, generators: np.ndarray) -> None:
+        A = np.array(generators, dtype=bool)
+        if A.ndim != 2:
+            raise ValueError("generators must be a 2-D array of [x | z] bits.")
+        pivots: list[int] = []
+        rank = 0
+        for col in range(A.shape[1]):
+            if rank == A.shape[0]:
+                break
+            piv = np.flatnonzero(A[rank:, col])
+            if piv.size == 0:
+                continue
+            p = rank + int(piv[0])
+            A[[rank, p]] = A[[p, rank]]
+            others = np.flatnonzero(A[:, col])
+            others = others[others != rank]
+            A[others] ^= A[rank]
+            pivots.append(col)
+            rank += 1
+        self.rows = A[:rank]
+        self.pivots = np.array(pivots, dtype=int)
+        self.n = A.shape[1] // 2
+
+    @property
+    def rank(self) -> int:
+        return int(self.rows.shape[0])
+
+    def contains(self, strings: np.ndarray) -> np.ndarray:
+        """Membership of each ``[x | z]`` row of ``strings`` (up to sign)."""
+        v = np.array(np.atleast_2d(strings), dtype=bool)
+        for row, col in zip(self.rows, self.pivots, strict=True):
+            hit = v[:, col]
+            v[hit] ^= row
+        return np.asarray(~v.any(axis=1))
+
+    def local_rank(self, region: Sequence[int]) -> int:
+        """Rank ``k_A`` of the subgroup supported on the sites of ``region``."""
+        inside = np.zeros(self.n, dtype=bool)
+        inside[list(region)] = True
+        out = np.flatnonzero(~inside)
+        cols = np.concatenate([out, self.n + out])
+        if cols.size == 0 or self.rank == 0:
+            return self.rank
+        return self.rank - gf2_rank(self.rows[:, cols])
+
+    def subgroup(self, region: Sequence[int]) -> np.ndarray:
+        """Generators of the subgroup supported on ``region``."""
+        inside = np.zeros(self.n, dtype=bool)
+        inside[list(region)] = True
+        out = np.flatnonzero(~inside)
+        cols = np.concatenate([out, self.n + out])
+        A = np.concatenate([self.rows[:, cols], self.rows], axis=1)
+        rank = 0
+        for col in range(cols.size):
+            if rank == A.shape[0]:
+                break
+            piv = np.flatnonzero(A[rank:, col])
+            if piv.size == 0:
+                continue
+            p = rank + int(piv[0])
+            A[[rank, p]] = A[[p, rank]]
+            others = np.flatnonzero(A[:, col])
+            others = others[others != rank]
+            A[others] ^= A[rank]
+            rank += 1
+        return np.asarray(A[rank:, cols.size :])
+
+
+def enumerate_group(generators: np.ndarray) -> np.ndarray:
+    """All ``2^r`` elements of the group, ``[x | z]`` rows, identity first."""
+    gens = np.asarray(generators, dtype=bool)
+    if gens.shape[0] > 22:
+        raise ValueError(f"2^{gens.shape[0]} elements is too many to enumerate.")
+    out = np.zeros((1, gens.shape[1]), dtype=bool)
+    for g in gens:
+        out = np.concatenate([out, out ^ g], axis=0)
+    return out
+
+
+def visible_weights(elements: np.ndarray) -> np.ndarray:
+    """Weights ``|g|`` of the Y-free, non-identity strings among ``elements``."""
+    e = np.asarray(elements, dtype=bool)
+    n = e.shape[1] // 2
+    x, z = e[:, :n], e[:, n:]
+    weight = (x | z).sum(axis=1)
+    keep = ~(x & z).any(axis=1) & (weight > 0)
+    return np.asarray(weight[keep])
+
+
+def interval(start: int, length: int, N: int) -> list[int]:
+    """Sites ``start, ..., start + length - 1`` of the periodic chain."""
+    return [(start + k) % N for k in range(length)]
+
+
+def local_visible_weights(basis: GroupBasis, span: int) -> np.ndarray:
+    """Weights of the distinct visible strings of ``G`` within ``span`` sites.
+
+    Every visible string whose support fits in an interval of ``span``
+    sites is counted once.
+    """
+    N = basis.n
+    seen: set[bytes] = set()
+    weights: list[int] = []
+    for start in range(N):
+        sub = basis.subgroup(interval(start, span, N))
+        if sub.shape[0] == 0:
+            continue
+        elems = enumerate_group(sub)
+        x, z = elems[:, :N], elems[:, N:]
+        keep = ~(x & z).any(axis=1) & (x | z).any(axis=1)
+        for row, w in zip(elems[keep], (x | z)[keep].sum(axis=1), strict=True):
+            key = np.packbits(row).tobytes()
+            if key not in seen:
+                seen.add(key)
+                weights.append(int(w))
+    return np.array(weights, dtype=int)
+
+
+def range_targets(N: int, ranges: Sequence[int]) -> dict[str, np.ndarray]:
+    """Monomial targets on every site, as ``[x | z]`` rows per family.
+
+    Families: ``Z``, ``X`` (one site), ``ZZ_l``, ``XX_l`` and ``ZX_l`` (two
+    sites at distance ``l``, for each ``l`` in ``ranges``), each with ``N``
+    rows (one per first site).
+    """
+    out: dict[str, np.ndarray] = {}
+    for name, ops in (("Z", "Z"), ("X", "X")):
+        out[name] = np.stack([pauli_bits(N, {i: ops}) for i in range(N)])
+    for ell in ranges:
+        for name in ("ZZ", "XX", "ZX"):
+            rows = [
+                pauli_bits(N, {i: name[0], (i + ell) % N: name[1]}) for i in range(N)
+            ]
+            out[f"{name}_{ell}"] = np.stack(rows)
+    return out
+
+
+def effective_dimension(weights: np.ndarray, lambdas: Sequence[float]) -> np.ndarray:
+    """``d_eff(lambda) = sum_g w_g / (w_g + lambda)``, with ``w_g = 2^{-|g|}``."""
+    w = 0.5 ** np.asarray(weights, dtype=float)
+    lam = np.asarray(lambdas, dtype=float)
+    return np.asarray((w[None, :] / (w[None, :] + lam[:, None])).sum(axis=1))
