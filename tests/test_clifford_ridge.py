@@ -320,3 +320,15 @@ def test_scripts_run_and_plot(tmp_path: Path) -> None:
     plots = load("plot_clifford_ridge")
     plots.main([str(tmp_path)])
     assert (tmp_path / "figures" / "transition.png").is_file()
+    for n in (8, 12):
+        for tag, ps in (("c0", [0.1, 0.2]), ("c1", [0.3])):
+            po = script.run_population(n, 2 * n, ps, 3, 0)
+            (tmp_path / f"population_N{n}_T{2 * n}_s0_{tag}.json").write_text(
+                json.dumps(po)
+            )
+    row = po["per_p"][0]
+    assert row["full"]["rank"]["mean"] == 12
+    assert set(row["full"]["member"]) >= {"Z", "X", "ZZ_1", "XX_6", "ZX_4"}
+    load("plot_population").main([str(tmp_path)])
+    for name in ("order", "eperp", "range", "spectrum", "collapse"):
+        assert (tmp_path / "figures" / f"population_{name}.png").is_file()
