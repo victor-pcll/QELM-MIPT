@@ -19,4 +19,11 @@ B="0.18 0.2 0.22 0.25 0.3 0.35 0.4 0.5"
   echo "validate --n 16 --circuits 6"
   echo "validate --n 32 --circuits 6"
 } | xargs -P "$JOBS" -I{} sh -c "uv run --locked python $S {} --out $OUT >> $OUT/log.txt 2>&1"
+# Readout by parities of at most k bits (run after the jobs above).
+PK="0.04 0.08 0.12 0.16 0.2 0.25 0.3"
+{
+  echo "parities --n 8 --k-max 5 --samples 200 --p $PK"
+  echo "parities --n 12 --k-max 4 --samples 60 --p $PK"
+  echo "parities --n 16 --k-max 3 --samples 60 --p $PK"
+} | xargs -P "$JOBS" -I{} sh -c "uv run --locked python $S {} --out $OUT >> $OUT/log.txt 2>&1"
 echo "Done: outputs in $OUT"

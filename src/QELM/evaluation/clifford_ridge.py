@@ -713,21 +713,27 @@ def parity_strings(
     z = np.zeros((n_sets, n), dtype=bool)
     alive = np.ones(n_sets, dtype=bool)
     started = np.zeros(n_sets, dtype=bool)
-    # For each step, (set index, site) pairs of the bits measured there.
-    events: dict[int, list[tuple[int, int]]] = {}
-    for s, bits in enumerate(sets):
-        for j in bits:
-            events.setdefault(int(steps[j]), []).append((s, int(sites[j])))
+    lengths = np.array([len(b) for b in sets], dtype=np.int64)
+    owner = np.repeat(np.arange(n_sets), lengths)
+    flat = (
+        np.concatenate([np.asarray(b, dtype=np.int64) for b in sets])
+        if n_sets
+        else np.zeros(0, dtype=np.int64)
+    )
+    ev_step, ev_site = steps[flat], sites[flat]
+    order = np.argsort(ev_step, kind="stable")
+    owner, ev_step, ev_site = owner[order], ev_step[order], ev_site[order]
+    bounds = np.searchsorted(ev_step, np.arange(circuit.T + 2))
 
     def measure(t: int) -> None:
-        here = events.get(t, [])
         rows = np.flatnonzero(started & alive)
         if t < circuit.T:
             for site in np.flatnonzero(circuit.measured[t]):
                 alive[rows] &= ~x[rows, site]
-        for s, k in here:
-            z[s, k] ^= True
-            started[s] = True
+        lo, hi = bounds[t], bounds[t + 1]
+        # One measurement per site and step: no repeated (set, site) pair.
+        z[owner[lo:hi], ev_site[lo:hi]] ^= True
+        started[owner[lo:hi]] = True
 
     measure(circuit.T)
     for t in reversed(range(circuit.T)):
