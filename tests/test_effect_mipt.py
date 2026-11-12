@@ -9,13 +9,16 @@ from QELM.evaluation.effect_mipt import (
     apply_gate,
     clifford_purification,
     draw_haar_circuit,
+    fourier_weight,
     frame_potential,
     frame_potential_exact,
     haar_reference_entropy,
+    pauli_coefficients,
     prob_zero,
     project,
+    sample_kraus,
 )
-from QELM.evaluation.effect_rank import brick_pairs
+from QELM.evaluation.effect_rank import PAULIS, brick_pairs
 from QELM.models.circuits.base import apply_two_qubit_gate
 from QELM.models.circuits.clifford import clifford_group_2q
 from QELM.models.circuits.haar import haar_gate
@@ -113,3 +116,57 @@ def test_haar_reference_limits() -> None:
     np.testing.assert_allclose(free, 1.0, atol=1e-9)
     full = haar_reference_entropy(n, np.ones((2, n), dtype=bool), rng)
     np.testing.assert_allclose(full, 0.0, atol=1e-6)
+
+
+def test_pauli_coefficients_match_traces() -> None:
+    rng = np.random.default_rng(13)
+    a = rng.normal(size=(8, 8)) + 1j * rng.normal(size=(8, 8))
+    op = a + a.conj().T
+    c = pauli_coefficients(op)
+    for idx in (0, 7, 27, 38, 63):
+        i, j, k = idx // 16, (idx // 4) % 4, idx % 4
+        string = np.kron(np.kron(PAULIS[i], PAULIS[j]), PAULIS[k])
+        assert c[idx] == pytest.approx(np.trace(string @ op).real / 8)
+
+
+@pytest.mark.parametrize("p", [0.2, 0.5])
+def test_dense_fourier_weight_is_the_purity_of_the_effect(p: float) -> None:
+    n = 4
+    rng = np.random.default_rng((14, int(10 * p)))
+    gates = draw_haar_circuit(n, n, rng)
+    k = sample_kraus(gates, rng.random((n, n)) < p, rng)
+    effect = k.conj().T @ k
+    assert np.trace(effect).real == pytest.approx(1.0)
+    purity = np.trace(effect @ effect).real / np.trace(effect).real ** 2
+    w = fourier_weight(k)
+    assert 1 + w.dense == pytest.approx(2**n * purity)
+    assert 0 <= w.angle <= w.dense + 1e-12
+
+
+def test_fourier_weight_limits() -> None:
+    n = 4
+    rng = np.random.default_rng(15)
+    gates = draw_haar_circuit(n, n, rng)
+    flat = fourier_weight(sample_kraus(gates, np.zeros((n, n), dtype=bool), rng))
+    assert flat.dense == pytest.approx(0.0, abs=1e-10)
+    assert flat.angle == pytest.approx(0.0, abs=1e-10)
+    pure = fourier_weight(sample_kraus(gates, np.ones((n, n), dtype=bool), rng))
+    assert 1 + pure.dense == pytest.approx(2.0**n)
+
+
+def test_sample_kraus_follows_the_born_rule() -> None:
+    # One measured site after one layer: outcome 0 with probability 1/2 for
+    # the maximally mixed input, and the two effects sum to the identity / 2^N.
+    n = 2
+    gates = draw_haar_circuit(n, 1, np.random.default_rng(16))
+    masks = np.array([[True, False]])
+    rng = np.random.default_rng(17)
+    effects = []
+    for _ in range(400):
+        k = sample_kraus(gates, masks, rng)
+        effects.append(k.conj().T @ k)
+    first = effects[0]
+    same = np.mean([np.allclose(e, first) for e in effects])
+    assert abs(same - 0.5) < 0.1
+    other = next(e for e in effects if not np.allclose(e, first))
+    np.testing.assert_allclose((first + other) / 2, np.eye(4) / 4, atol=1e-12)

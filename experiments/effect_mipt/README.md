@@ -123,6 +123,99 @@ rule is not enough to see the transition. Of the candidates of the note of
 #319, the one that does see it is the entropy of the mid-circuit effect
 (Figure 2), which is the known purification order parameter.
 
+## Per-record Fourier weight (issue #325)
+
+For a mid-circuit record `m`, `Pr(m | x) = sum_a c_a(m) B_a(x)` on the Bloch
+monomials, with `c_a` the Pauli coefficients of the effect `E_m`. The weight
+outside the constant mode is `W(m) = sum_{a != 0} c_a^2 / c_0^2`. With the
+dense encoding, `1 + W = 2^N Tr[E_m^2] / Tr[E_m]^2`, so the missing weight
+`Delta = N - log2(1 + W)` is the Renyi-2 entropy of the effect, that is the
+purification entropy: `Delta = N` when `x -> Pr(m | x)` is flat, `Delta = 0`
+when the record fixes the input as well as a pure state would. The angle
+encoding keeps the strings without `Y`. `fourier_weight` computes both from
+the Kraus operator of a Born-drawn record (`sample_kraus`), and the `weight`
+subcommand runs it on the circuits and masks of the rank runs:
+
+```bash
+uv run python experiments/effect_mipt/effect_mipt.py weight --n 8 --ratio 2 \
+    --seeds $(seq 0 19) --samples 30
+```
+
+![Per-record Fourier weight](figures/fourier_weight.png)
+
+**Figure 5. Per-record Fourier weight, Haar, fixed masks, `T = N`, `2N`,
+`4N` (columns).** Colour: `N = 6` to 12. Dashed lines: the two `p_c` of
+Figures 1 and 2. Error bars: standard error over circuits. `N = 6, 8`: 20
+circuits, 30 records each; `N = 10`: 12 circuits and 20 records (4 and 10 at
+`T = 4N`); `N = 12`: 4 circuits and 5 records, `T = N` only.
+- **Top: missing weight `Delta` in bits, dense, log scale.**
+  - Below `p ≈ 0.2`, `Delta` grows with `N`: at `p = 0.1`, `T = 4N`, 1.26,
+    1.92, 2.44 bits for `N = 6, 8, 10`. The record leaves a number of bits
+    that grows with the size.
+  - Above `p ≈ 0.35`, `Delta` falls below 0.1 bit at `T = 4N` for every
+    size, and below 0.25 bit at `T = 2N`.
+  - **Between the two the sizes are not separated**: no pairwise crossing is
+    resolved (the interpolated ones range from 0.18 to 0.48). `N <= 10` is
+    too small for Haar. The same quantity for Clifford at `N = 16` to 64 is
+    Figure 2 (for a stabilizer state all Renyi entropies coincide), where
+    the change of trend is at `p = 0.28` to 0.30.
+  - `Delta` depends on `T`: at `T = N` the pure phase has not finished
+    purifying (0.8 to 1.3 bits left at `p = 0.3`).
+- **Middle: mean `log2(1 + W_angle) / N`, angle encoding.** It rises as
+  `Delta` falls and saturates at 0.64 bit per site, close to the
+  `log2(3/2) = 0.585` of a random pure state. The sizes agree within errors:
+  the angle encoding sees the same per-record weight, on a smaller scale.
+- **Bottom: rank of the same circuits** (min cut). It has its peak at small
+  `p`, unrelated to the fall of `Delta`.
+
+**Reading.** In the Fourier framework, the transition is in the weight of
+each row of `A` (how far one record's function is from the constant), not
+in the number of modes the rows span. At Haar sizes `N <= 12` this is a
+trend, not a resolved crossing; the resolved evidence is the Clifford run.
+
+## The Fourier weight recovers the literature Clifford transition (issue #325)
+
+To compare with the literature, the encoded input is reduced to one qubit
+and the circuit is the reference-qubit probe of Gullans & Huse (PRL 125,
+070606 (2020)), already in `QELM.models.circuits.stabilizer`: periodic
+brickwork of random two-qubit Clifford gates, the qubit `x` entangled with
+the middle site, `2N` half-layers without measurement, then `2N` half-layers
+with a `Z` measurement of each site with probability `p` after every
+half-layer. For one encoded qubit, `Pr(m | x) = c_0 (1 + r_m . b(x))` with
+`b(x)` the Bloch vector of the input, so `W(m) = |r_m|^2` and
+`log2(1 + W) = 1 - S_2` with `S_2` the Renyi-2 entropy of the reference
+qubit. For a stabilizer state `W` is 0 or 1 for every record, and
+`<W> = 1 - <S_R>`.
+
+```bash
+uv run python experiments/effect_mipt/clifford_weight.py --n 64 --samples 4000
+uv run python experiments/effect_mipt/plot_clifford_weight.py outputs/effect_mipt
+```
+
+![Clifford Fourier weight](figures/clifford_weight.png)
+
+**Figure 6. Fourier weight of the encoded qubit, Clifford, `N = 16, 32, 64,
+128`.** 4000 trajectories per point (4500 at `N = 128`), `p = 0.08` to 0.24
+in steps of 0.01. Numbers in `figures/clifford_weight_summary.json`.
+- **Left: `<W>` against `p`.** Below `p_c` the record carries no weight on
+  the input (the information is hidden in the volume-law state), above it
+  the record fixes the input completely. The curves sharpen with `N` and
+  cross at one point.
+- **Middle: crossing of every pair of sizes** (zero of a weighted line
+  through the difference on the four grid points around the sign change).
+  All six lie between 0.158 and 0.162, with no drift with size; their
+  weighted mean is 0.160, the literature value `p_c ≈ 0.16`.
+- **Right: collapse against `(p - p_c) N^(1/nu)` with the literature
+  `p_c = 0.16` and `nu = 1.3`**, nothing fitted. A free two-parameter
+  collapse (polynomial of degree 5, `|x| < 2`) gives `p_c = 0.160`,
+  `nu = 1.38`, as a check.
+
+**Reading.** The per-record Fourier weight of the encoded input is an order
+parameter of the MIPT: it is the second Renyi purification entropy, and on
+the literature circuit it reproduces the known critical point and exponent.
+It is the quantity of Figure 5 restricted to one encoded qubit, where
+Clifford sizes are large enough to resolve the crossing.
+
 ## Caveats
 
 - `D_2` is estimated from 600 records. Its in-sample standard error grows
