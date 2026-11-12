@@ -253,3 +253,87 @@ extent `l_g`, and the density of generators of length `l` is
 
   The growth is close to linear for small `p`, logarithmic at `p_c`, and
   `S(N/2)` stays flat above `p_c`.
+
+---
+
+# Follow-up (issue #341): the ridge on record features is an exact Fourier filter
+
+Run (about 1 h on 4 cores):
+
+    experiments/clifford_ridge/fourier_filter.sh
+    uv run python experiments/clifford_ridge/plot_fourier_filter.py outputs/fourier_filter
+
+## Why it is exact in Clifford
+
+Take a record feature: the mean of one bit, or the parity of several bits.
+Its value is `Tr[rho(x) O_S]`. `O_S` is the `Z` of the bits, propagated
+backwards through the gates (`U^dagger . U`) and through the dephasing of
+every earlier measurement. The dephasing at site `k` kills any string that
+does not commute with `Z_k`. So `O_S` is **one Pauli string (up to sign) or
+zero** (`parity_strings`, `local_strings`). The test suite checks this
+against the exact means at `N = 4`, for single bits and for pairs.
+
+The Fourier transfer matrix `C` of the readout is therefore a selection
+matrix: one mode per surviving feature. Then:
+
+- `Sigma = C W C^T` is diagonal in the distinct visible modes, with
+  eigenvalue `m_a w_a`. Here `w_a = 2^-|a|` and `m_a` is the number of
+  features that carry mode `a`. The spectrum of `Sigma` comes from the
+  singular values of `C W^(1/2)`, not of `C`: the factor `W` sits inside
+  the filter.
+- At `K = inf`, the ridge transmits mode `a` with `m w / (m w + lambda)`
+  (Wiener filter). Modes outside `C` make up `E_perp`.
+- At `K` shots, a mode carried by a single feature is transmitted with
+  `K w / (1 + (K - 1) w)`. The noise is `(1 - w)/K` per feature, and on
+  average it has no cross terms between features that carry different
+  modes. A mode is therefore learned when `w ≳ 1/K`, that is
+  `|a| ≲ log2 K`. In amplitude this is `c_a ~ 2^-|a|/2 ≳ 1/sqrt(K)`.
+
+**Validation.** At `N = 16` and 32, for `p = 0.08`, 0.16 and 0.3, with 6
+circuits per point, 3000 inputs and 256 shots sampled with stim, the
+empirical population `R2` of every mode carried by the local features
+follows the prediction. The RMS deviation over 187 (mode, `K`) pairs is
+0.009 (`figures/fourier_filter.png`, bottom right).
+
+## Results (T = 2N; bit features for N = 16 to 128, pairs of bits for N = 16 and 32)
+
+- **The local readout keeps almost nothing.** Between 97 % and 99 % of the
+  mid-circuit bits are killed: the marginal mean of a bit, averaged over
+  the earlier outcomes, is independent of the input. The final bits are
+  all killed at `T = 2N`. What survives is mostly the first bits measured
+  on each input site.
+- **Number of visible modes per site.**
+  - Bit features: 0.07 at `p = 0.04`, 0.20 at `p_c` and 0.40 at
+    `p = 0.5`, the same for every `N`.
+  - Bits plus pairs: 0.11 to 1.7 per site at `N = 16`, and 0.13 to 3.0 at
+    `N = 32`. This dictionary grows with `N`.
+  - Full record `G` (#337), at `N = 16`: 44 to 112 per site.
+  - The information about the input sits in parities of many bits. A linear
+    readout on bit means sees only a small part of it.
+- **Transfer function `C(p)`.** The bit features couple mostly to modes of
+  weight 1 to 4. Below `p_c` there is a thin tail of heavy modes, up to
+  weight about 12 at `N = 128`, from late bits whose string grew before it
+  was read. The filter removes this tail at any realistic `K`. Above `p_c`
+  the tail disappears and the low-weight modes become more frequent.
+- **Targets on one or two sites (N = 128).** Below `p ≈ 0.08`, the bit
+  features reach almost all of what the full record reaches. Above that,
+  the full record pulls ahead: at `p = 0.3`, `E_perp` of `Z_i` is 0.944
+  with bit features against 0.880 with the full record. At `p = 0.5` it is
+  0.915 against 0.834. The gap opens gradually, with no break at `p_c`.
+- **No optimum at p_c for the local readout.** The number of modes
+  transmitted at `K` shots, `n(K) = sum K w / (1 + (K - 1) w)`, rises
+  monotonically with `p` for every `K` from 1 to 4096. The best `p` is the
+  largest of the grid. `n(K)` saturates from `K ≈ 256`, because the
+  surviving modes have weight 8 or less.
+
+## Reading
+
+The ridge is a Fourier filter: `C(p)` selects the modes and the filter
+`w / (w + lambda)`, or `K w / (1 + (K - 1) w)`, weighs them. In a Clifford
+QELM this picture is exact and verified. The MIPT acts on `C` and not on
+the filter. Below `p_c`, the few modes that the bit features read include
+long strings with exponentially small weight. Above `p_c`, the modes are
+short and more numerous. But for the local readout, every one of these
+quantities varies smoothly and does not depend on `N`. The trace of the
+transition seen in #337 and #339, through `Delta` and the locality of `G`,
+requires reading parities of many bits, not bit means.
