@@ -106,11 +106,13 @@ def run_transition(
 
 
 def powers_of_two(n: int) -> list[int]:
-    """1, 2, 4, ... up to ``n // 2``."""
+    """1, 2, 4, ... up to ``n // 2``, and ``n // 2`` itself."""
     out, k = [], 1
     while k <= n // 2:
         out.append(k)
         k *= 2
+    if out[-1] != n // 2:
+        out.append(n // 2)
     return out
 
 
