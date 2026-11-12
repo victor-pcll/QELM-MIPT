@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.util
 import itertools
+import json
+from pathlib import Path
+from types import ModuleType
 
 import numpy as np
 import pytest
@@ -137,12 +141,13 @@ def test_sampled_spectrum_matches_enumeration(final: bool) -> None:
     mu_exact = np.linalg.eigvalsh(f)
     assert mu_exact.min() > -1e-12 and mu_exact.max() < 1 + 1e-12
     v = np.array(
-        [conditional_means(sample_effect(gates, masks, final, rng)) for _ in range(6000)]
+        [
+            conditional_means(sample_effect(gates, masks, final, rng))
+            for _ in range(6000)
+        ]
     )
     spec = record_spectrum(v)
-    np.testing.assert_allclose(
-        np.sort(spec.mu)[-3:], np.sort(mu_exact)[-3:], atol=0.03
-    )
+    np.testing.assert_allclose(np.sort(spec.mu)[-3:], np.sort(mu_exact)[-3:], atol=0.03)
 
 
 def test_spectral_r2_is_consistent() -> None:
@@ -246,12 +251,44 @@ def test_ridge_sweep_bias_and_variance() -> None:
     noisy_train = x[0][None] + 0.3 * rng.normal(size=(5, 300, 4))
     noisy_test = x[2][None] + 0.3 * rng.normal(size=(5, 300, 4))
     noisy_val = x[1][None] + 0.3 * rng.normal(size=(5, 300, 4))
-    sweep = ridge_sweep(
-        noisy_train, y, noisy_val, x[1] @ w, noisy_test, x[2] @ w, lam
-    )
+    sweep = ridge_sweep(noisy_train, y, noisy_val, x[1] @ w, noisy_test, x[2] @ w, lam)
     assert np.all(sweep.variance > 0)
     np.testing.assert_allclose(
         sweep.test_mse, sweep.bias2 + sweep.variance * 4 / 5, rtol=1e-10
     )
     # Strong regularisation shrinks to the mean: the error tends to Var(y).
     assert sweep.test_mse[-1] > sweep.test_mse[0]
+
+
+def _load_script(name: str) -> ModuleType:
+    """Import a script of experiments/ridge_spectrum, which is not a package."""
+    path = Path(__file__).resolve().parents[1] / "experiments" / "ridge_spectrum" / name
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_experiment_script_and_plots_run(tmp_path: Path) -> None:
+    """Both levels run on a tiny case, and the plot script reads them."""
+    script = _load_script("ridge_spectrum.py")
+    plots = _load_script("plot_ridge_spectrum.py")
+    for seed in (0, 1):
+        one = script.run_level1(3, seed, [0.1, 0.4], 200)
+        two = script.run_level2(3, seed, [0.1, 0.4], 8, (60, 30, 30), 4)
+        (tmp_path / f"level1_N3_seed{seed}.json").write_text(json.dumps(one))
+        (tmp_path / f"level2_N3_seed{seed}.json").write_text(json.dumps(two))
+    row = one["per_p"][1]["full"]
+    assert len(row["n_learn"]) == len(one["K"])
+    assert 0 <= row["targets"]["k1"]["e_perp"] <= 1
+    ridge = two["per_p"][0]["targets"]["k1"]["ridge"]
+    assert set(ridge) == {"1", "4", "inf"}
+    assert ridge["inf"]["variance"] == 0
+    runs = plots.load(tmp_path)
+    out = tmp_path / "figures"
+    out.mkdir()
+    summary: dict = {}
+    for fig in (plots.fig_nlearn, plots.fig_level2_bias, plots.fig_optimum):
+        fig(runs, out, summary)
+    assert (out / "n_learn.png").is_file() and "fig6" in summary

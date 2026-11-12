@@ -202,7 +202,9 @@ def run_level2(
                 "r2_population": [
                     float(
                         cov
-                        @ np.linalg.pinv(signal + noise / k, rcond=1e-10, hermitian=True)
+                        @ np.linalg.pinv(
+                            signal + noise / k, rcond=1e-10, hermitian=True
+                        )
                         @ cov
                     )
                     for k in K_POPULATION

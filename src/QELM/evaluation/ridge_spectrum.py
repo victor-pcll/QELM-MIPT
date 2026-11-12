@@ -460,4 +460,3 @@ def shot_groups(shots: np.ndarray, k: int, max_reps: int) -> np.ndarray:
     used = shots[:, : reps * k, :].astype(float)
     grouped = used.reshape(shots.shape[0], reps, k, shots.shape[2]).mean(axis=2)
     return np.asarray(np.moveaxis(grouped, 1, 0))
-
