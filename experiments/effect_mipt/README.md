@@ -327,6 +327,55 @@ correlate distant inputs; above `p_c` it only builds modes of a finite
 range, set by `p`. One size only: whether the plateau length diverges at
 `p_c` needs `N = 32` and 128 as well.
 
+## Floquet circuit of Skinner, Ruhman & Nahum (issue #333)
+
+Skinner, Ruhman & Nahum, PRX 9, 031009 (2019), Eq. 1: open brickwork of one
+fixed brick `U = exp{-i[0.3 XX + 0.2 (X1 + 1X)]} exp{-i[0.6 ZZ + 0.4 (Z1 + 1Z)]}`
+(Pauli matrices, as written), `Z` measurement of each spin with probability
+`p` after every layer of bricks, drawn afresh. Their Floquet values for
+`n = 2`: `p_c = 0.22 ± 0.05`, `nu = 2.07 ± 0.22` (Haar: `0.27 ± 0.03`).
+
+The brick is not Clifford, so `W(m)` depends on the outcomes:
+`floquet_record` evolves the exact Kraus operator of the record (all `2^N`
+input basis states, mixed-input Born rule) and gives
+`Delta = N - log2(1 + W)`; on the same measurement pattern it evolves the
+pure state from `|0...0>` and gives the half-chain `S_2`.
+`floquet_half_chain_s2` runs the pure state alone at larger `N`, with `S_2`
+averaged over the two central cuts (one on an even bond, one on an odd
+bond; a single cut gives an even/odd-size parity effect, visible in the
+bottom-left panel).
+
+```bash
+uv run python experiments/effect_mipt/floquet_skinner.py --n 10 --samples 120
+uv run python experiments/effect_mipt/floquet_skinner.py --n 16 --samples 500 --pure-only
+uv run python experiments/effect_mipt/plot_floquet_skinner.py outputs/effect_mipt
+```
+
+![Floquet circuit of Skinner et al.](figures/floquet_skinner.png)
+
+**Figure 10.** Same patterns: `N = 6, 8, 10, 12` with 600, 400, 120 and 32
+patterns per `p` (2N half-layers). Pure state alone: `N = 8` to 14 with 2000
+trajectories, `N = 16` with 1000 (4N half-layers). Shaded: the `p_c` of the
+paper. Numbers in `figures/floquet_skinner_summary.json`.
+- **`Delta` (top).** `Delta / N` falls with `p`; `Delta` grows with `N` at
+  small `p` and falls faster with `N` at large `p`. The pairwise crossings
+  lie at 0.12 to 0.14 and drift down with size; a free collapse gives
+  `p_c = 0.108`, `nu = 1.10`. At these sizes the Fourier weight puts the
+  transition **below** the paper's value.
+- **`S_2` (bottom).** Without the parity effect, `S_2` grows with `N` up to
+  `p = 0.21` and no longer depends on `N` from `p = 0.24` (`N = 8` against
+  16): the volume-law dependence stops at `p ≈ 0.22 ± 0.02`, the paper's
+  value. The free collapse of `S_2(p, N) - S_2(p_c, N)` gives `p_c = 0.158`
+  with `nu = 0.62`, far from the paper's `nu ≈ 2`: at `N <= 16` this
+  two-parameter fit is not reliable.
+
+**Reading.** On the same circuit, the half-chain `S_2` reproduces the
+paper's `p_c ≈ 0.22`, while the dense Fourier weight crosses lower
+(0.11 to 0.14) with a downward drift. The two probes differ in kind: `Delta`
+is the purification of a maximally mixed input after `2N` half-layers,
+`S_2` the entanglement of a pure state. Whether their critical points meet
+at large `N`, as they do for Haar circuits, is not settled at `N <= 12`.
+
 ## Caveats
 
 - `D_2` is estimated from 600 records. Its in-sample standard error grows
