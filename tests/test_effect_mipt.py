@@ -17,6 +17,8 @@ from QELM.evaluation.effect_mipt import (
     draw_open_half_layers,
     draw_periodic_half_layers,
     effect_stabilizers,
+    floquet_half_chain_s2,
+    floquet_record,
     fourier_weight,
     frame_potential,
     frame_potential_exact,
@@ -26,6 +28,7 @@ from QELM.evaluation.effect_mipt import (
     prob_zero,
     project,
     sample_kraus,
+    skinner_floquet_brick,
 )
 from QELM.evaluation.effect_rank import PAULIS, brick_pairs
 from QELM.models.circuits.base import apply_two_qubit_gate
@@ -301,3 +304,66 @@ def test_interval_counts_match_brute_force() -> None:
             inside[[(start + i) % n for i in range(ell)]] = True
             number = int(np.sum(~np.any(occupied & ~inside, axis=1)))
             assert 2 ** counts[ell] == number
+
+
+# ---------------------------------------------------------------------------
+# Floquet circuit of Skinner, Ruhman & Nahum (#333)
+# ---------------------------------------------------------------------------
+
+
+class _ZeroRng:
+    """Stand-in generator whose draws are all 0: every outcome is 0."""
+
+    def random(self) -> float:
+        return 0.0
+
+
+def test_skinner_brick_is_unitary_and_matches_eq1() -> None:
+    u = skinner_floquet_brick()
+    np.testing.assert_allclose(u.conj().T @ u, np.eye(4), atol=1e-12)
+    # The Z part is diagonal: exp(-i[0.6 zz + 0.4 (z_a + z_b)]) on |00>.
+    uz = skinner_floquet_brick(phi_xx=0.0, theta_x=0.0)
+    assert uz[0, 0] == pytest.approx(np.exp(-1j * (0.6 + 0.8)))
+    assert uz[3, 3] == pytest.approx(np.exp(-1j * (0.6 - 0.8)))
+
+
+def test_floquet_delta_matches_pauli_weight_of_the_same_record() -> None:
+    n, depth = 4, 3
+    rng = np.random.default_rng(7)
+    layer_masks = rng.random((depth, n)) < 0.5
+    half = np.zeros((2 * depth, n), dtype=bool)
+    half[1::2] = layer_masks  # measure after the odd half-layer only
+    brick = skinner_floquet_brick()
+    record = floquet_record(n, half, brick, _ZeroRng(), [2 * depth])  # type: ignore[arg-type]
+    gates = [[brick] * len(brick_pairs(n))] * depth
+    kraus = sample_kraus(gates, layer_masks, _ZeroRng())  # type: ignore[arg-type]
+    w = fourier_weight(kraus).dense
+    assert record.delta[0] == pytest.approx(n - np.log2(1 + w), abs=1e-9)
+
+
+def test_floquet_record_limits() -> None:
+    n = 6
+    rng = np.random.default_rng(8)
+    brick = skinner_floquet_brick()
+    free = floquet_record(n, np.zeros((8, n), dtype=bool), brick, rng, [4, 8])
+    np.testing.assert_allclose(free.delta, n, atol=1e-9)
+    assert np.all(free.s2_half > 0.1)
+    full = floquet_record(n, np.ones((4, n), dtype=bool), brick, rng, [4])
+    assert full.delta[0] == pytest.approx(0.0, abs=1e-9)
+    assert full.s2_half[0] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_floquet_half_chain_s2_cuts() -> None:
+    n = 6
+    brick = skinner_floquet_brick()
+    masks = np.zeros((6, n), dtype=bool)
+    s2 = floquet_half_chain_s2(n, masks, brick, np.random.default_rng(1), [6])
+    record = floquet_record(n, masks, brick, np.random.default_rng(1), [6])
+    assert s2[0, 0] == pytest.approx(record.s2_half[0])  # no measurement: same state
+    assert s2[0, 1] > 0
+    ones = np.ones((2, n), dtype=bool)
+    np.testing.assert_allclose(
+        floquet_half_chain_s2(n, ones, brick, np.random.default_rng(2), [2]),
+        0,
+        atol=1e-9,
+    )
