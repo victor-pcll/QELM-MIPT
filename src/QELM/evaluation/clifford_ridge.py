@@ -590,3 +590,159 @@ def interval_entropies(
                     v ^= pivots[top]
             out[start, ell] = len(pivots) - ell
     return out
+
+
+# ---------------------------------------------------------------------------
+# The ridge on local features: an exact Fourier filter (issue #341)
+# ---------------------------------------------------------------------------
+#
+# The local feature of a measured bit j is its marginal mean
+# E[(-1)^{m_j} | x] = Tr[rho(x) O_j]. O_j is the Z of the bit, back-propagated
+# through the gates (U^dagger . U) and through the dephasing channels of the
+# earlier measurements: a Pauli string goes through the dephasing of site k
+# if it commutes with Z_k and is killed otherwise. So O_j is one Pauli string
+# (up to sign) or zero, the Fourier transfer matrix C of the local readout
+# is a selection matrix, and the population covariance of the features,
+# Sigma = C W C^T, is diagonal in the distinct visible strings, with
+# eigenvalue m_a w_a for a string present m_a times.
+
+_HEISENBERG: np.ndarray | None = None
+
+
+def heisenberg_table() -> np.ndarray:
+    """``U^dagger P U`` of every two-qubit Clifford on the 16 Paulis.
+
+    Pauli codes per qubit: 0 ``I``, 1 ``X``, 2 ``Z``, 3 ``Y``; a two-qubit
+    Pauli is ``4 c_a + c_b`` with ``a`` the most significant qubit of the
+    gate (the convention of :func:`clifford_group_2q`).
+
+    Returns:
+        Integer array ``(11520, 16)``, cached.
+    """
+    global _HEISENBERG
+    if _HEISENBERG is None:
+        from QELM.models.circuits.clifford import clifford_group_2q
+
+        one = [
+            np.eye(2),
+            np.array([[0, 1], [1, 0]]),
+            np.diag([1.0, -1.0]),
+            np.array([[0, -1j], [1j, 0]]),
+        ]
+        paulis = np.array([np.kron(a, b) for a in one for b in one], dtype=complex)
+        gates = np.array(clifford_group_2q())
+        conj = np.einsum("gji,pjk,gkl->gpil", gates.conj(), paulis, gates)
+        overlap = np.abs(np.einsum("qji,gpji->gpq", paulis.conj(), conj)) / 4
+        _HEISENBERG = np.asarray(np.argmax(overlap, axis=2))
+    return _HEISENBERG
+
+
+def local_strings(circuit: CliffordQELM) -> tuple[np.ndarray, np.ndarray]:
+    """Back-propagated Pauli string of every measured bit.
+
+    Args:
+        circuit: Gates and mask; the bits are in the order of
+            :func:`body_program` (mid-circuit, then the final readout).
+
+    Returns:
+        ``(strings, alive)``: ``[x | z]`` bits of ``O_j``, shape
+        ``(n_mid + N, 2 N)``, and whether ``O_j`` survives the dephasing
+        (``Tr[rho O_j]`` is then the feature, up to sign; zero otherwise).
+    """
+    table = heisenberg_table()
+    n, t_steps = circuit.N, circuit.T
+    n_bits = circuit.n_mid + n
+    code = np.zeros((n_bits, n), dtype=np.int64)  # 0 I, 1 X, 2 Z, 3 Y
+    alive = np.ones(n_bits, dtype=bool)
+    active = np.zeros(n_bits, dtype=bool)
+    start = np.cumsum([0, *circuit.measured.sum(axis=1)])
+    final = np.arange(circuit.n_mid, n_bits)
+    code[final, np.arange(n)] = 2
+    active[final] = True
+    for t in reversed(range(t_steps)):
+        sites = np.flatnonzero(circuit.measured[t])
+        # Dephasing of the measurements of step t on the later bits.
+        rows = np.flatnonzero(active)
+        for k in sites:
+            alive[rows] &= (code[rows, k] == 0) | (code[rows, k] == 2)
+        # The bits measured at step t start here.
+        new = np.arange(start[t], start[t + 1])
+        code[new, sites] = 2
+        active[new] = True
+        rows = np.flatnonzero(active & alive)
+        for g, (a, b) in zip(circuit.gates[t], periodic_bonds(n, t), strict=True):
+            out = table[int(g), 4 * code[rows, a] + code[rows, b]]
+            code[rows, a], code[rows, b] = out // 4, out % 4
+    strings = np.concatenate([(code == 1) | (code == 3), code >= 2], axis=1)
+    return strings, alive
+
+
+def bit_times(circuit: CliffordQELM) -> tuple[np.ndarray, np.ndarray]:
+    """Step (``T`` for the final readout) and site of every measured bit."""
+    steps, sites = np.nonzero(circuit.measured)
+    n = circuit.N
+    return (
+        np.concatenate([steps, np.full(n, circuit.T)]),
+        np.concatenate([sites, np.arange(n)]),
+    )
+
+
+def parity_strings(
+    circuit: CliffordQELM, sets: Sequence[Sequence[int]]
+) -> tuple[np.ndarray, np.ndarray]:
+    """Back-propagated string of the parity ``prod_{j in S} (-1)^{m_j}``.
+
+    The mean ``E[prod (-1)^{m_j} | x]`` is ``Tr[rho(x) O_S]``, with ``O_S``
+    one Pauli string (up to sign) or zero. Going backwards, the measurement
+    of site ``k`` at step ``t`` kills every later operator that does not
+    commute with ``Z_k``, then multiplies by ``Z_k`` the parities that
+    contain that bit. :func:`local_strings` is the case of single bits.
+
+    Args:
+        circuit: Gates and mask.
+        sets: Bit indices of each parity (order of :func:`body_program`).
+
+    Returns:
+        ``(strings, alive)`` as in :func:`local_strings`, one row per set.
+    """
+    table = heisenberg_table()
+    n = circuit.N
+    steps, sites = bit_times(circuit)
+    n_sets = len(sets)
+    x = np.zeros((n_sets, n), dtype=bool)
+    z = np.zeros((n_sets, n), dtype=bool)
+    alive = np.ones(n_sets, dtype=bool)
+    started = np.zeros(n_sets, dtype=bool)
+    lengths = np.array([len(b) for b in sets], dtype=np.int64)
+    owner = np.repeat(np.arange(n_sets), lengths)
+    flat = (
+        np.concatenate([np.asarray(b, dtype=np.int64) for b in sets])
+        if n_sets
+        else np.zeros(0, dtype=np.int64)
+    )
+    ev_step, ev_site = steps[flat], sites[flat]
+    order = np.argsort(ev_step, kind="stable")
+    owner, ev_step, ev_site = owner[order], ev_step[order], ev_site[order]
+    bounds = np.searchsorted(ev_step, np.arange(circuit.T + 2))
+
+    def measure(t: int) -> None:
+        rows = np.flatnonzero(started & alive)
+        if t < circuit.T:
+            for site in np.flatnonzero(circuit.measured[t]):
+                alive[rows] &= ~x[rows, site]
+        lo, hi = bounds[t], bounds[t + 1]
+        # One measurement per site and step: no repeated (set, site) pair.
+        z[owner[lo:hi], ev_site[lo:hi]] ^= True
+        started[owner[lo:hi]] = True
+
+    measure(circuit.T)
+    for t in reversed(range(circuit.T)):
+        measure(t)
+        rows = np.flatnonzero(started & alive)
+        code = x[rows].astype(np.int64) + 2 * z[rows].astype(np.int64)
+        for g, (a, b) in zip(circuit.gates[t], periodic_bonds(n, t), strict=True):
+            out = table[int(g), 4 * code[:, a] + code[:, b]]
+            code[:, a], code[:, b] = out // 4, out % 4
+        x[rows], z[rows] = (code % 2).astype(bool), (code >= 2)
+    strings = np.concatenate([x, z], axis=1)
+    return strings, alive & started
