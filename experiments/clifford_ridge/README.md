@@ -152,3 +152,104 @@ at `p = 0.1`.
 - `population_spectrum.png`: weight histogram of the visible strings
   (`N = 16`), `d_eff(lambda)`, effective rank, and local visible strings per
   site.
+
+---
+
+# Follow-up (issue #339): Haar vs Clifford, and the locality of the dictionary
+
+Run (about 1 h 20 min on 4 cores):
+
+    experiments/clifford_ridge/haar_locality.sh
+    uv run python experiments/clifford_ridge/plot_locality.py outputs/clifford_ridge
+    uv run python experiments/clifford_ridge/plot_haar_span.py outputs/haar_span
+
+## 1. Haar against Clifford at K = infinity, same geometry
+
+Geometry of #334: open brickwork, one layer is even bonds, then odd bonds,
+then the `Z` measurements; `T = 2N`; `p_c = 0.29` for Haar in this
+convention (#322). For each seed, one Haar circuit and one Clifford circuit
+see the same masks. Seeds: 20 (`N = 4, 5`), 10 (`N = 6`) and 3 (`N = 7`,
+coarse `p` grid). `haar_span.py` uses the exact span of the effects
+(`effect_operator_basis`), its projection on the strings without `Y`, the
+population ridge with `lambda -> 0+` (`approximation_bias`) and
+`window_capture`, which is `dim(Span ∩ V_A)`. Figure:
+`figures/haar_vs_clifford.png`.
+
+Full record, mean over the seeds:
+
+| N | p | Haar: angle rank / 3^N | Haar: E_perp, Z mid / deg 1 / deg 2 | Clifford: angle rank / 3^N | Clifford: E_perp, Z mid / deg 1 / deg 2 |
+|---|---|---|---|---|---|
+| 6 | 0 | 0.09 | 0.65 / 0.63 / 0.75 | 0.02 | 0.90 / 1.00 / 0.98 |
+| 6 | 0.1 | 0.97 | 0.00 / 0.02 / 0.02 | 0.01 | 1.00 / 0.95 / 0.99 |
+| 6 | 0.2 | 0.86 | 0.02 / 0.03 / 0.06 | 0.02 | 1.00 / 0.94 / 0.97 |
+| 6 | 0.3 | 0.70 | 0.05 / 0.05 / 0.15 | 0.02 | 1.00 / 0.86 / 0.97 |
+| 6 | 0.6 | 0.33 | 0.21 / 0.23 / 0.43 | 0.02 | 1.00 / 0.92 / 0.98 |
+| 6 | 1.0 | 0.09 | 0.46 / 0.49 / 0.77 | 0.03 | 0.80 / 0.85 / 0.97 |
+| 7 | 0.1 | 0.96 | 0.00 / 0.00 / 0.06 | 0.01 | 1.00 / 1.00 / 0.99 |
+| 7 | 0.3 | 0.80 | 0.06 / 0.05 / 0.12 | 0.01 | 0.67 / 0.90 / 0.99 |
+
+What this shows:
+
+- **Haar is almost complete in a window of p, Clifford never is.** The
+  Haar span holds up to 97 % of the `3^N` functions at `p = 0.1`, and the
+  `E_perp` of local, degree-1 and degree-2 targets drops to 0 to 0.06. The
+  Clifford span stays at `2^N` strings, of which a few percent are visible,
+  and its `E_perp` stays between 0.8 and 1. The lack of completeness in
+  #337 is therefore a Clifford property: commuting effects.
+- **The Haar window lies below p_c.** At `p = 0` (unitary only) the span is
+  the `2^N` diagonal strings moved by `U`, and `E_perp` is about 0.6.
+  `E_perp` falls to almost 0 for `p = 0.05` to 0.2. Above that it rises
+  steadily: about 0.05 at `p_c`, about 0.2 at `p = 0.6`, about 0.5 at
+  `p = 1`. This matches the qualitative picture "complete below `p_c`,
+  incompressible bias above".
+- **At these sizes, nothing is sharp at p_c.** The `E_perp(p)` curves for
+  `N = 4` to 7 lie on top of each other within errors, and the rise starts
+  before `p_c`. Telling a transition from a crossover needs larger `N`,
+  which the exact span cannot reach (`N = 7` Haar already takes about 4 min
+  per `p`).
+- **The mid-record purification shows up in the Haar ridge.** With the mid
+  record alone, the degree-1 `E_perp` is 0.28 at `p = 0.1` (`N = 6`) and
+  0.10 at `N = 7`, against 0.02 and 0.00 with the final readout. From
+  `p ≈ 0.3` upwards, the mid record alone reaches the same `E_perp` as the
+  full record. Below `p_c` part of the information waits for the final
+  readout; above it, it has already been read.
+- **Local capture.** The fraction `dim(Span ∩ V_2) / 3^2` of the functions
+  of a two-site window peaks at 0.94 (`N = 6`) and 0.98 (`N = 7`) at
+  `p = 0.1`. It falls to the Clifford level (about 0.2) above `p ≈ 0.6`.
+
+## 2. Locality of the Clifford dictionary (N = 16 to 256)
+
+`clifford_ridge.py locality` computes the entropy `S(l)` of every interval
+of the references after the full readout. It averages over the `N` starting
+sites and over 400 circuits (150 at `N = 256`), at `T = 2N`. The
+`interval_entropies` function updates a GF(2) rank site by site; it takes
+about 1 s per circuit at `N = 256`. Figure:
+`figures/dictionary_locality.png`.
+
+How to read it: `2^(l - S(l))` strings of `G` fit in a window of `l` sites.
+`S(l)` is therefore the number of input bits of the window that the
+dictionary cannot represent with functions confined to the window. In the
+clipped gauge, each generator of `G` is one representable function of
+extent `l_g`, and the density of generators of length `l` is
+`rho(l) = -2 S''(l)`.
+
+- **Map of `1 - S(l)/l` over `(p, l)`** (top left). Below `p_c`, the
+  representable fraction stays small up to windows of the size of the
+  system. Above `p_c`, it exceeds 0.9 from a few sites on. The iso-lines
+  bend around `p_c`.
+- **`S(l)`** (top right). At `p = 0.04`, `S(l)` grows linearly with `l`
+  (volume law). At `p = 0.16`, it follows `log2 l`. At `p = 0.3`, it
+  saturates at 1.3 after 3 sites (area law).
+- **Extent of the functions, `rho(l)`** (bottom left). Below `p_c` there is
+  a peak at `l ≈ N/2`: a finite fraction of the functions is delocalised
+  over the whole chain. At `p ≈ p_c`, `rho(l) ≈ 2 l^-2`, scale free. Above `p_c`
+  there is an exponential cut-off, with a typical extent of 2 to 5 sites.
+- **`S(N/2)` against N** (bottom right), for `N = 16, 32, 64, 128, 256`:
+
+  | p | 0.04 | 0.10 | 0.14 | 0.16 | 0.18 | 0.22 | 0.30 | 0.50 |
+  |---|---|---|---|---|---|---|---|---|
+  | N = 16 | 5.85 | 4.14 | 3.25 | 2.85 | 2.50 | 1.97 | 1.25 | 0.66 |
+  | N = 256 | 71.0 | 32.7 | 14.4 | 6.89 | 3.87 | 2.25 | 1.31 | 0.67 |
+
+  The growth is close to linear for small `p`, logarithmic at `p_c`, and
+  `S(N/2)` stays flat above `p_c`.

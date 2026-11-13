@@ -22,6 +22,7 @@ from QELM.evaluation.clifford_ridge import (
     empirical_spectrum,
     enumerate_group,
     interval,
+    interval_entropies,
     local_visible_weights,
     monomial_values,
     population_r2,
@@ -332,3 +333,51 @@ def test_scripts_run_and_plot(tmp_path: Path) -> None:
     load("plot_population").main([str(tmp_path)])
     for name in ("order", "eperp", "range", "spectrum", "collapse"):
         assert (tmp_path / "figures" / f"population_{name}.png").is_file()
+
+
+def test_interval_entropies_match_the_local_ranks() -> None:
+    n, t = 10, 8
+    rng = np.random.default_rng(40)
+    for p in (0.1, 0.3):
+        circuit = with_mask(draw_circuit(n, t, rng), rng.random((t, n)), p)
+        full = effect_groups(circuit).full
+        basis = GroupBasis(full)
+        s = interval_entropies(full)
+        assert s.shape == (n, n + 1)
+        for start in (0, 3, 9):
+            for ell in range(n + 1):
+                k = basis.local_rank(interval(start, ell, n))
+                assert s[start, ell] == ell - k
+        np.testing.assert_array_equal(s[:, n], 0)
+        # Pure state: S of [0, l) equals S of its complement [l, n).
+        for ell in range(1, n):
+            assert s[0, ell] == s[ell, n - ell]
+
+
+def test_locality_and_haar_scripts_run_and_plot(tmp_path: Path) -> None:
+    path = Path(__file__).resolve().parents[1] / "experiments" / "clifford_ridge"
+
+    def load(name: str) -> ModuleType:
+        spec = importlib.util.spec_from_file_location(name, path / f"{name}.py")
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    script = load("clifford_ridge")
+    for n in (8, 12):
+        lo = script.run_locality(n, 2 * n, [0.04, 0.1, 0.16, 0.3], 3, 0)
+        (tmp_path / f"locality_N{n}_T{2 * n}_s0.json").write_text(json.dumps(lo))
+    s = np.asarray(lo["per_p"][0]["s"])
+    assert s.shape == (13,) and s[0] == 0 and s[-1] == 0
+    load("plot_locality").main([str(tmp_path)])
+    assert (tmp_path / "figures" / "dictionary_locality.png").is_file()
+    haar = load("haar_span")
+    for seed in (0, 1):
+        res = haar.run(3, seed, [0.0, 0.3])
+        (tmp_path / f"haar_span_N3_seed{seed}.json").write_text(json.dumps(res))
+    full = res["per_kind"]["clifford"][1]["full"]
+    assert full["dense"] == 8
+    assert res["per_kind"]["haar"][0]["full"]["dense"] == 8
+    load("plot_haar_span").main([str(tmp_path)])
+    assert (tmp_path / "figures" / "haar_vs_clifford.png").is_file()

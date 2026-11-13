@@ -292,3 +292,24 @@ def test_experiment_script_and_plots_run(tmp_path: Path) -> None:
     for fig in (plots.fig_nlearn, plots.fig_level2_bias, plots.fig_optimum):
         fig(runs, out, summary)
     assert (out / "n_learn.png").is_file() and "fig6" in summary
+
+
+def test_window_capture_is_the_intersection_dimension() -> None:
+    """dim(S ∩ V_A) = rank S + rank V_A - rank [S; V_A]."""
+    from QELM.evaluation.effect_rank import _orthonormal_rows
+    from QELM.evaluation.ridge_spectrum import window_capture
+
+    n = 3
+    rng = np.random.default_rng(7)
+    digits = np.indices((3,) * n).reshape(n, -1)
+    region = [1, 2]
+    local = np.flatnonzero(~np.any(digits[[0]] != 0, axis=0))
+    v_a = np.eye(3**n)[local]
+    # A span with two directions inside V_A and five generic ones.
+    rows = np.vstack([rng.normal(size=(2, local.size)) @ v_a, rng.normal(size=(5, 27))])
+    span = _orthonormal_rows(rows, 1e-9)
+    stacked = np.linalg.matrix_rank(np.vstack([span, v_a]), tol=1e-8)
+    expected = span.shape[0] + v_a.shape[0] - stacked
+    assert expected == 2
+    assert window_capture(span, n, region) == expected
+    assert window_capture(span, n, range(n)) == span.shape[0]

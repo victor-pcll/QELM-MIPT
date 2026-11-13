@@ -1771,6 +1771,9 @@ uv run python experiments/clifford_ridge/plot_population.py outputs/clifford_rid
 ```
 
 The transition probes alone: `clifford_ridge.py transition --n 32 --t 64`.
+Follow-up (issue #339), Haar against Clifford and the entropy profile `S(l)`:
+`experiments/clifford_ridge/haar_locality.sh`, then `plot_locality.py` and
+`plot_haar_span.py`.
 Results and reading in `experiments/clifford_ridge/README.md`.
 
 ## Draw the QELM verdict figures (issue #303)
