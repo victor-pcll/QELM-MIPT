@@ -25,5 +25,8 @@ PK="0.04 0.08 0.12 0.16 0.2 0.25 0.3"
   echo "parities --n 8 --k-max 5 --samples 200 --p $PK"
   echo "parities --n 12 --k-max 4 --samples 60 --p $PK"
   echo "parities --n 16 --k-max 3 --samples 60 --p $PK"
+  # Same with the mid-circuit bits only (issue #344).
+  echo "parities --n 8 --k-max 5 --samples 200 --p $PK --mid-only --tag mid"
+  echo "parities --n 12 --k-max 4 --samples 60 --p $PK --mid-only --tag mid"
 } | xargs -P "$JOBS" -I{} sh -c "uv run --locked python $S {} --out $OUT >> $OUT/log.txt 2>&1"
 echo "Done: outputs in $OUT"

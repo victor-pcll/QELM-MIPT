@@ -390,3 +390,110 @@ What this shows:
   only with a readout whose complexity matches the entanglement of the
   code. A non-linear decoder, or parities chosen from the structure of
   `G`, would be the realistic way to get there.
+
+# Follow-up (issue #344): the learning transition with and without the final readout
+
+Same circuits as above (Clifford: periodic brickwork, `T = 2N`; Haar:
+open brickwork, `T = 2N`, #339). Each quantity is computed twice on the
+same circuits: with the final `Z` readout of all qubits (`full`) and with
+the mid-circuit record alone (`mid`). No new circuit is drawn, except for
+the parities, which add a `--mid-only` option to `fourier_filter.py`
+(parities of the mid bits only).
+
+```bash
+PK="0.04 0.08 0.12 0.16 0.2 0.25 0.3"
+uv run python experiments/clifford_ridge/fourier_filter.py parities --n 8 \
+    --k-max 5 --samples 200 --p $PK --mid-only --tag mid
+uv run python experiments/clifford_ridge/fourier_filter.py parities --n 12 \
+    --k-max 4 --samples 60 --p $PK --mid-only --tag mid
+uv run python experiments/clifford_ridge/plot_final_readout.py \
+    --population outputs/clifford_ridge --haar outputs/haar_span \
+    --parities outputs/fourier_filter --out outputs/final_readout
+```
+
+Figure: `figures/with_without_final.png` (solid: full, dashed: mid).
+The test `test_all_parities_reach_the_whole_group` checks that the
+parities of all subsets of the mid bits give exactly the visible strings
+of the mid group, and those of all bits give exactly those of `G`.
+
+## Results
+
+**Dimension of the span (Clifford, exact).** With the final readout,
+`dim Span{E_m} = 2^N` for every `p`. With the mid record alone, it is
+`2^{N - Delta}`:
+
+| `log2 dim / N`, mid only | p = 0.02 | 0.06 | 0.10 | 0.14 | 0.16 | 0.20 |
+|---|---|---|---|---|---|---|
+| N = 16 | 0.30 | 0.57 | 0.73 | 0.86 | 0.90 | 0.96 |
+| N = 128 | 0.37 | 0.64 | 0.82 | 0.95 | 0.99 | 1.00 |
+
+Below `p_c`, `Delta / N` stays finite as `N` grows (volume law), so the
+mid record misses a finite fraction of the `N` input bits. Above `p_c`,
+`Delta / N -> 0` and the two records span the same space.
+
+**Size of the dictionary at K = inf (Clifford, N = 16).**
+
+| p | 0.02 | 0.04 | 0.10 | 0.16 | 0.20 | 0.30 |
+|---|---|---|---|---|---|---|
+| visible strings, full | 681 | 705 | 808 | 1002 | 1113 | 1335 |
+| visible strings, mid | 1.3 | 4.9 | 85 | 465 | 812 | 1323 |
+| `d_eff(lambda = 1/16)`, full | 16.7 | 20.1 | 36.5 | 71.1 | 96.3 | 154.5 |
+| `d_eff(lambda = 1/16)`, mid | 0.5 | 1.4 | 9.3 | 42.9 | 77.5 | 153.6 |
+
+Without the final readout, the dictionary vanishes at small `p` and rises
+steeply up to `p_c`. With it, the dictionary is already large at `p -> 0`
+and grows slowly. Both are monotone in `p`, and they meet above `p ≈ 0.3`.
+
+**Local targets (Clifford, N = 128).** `E_perp` of `Z_i`, `Z_i Z_{i+1}`
+and `Z_i X_{i+1}` is the same with and without the final readout, at
+every `p` (the curves lie on top of each other). The strings that the
+final readout adds to `G` are all non-local.
+
+**Haar, N = 4 to 7.** `E_perp` of a degree-1 target:
+
+| N | p = 0.05, mid / full | 0.10 | 0.15 | 0.20 |
+|---|---|---|---|---|
+| 4 | 0.91 / 0.29 | 0.76 / 0.10 | 0.46 / 0.06 | 0.23 / 0.05 |
+| 5 | 0.77 / 0.12 | 0.40 / 0.02 | 0.15 / 0.03 | 0.04 / 0.02 |
+| 6 | 0.75 / 0.05 | 0.28 / 0.02 | 0.11 / 0.02 | 0.03 / 0.03 |
+| 7 | 0.70 / 0.03 | 0.10 / 0.00 | 0.00 / 0.00 | 0.00 / 0.00 |
+
+Without the final readout, the Haar ridge fails at small `p`. But the `p`
+below which it fails moves down with `N` (from about 0.25 at `N = 4` to
+about 0.1 at `N = 7`), well below the Haar `p_c ≈ 0.29`. At these sizes
+the threshold looks set by the number of mid measurements (about
+`2 p N^2`, which must exceed `N`), not by `p_c`.
+
+**Parities of at most k bits (Clifford), fraction of `G` reached:**
+
+| N, k | record | p = 0.04 | 0.08 | 0.12 | 0.16 | 0.20 | 0.25 | 0.30 |
+|---|---|---|---|---|---|---|---|---|
+| 8, k <= 5 | full | 0.428 | 0.246 | 0.242 | 0.281 | 0.336 | 0.412 | 0.498 |
+| 8, k <= 5 | mid | 0.059 | 0.135 | 0.204 | 0.269 | 0.335 | 0.411 | 0.498 |
+| 12, k <= 4 | full | 0.023 | 0.037 | 0.054 | 0.072 | 0.120 | 0.158 | 0.190 |
+| 12, k <= 4 | mid | 0.015 | 0.036 | 0.054 | 0.072 | 0.120 | 0.158 | 0.190 |
+
+The low-`p` branch at `N = 8` disappears without the final bits: 0.428
+falls to 0.059 at `p = 0.04`, and the curve becomes monotone. Above
+`p ≈ 0.16` the two records give the same dictionary. At `N = 12`
+(`k <= 4`), the two records agree from `p = 0.08` on.
+
+## Reading
+
+- **What the final readout does.** At `T = 2N` and below `p_c`, the input
+  information that the mid measurements have not read is still in the
+  final state, spread over `N/2`-body correlations. The final readout
+  gives it back: the span is then complete (`2^N`) at every `p`, and the
+  transition shows only in the locality of `G` (#337, #339). Without it,
+  that information is lost, and the transition shows directly in the size
+  of the span (`2^{N - Delta}`) and of the dictionary.
+- **Two pictures of the transition.** With the final readout, the low-`p`
+  side holds a large but non-local dictionary. A readout of high enough
+  order can use it, hence the second branch at `N = 8`. Without it, the
+  learning capacity grows monotonically with `p` and saturates near
+  `p_c`, where the mid record catches up with the full record.
+- **What does not change.** Local targets are learned from mid bits only,
+  in Clifford at every `p` and in Haar once there are enough
+  measurements. The final readout matters only for non-local components,
+  which a linear readout with few-bit features cannot reach anyway
+  (#341).
