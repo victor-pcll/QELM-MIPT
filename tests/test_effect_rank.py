@@ -17,6 +17,7 @@ from QELM.evaluation.effect_rank import (
     final_readout_basis,
     heisenberg_transfer,
     measure_site,
+    mincut_bits,
     no_y_columns,
     rank_bounds,
 )
@@ -137,3 +138,41 @@ def test_rank_below_symmetry_bound_and_reproducible(kind: str) -> None:
     assert first.angle <= bounds["angle"][key]
     if kind == "clifford":
         assert first.dense == 2**n
+
+
+@pytest.mark.parametrize(("n", "ratio"), [(3, 1), (3, 2), (4, 1), (4, 2), (5, 1)])
+def test_haar_dense_rank_is_two_to_the_min_cut(n: int, ratio: int) -> None:
+    depth = ratio * n
+    u = np.random.default_rng((n, ratio, 1000)).random((depth, n))
+    circuit = draw_circuit("haar", n, depth, np.random.default_rng((n, ratio)))
+    for p in (0.1, 0.25, 0.4, 0.6, 0.8):
+        assert effect_rank(circuit, u < p).dense == 2 ** mincut_bits(u < p)
+
+
+@pytest.mark.parametrize("kind", ["u1", "z2", "clifford"])
+def test_min_cut_bounds_every_class(kind: str) -> None:
+    n = 4
+    u = np.random.default_rng(3).random((n, n))
+    circuit = draw_circuit(kind, n, n, np.random.default_rng(4))
+    for p in (0.15, 0.3, 0.5):
+        assert effect_rank(circuit, u < p).dense <= 2 ** mincut_bits(u < p)
+
+
+def test_min_cut_end_points_and_simple_cuts() -> None:
+    n = 6
+    assert mincut_bits(np.zeros((n, n), dtype=bool)) == n
+    assert mincut_bits(np.ones((n, n), dtype=bool)) == n
+    rng = np.random.default_rng(5)
+    for p in (0.1, 0.3, 0.6):
+        masks = rng.random((2 * n, n)) < p
+        cut = mincut_bits(masks)
+        k = int(masks[:-1].sum())
+        assert n <= cut <= min(n + k, 2 * n - int(masks[0].sum()))
+
+
+def test_min_cut_of_one_measurement() -> None:
+    # One mid-circuit measurement adds one bit: rank 2^(n + 1).
+    n = 4
+    masks = np.zeros((n, n), dtype=bool)
+    masks[1, 2] = True
+    assert mincut_bits(masks) == n + 1

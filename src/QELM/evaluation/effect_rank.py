@@ -34,6 +34,8 @@ from dataclasses import dataclass
 from math import comb
 
 import numpy as np
+from scipy.sparse import csr_array
+from scipy.sparse.csgraph import maximum_flow
 
 from QELM.models.circuits.clifford import random_clifford_gate
 from QELM.models.circuits.haar import haar_gate, random_u1_gate
@@ -252,3 +254,68 @@ def rank_bounds(n: int) -> dict[str, dict[str, float]]:
             "readout": 2.0**n,
         },
     }
+
+
+def mincut_bits(masks: np.ndarray) -> int:
+    """Minimum cut, in bits, between the input and the records of a mask.
+
+    The matrix ``A`` (records x Pauli monomials) is a tensor network on the
+    space-time graph of the brickwork, so ``rank(A) <= 2^C`` with ``C`` the
+    minimum cut between the ``N`` input legs and the records:
+
+    - an operator leg of a qubit carries 2 bits (``4`` Pauli strings);
+    - a gate is a node joining its four legs;
+    - a ``Z`` measurement keeps the diagonal part only: the leg enters with
+      1 bit, leaves with 1 bit, and 1 bit goes to the record;
+    - the final readout takes 1 bit per site.
+
+    Two cuts give the known bounds: cutting every record gives ``N + K``
+    (``K`` mid-circuit measurements, the last layer excluded since it
+    commutes with the readout), and cutting just after the first layer of
+    measurements gives ``2N - n_1``. For Haar circuits the bound is reached:
+    ``effect_rank(...).dense == 2 ** mincut_bits(masks)`` in every case
+    tested (``tests/test_effect_rank.py``), so the dense rank of a generic
+    circuit depends on the mask only. Gates with a structure (U(1), Z2,
+    Clifford) can stay below it.
+
+    Args:
+        masks: Boolean array ``(T, n)`` of the mid-circuit measurements, the
+            layer convention of :func:`effect_rank`.
+
+    Returns:
+        The capacity ``C`` of the minimum cut, an integer from ``n`` to
+        ``2 n``.
+    """
+    masks = np.asarray(masks, dtype=bool)
+    depth, n = masks.shape
+    source, sink = 0, 1
+    nodes = 2
+    capacity: dict[tuple[int, int], int] = {}
+
+    def link(a: int, b: int, c: int) -> None:
+        # Undirected edge of capacity c: one arc in each direction.
+        capacity[(a, b)] = capacity.get((a, b), 0) + c
+        capacity[(b, a)] = capacity.get((b, a), 0) + c
+
+    leg = [source] * n
+    bits = [2] * n
+    for t in range(depth):
+        for left in brick_pairs(n):
+            gate = nodes
+            nodes += 1
+            for s in (left, left + 1):
+                link(leg[s], gate, bits[s])
+                leg[s], bits[s] = gate, 2
+        for site in np.flatnonzero(masks[t]).tolist():
+            meas = nodes
+            nodes += 1
+            link(leg[site], meas, 1)
+            link(meas, sink, 1)
+            leg[site], bits[site] = meas, 1
+    for s in range(n):
+        link(leg[s], sink, 1)
+    rows = np.array([a for a, _ in capacity], dtype=np.int64)
+    cols = np.array([b for _, b in capacity], dtype=np.int64)
+    values = np.array(list(capacity.values()), dtype=np.int32)
+    graph = csr_array((values, (rows, cols)), shape=(nodes, nodes))
+    return int(maximum_flow(graph, source, sink).flow_value)

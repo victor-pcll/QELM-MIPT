@@ -127,3 +127,56 @@ data as Figure 2. The peak fraction falls with `N` for every class.
 
 The JSON next to each figure (`effect_rank_<encoding>.json`) holds the means,
 standard errors, seed counts and bounds that are plotted.
+
+## Min cut of the space-time graph (issue #321)
+
+`QELM.evaluation.effect_rank.mincut_bits(masks)` is the minimum cut `C`,
+in bits, between the input legs and the records of the brickwork: an
+operator leg carries 2 bits, a `Z` measurement lets 1 bit through and sends
+1 bit to the record, the final readout takes 1 bit per site. The matrix `A`
+is a tensor network on this graph, so `rank <= 2^C` for every class.
+`experiments/effect_rank/mincut_rank.py` draws the two figures below
+(`uv run python experiments/effect_rank/mincut_rank.py`, about 40 minutes on
+one core, almost all of it in the `N = 128` scan).
+
+![Exact rank divided by 2^C](figures/mincut_vs_rank.png)
+
+**Figure 5. Mean exact dense rank divided by the mean of `2^C`, against
+`p`, one panel per class.** Same seeds and nested masks as Figures 1 to 4
+(10 circuits per point, `N = 3` to 7, and `N = 8` for U(1) and Clifford).
+Dashed line: ratio 1. Log scale.
+- **Haar: the ratio is exactly 1 at every `N` and `p`.** Since
+  `rank <= 2^C` circuit by circuit, the equality of the means gives the
+  equality for each of the 1 050 circuits and masks. The Haar dense rank at
+  fixed mask depends on the mask only.
+- **Z2: the ratio is 1/2 for `N >= 5` over most of the range** (0.50 at
+  `N = 6` from `p = 0.2` to 0.65): the parity sector halves the space the
+  cut allows.
+- **U(1) and Clifford stay well below the cut.** Clifford falls to about
+  0.02 of `2^C` at `N = 7`, `p = 0.15`, since its span is always a
+  stabilizer group of `2^N` strings.
+
+![Min cut at large N](figures/mincut_large_n.png)
+
+**Figure 6. `C / N` (equal to `log2(rank) / N` for Haar) at large `N`.**
+Mean over masks (50 at `N = 8`, 6 at `N = 64` and 128), error bars the
+standard error. Colour from light to dark blue for `N = 8` to 128.
+- **Left, `T = N`, against `p`** (log axis above 0.01). Dashed line:
+  `2 - p`. At fixed `p` the sizes collapse onto one smooth curve (1.85 at
+  `p = 0.05`, 1.70 at 0.2, 1.45 at 0.5), while the peak moves left and up.
+- **Centre, against `x = p (T - 1)`,** the mean number of useful
+  measurements per site. Dash-dot: the record bound `1 + x`, followed by
+  every size up to `x ≈ 1`.
+- **Right, peak position `p*` and `2 -` peak height against `T`.** Circles
+  `T = N`, open squares `T = 2N`; dotted line `1.15 / (T - 1)`.
+  - `p*` follows `1.15 / (T - 1)`: 0.15, 0.083, 0.036, 0.018, 0.0089 for
+    `N = 8` to 128 at `T = N`, so the peak sits at about one useful
+    measurement per site and goes to `p = 0`.
+  - The height tends to 2 bits per site, the `4^N` bound: 1.68, 1.80, 1.87,
+    1.90, 1.94.
+
+**Reading.** The peak of the rank is the crossover between a rank limited by
+the number of records and a rank limited by the dephasing of the input by
+the first measurements. It has no finite critical point. The note
+`documentation/notes/transition-rang-mipt.md` (PR #320) discusses what this
+means for the measurement-induced transition.
