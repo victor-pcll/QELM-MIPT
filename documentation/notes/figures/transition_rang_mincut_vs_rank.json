@@ -1,0 +1,75 @@
+{
+ "summary": {
+  "N3_T3": {
+   "cases": 210,
+   "exact": 210
+  },
+  "N3_T6": {
+   "cases": 210,
+   "exact": 210
+  },
+  "N4_T4": {
+   "cases": 210,
+   "exact": 210
+  },
+  "N4_T8": {
+   "cases": 210,
+   "exact": 210
+  },
+  "N5_T5": {
+   "cases": 210,
+   "exact": 210
+  },
+  "N6_T6": {
+   "cases": 36,
+   "exact": 36
+  }
+ },
+ "points": [
+  {
+   "cut": 3,
+   "log2rank": 3.0,
+   "count": 184
+  },
+  {
+   "cut": 4,
+   "log2rank": 4.0,
+   "count": 282
+  },
+  {
+   "cut": 5,
+   "log2rank": 5.0,
+   "count": 263
+  },
+  {
+   "cut": 6,
+   "log2rank": 6.0,
+   "count": 166
+  },
+  {
+   "cut": 7,
+   "log2rank": 7.0,
+   "count": 118
+  },
+  {
+   "cut": 8,
+   "log2rank": 8.0,
+   "count": 53
+  },
+  {
+   "cut": 9,
+   "log2rank": 9.0,
+   "count": 16
+  },
+  {
+   "cut": 10,
+   "log2rank": 10.0,
+   "count": 1
+  },
+  {
+   "cut": 11,
+   "log2rank": 11.0,
+   "count": 3
+  }
+ ]
+}
