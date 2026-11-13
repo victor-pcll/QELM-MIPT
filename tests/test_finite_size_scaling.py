@@ -11,6 +11,7 @@ from QELM.evaluation.finite_size_scaling import (
     crossing_errors,
     crossings,
     fit_collapse,
+    quality_map,
 )
 
 
@@ -76,3 +77,13 @@ def test_subtracted_collapse_of_a_log_growing_order_parameter() -> None:
     fit = fit_collapse(curves, 0.15, 1.0, n_boot=0, subtract=True)
     assert fit.p_c == pytest.approx(0.16, abs=2e-3)
     assert fit.nu == pytest.approx(1.3, abs=0.1)
+
+
+def test_quality_map_is_collapse_quality_on_the_grid() -> None:
+    curves = _synthetic(0.16, 1.3, noise=0.005)
+    p_c = np.array([0.14, 0.16, 0.18])
+    nu = np.array([0.8, 1.3, 2.0])
+    q = quality_map(curves, p_c, nu)
+    assert q.shape == (3, 3)
+    assert q[0, 2] == collapse_quality(curves, 0.14, 2.0)
+    assert np.unravel_index(np.argmin(q), q.shape) == (1, 1)
