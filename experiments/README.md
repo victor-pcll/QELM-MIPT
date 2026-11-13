@@ -1780,6 +1780,8 @@ filter: `experiments/clifford_ridge/fourier_filter.sh`, then
 Follow-up (issue #349), the two-filter split
 `E_perp = E_circuit + E_readout(k)`: `experiments/clifford_ridge/two_filters.sh`,
 then `plot_two_filters.py outputs/two_filters`.
+Follow-up (issue #352), Haar trajectories against Haar ridge locality:
+`experiments/clifford_ridge/haar_order.sh`, then `plot_haar_order.py`.
 Results and reading in `experiments/clifford_ridge/README.md`.
 
 ## Draw the QELM verdict figures (issue #303)
