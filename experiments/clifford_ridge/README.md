@@ -739,3 +739,35 @@ Caveats. Clifford circuits only: with Haar gates `Span{E_m}` is much
 larger than `2^N` (#339) and the symmetry argument of claim 4 does not
 apply. Exact populations only at `N <= 6`; the locality numbers are exact
 counts but `k <= 3` beyond `N = 8`.
+
+## Two order parameters read from the ridge at K = infinity
+
+No local target and no local feature sees the transition (#337, #341,
+above). Two properties of the ridge's function space do. The figures
+re-plot data already computed (no new simulation):
+
+    uv run python experiments/clifford_ridge/plot_ridge_order.py \
+        --transition outputs/clifford_ridge \
+        --locality experiments/clifford_ridge/figures/summary_locality.json \
+        --out experiments/clifford_ridge/figures
+
+- **Without the final readout: the rank of the ridge**
+  (`figures/ridge_order_rank.png`). The features of the mid-circuit record
+  span `2^(N - Delta)` functions. `log2(rank) / N = 1 - Delta / N` is the
+  share of the input bits the ridge can represent. It sharpens into a step
+  at `p_c`. `Delta`, the number of bits it cannot represent, is scale
+  invariant at the transition: the curves for `N = 16` to 128 cross at
+  `p_c = 0.161` and collapse with `nu = 1.30` (#346). Data: the
+  `transition` runs of #337 (`T = 2N`).
+- **With the final readout: the locality of the ridge dictionary**
+  (`figures/ridge_order_locality.png`). The rank is `2^N` at every `p`,
+  but only `2^(l - S(l))` of its functions fit in `l` sites. The fraction
+  `1 - S(l)/l` of local functions stays small up to `l ~ N` below `p_c` and
+  reaches 1 within a few sites above. `S(N/2)` grows linearly with `N`
+  below `p_c` and stays flat above. Its growth exponent
+  `d log S(N/2) / d log N` drops from 0.9 to 0 around `p_c`, more sharply
+  as `N` grows (`N = 16` to 256). Data: `summary_locality.json` (#339).
+
+Both are `K = inf` quantities of an exponentially large readout (all the
+parities of the record); whether they survive finite shots and inputs is
+the next question.

@@ -138,3 +138,28 @@ def test_two_filter_scripts_run_and_plot(tmp_path: Path) -> None:
         "two_filters_budget",
     ):
         assert (tmp_path / "figures" / f"{name}.png").is_file()
+
+
+def test_ridge_order_plot_runs(tmp_path: Path) -> None:
+    """Both order-parameter figures from small synthetic inputs."""
+    for n in (8, 16):
+        per_p = [
+            {"p": p, "delta": [max(0.0, n * (0.2 - p)), 0.01]} for p in (0.1, 0.2, 0.3)
+        ]
+        run = {"n": n, "t": 2 * n, "per_p": per_p}
+        (tmp_path / f"transition_N{n}_T{2 * n}_s0.json").write_text(json.dumps(run))
+    keys = ["0.04", "0.1", "0.16", "0.22", "0.3"]
+    loc = {
+        "N": 16,
+        "N_list": [16, 32],
+        "S": {k: list(np.linspace(1, 4, 8)) for k in keys},
+        "s_half": {k: [2.0, 3.0] for k in keys},
+    }
+    (tmp_path / "loc.json").write_text(json.dumps(loc))
+    out = tmp_path / "fig"
+    _load("plot_ridge_order").main(
+        ["--transition", str(tmp_path), "--locality", str(tmp_path / "loc.json"),
+         "--out", str(out)]
+    )  # fmt: skip
+    assert (out / "ridge_order_rank.png").is_file()
+    assert (out / "ridge_order_locality.png").is_file()
