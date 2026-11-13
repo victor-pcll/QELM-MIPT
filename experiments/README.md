@@ -1777,6 +1777,9 @@ Follow-up (issue #339), Haar against Clifford and the entropy profile `S(l)`:
 Follow-up (issue #341), the ridge on record features as an exact Fourier
 filter: `experiments/clifford_ridge/fourier_filter.sh`, then
 `plot_fourier_filter.py`.
+Follow-up (issue #349), the two-filter split
+`E_perp = E_circuit + E_readout(k)`: `experiments/clifford_ridge/two_filters.sh`,
+then `plot_two_filters.py outputs/two_filters`.
 Results and reading in `experiments/clifford_ridge/README.md`.
 
 ## Draw the QELM verdict figures (issue #303)
