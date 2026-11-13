@@ -337,3 +337,56 @@ short and more numerous. But for the local readout, every one of these
 quantities varies smoothly and does not depend on `N`. The trace of the
 transition seen in #337 and #339, through `Delta` and the locality of `G`,
 requires reading parities of many bits, not bit means.
+
+## Readout by parities of at most k bits
+
+`fourier_filter.py parities` propagates every parity of at most `k` bits
+(`parity_strings`, vectorised). The dictionary of order `k` is the union of
+the distinct visible strings that these parities reach. The runs use
+`N = 8` with `k <= 5` (200 circuits), `N = 12` with `k <= 4` (60 circuits)
+and `N = 16` with `k <= 3` (60 circuits), at `T = 2N`, for `p` from 0.04
+to 0.3 (`figures/parities.png`).
+
+Fraction of the visible strings of `G` that are reached:
+
+| N | k | p = 0.04 | 0.08 | 0.12 | 0.16 | 0.20 | 0.25 | 0.30 |
+|---|---|---|---|---|---|---|---|---|
+| 8 | 1 | 0.026 | 0.032 | 0.045 | 0.054 | 0.057 | 0.065 | 0.075 |
+| 8 | 3 | 0.136 | 0.108 | 0.138 | 0.165 | 0.204 | 0.241 | 0.297 |
+| 8 | 5 | 0.428 | 0.246 | 0.242 | 0.281 | 0.336 | 0.412 | 0.498 |
+| 12 | 4 | 0.023 | 0.037 | 0.054 | 0.072 | 0.120 | 0.158 | 0.190 |
+| 16 | 3 | 0.003 | 0.008 | 0.014 | 0.020 | 0.029 | 0.032 | 0.047 |
+
+What this shows:
+
+- **Above p_c, each extra order k helps a lot.** At `p = 0.3`, the
+  fraction of `G` roughly doubles with each order (`N = 12`: 0.024, 0.063,
+  0.120, 0.190 for `k = 1..4`). The number of modes transmitted at
+  `K = 64` follows the same trend (2.2 per site at `N = 12`, `k <= 4`,
+  against 0.27 for bit features).
+- **Below p_c, a second branch appears only once `k` approaches `N/2`.**
+  At `N = 8` (`N/2 = 4`), from `k = 3` on, the fraction of `G` stops
+  decreasing towards small `p` and rises again: 0.43 at `p = 0.04` for
+  `k <= 5`, against a minimum of 0.24 near `p = 0.1`. `n(K = 64)` does the
+  same. At `N = 12` (`k <= 4 < N/2`) and `N = 16` (`k <= 3`), everything
+  stays monotonic in `p`. This agrees with the picture in which the
+  information below `p_c` sits in parities of about `N/2` bits, mostly
+  from the final readout, whose bits are all killed one by one. Two
+  caveats apply. At `p = 0.04` and `N = 8` there are only about 13 bits,
+  so `k <= 5` already covers about 29 % of all parities. And the minimum
+  sits near `p ≈ 0.1`, not exactly at `p_c`: we see two branches, not a
+  clean optimum at `p_c`.
+- **A possible kink just above p_c.** At `N = 12` (`k <= 4`) and `N = 16`
+  (`k <= 3`), `n(K = 64)` rises faster between `p = 0.16` and 0.2 than
+  elsewhere (`N = 12`: 0.73 to 1.51). For bit features the rise is smooth.
+  With 7 values of `p` and 60 circuits this is only an indication.
+- **`E_perp` of `Z_i` barely moves beyond `k = 2`** (`N = 16`,
+  `p = 0.3`: 0.947, 0.921, 0.908). One-site targets are reached mostly by
+  pairs of bits.
+- **Cost.** A readout of order `k` has `C(n_bits, k)` features. Reaching
+  `k ~ N/2` means an exponential number of features, which is out of reach
+  both for the exact enumeration here (`N >= 12`) and for a ridge trained
+  on a finite number of inputs. The transition can be read in the ridge
+  only with a readout whose complexity matches the entanglement of the
+  code. A non-linear decoder, or parities chosen from the structure of
+  `G`, would be the realistic way to get there.
