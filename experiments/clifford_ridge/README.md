@@ -549,8 +549,9 @@ holds, and claim 5 is `cross = 0`. `m` identical feature columns are one
 column scaled by `sqrt(m)` for any ridge, so `F^(k)` keeps the true
 multiplicities; at `lambda > 0`, `S` has one column per string of `G`.
 
-Figures: `figures/two_filters_additivity.png` and
-`figures/two_filters_locality.png`; numbers in
+Figures: `figures/two_filters_additivity.png`,
+`figures/two_filters_locality.png` and `figures/two_filters_budget.png`;
+numbers in
 `figures/summary_two_filters.json`.
 
 ## Claim 5: additivity
@@ -575,6 +576,34 @@ small `K` the readout of order `k` can even beat the full one
 (`p = 0.04`, `K = 4`: `total = 0.981` against `circuit = 0.987`). The split
 then needs a third term, the estimation error, which depends on both
 filters at once.
+
+**A three-term budget that holds without cross terms.** Write
+`E_estimation = E_total - E_total^pop(k)`, the excess of the trained ridge
+on `F^(k)` (finite training set, `lambda`, `K`) over its population value at
+`lambda -> 0+`, `K = inf`. Then
+
+    E_total = E_circuit + E_readout(k) + E_estimation,
+
+with the first two terms the population terms above (orthogonal, so no
+cross term) and `E_estimation >= 0`. It is non-negative because the mean
+prediction of any ridge trained on `F^(k)` lies in `Span F^(k)`, and no
+function of that span beats the projection `P_F y`; the shot noise only adds
+variance. The negative cross terms of the table come from training the
+*full* readout `S` on the same finite data, which is the wrong reference:
+`E_circuit` must stay a population quantity. Measured at `N = 4`, `k <= 2`,
+256 training inputs, `lambda = 2^-8` (`figures/two_filters_budget.png`):
+
+| p | `E_circuit` | `E_readout(2)` | `E_estimation`, K = 4 / 16 / 64 / 256 / inf |
+|---|---|---|---|
+| 0.04 | 0.905 | 0.045 | 0.031 / 0.022 / 0.014 / 0.009 / 0.007 |
+| 0.16 | 0.924 | 0.051 | 0.024 / 0.013 / 0.006 / 0.005 / 0.004 |
+| 0.30 | 0.925 | 0.033 | 0.020 / 0.014 / 0.009 / 0.006 / 0.006 |
+
+`E_estimation` is positive at every `p` and `K` of the run, and decreases
+with `K`. The circuit term is about 0.9 of the variance, the other two a few
+percent each. `E_estimation` depends on both filters (on `k` through the
+number of features, on the circuit through the weights `2^-|a|` of the
+modes), so it is not a third filter.
 
 For a single monomial, the population split is a pair of 0/1 indicators
 (`a not in G`; `a in G` but `a not in D_k`), as predicted in #337 and #341.
@@ -695,7 +724,7 @@ above. `N = 16`, `k = 1` / `k <= 3`:
 | 2. non-local generators below `p_c`, local above | partly true: true for the generators (#339), not for the elements of `G`, which are non-local at every `p` |
 | 3. local readout wrongly blind below `p_c`, lights up above | false: for local targets the circuit term dominates (`E_circuit ≥ 0.82` for `Z_i`), the readout term is ≈ 0 below `p_c` and grows above; the improvement with `p` is smooth and comes from the circuit |
 | 4. `F^(k) ⊂ Span G ⊂ H_Pauli`; no algorithm extracts a mode outside `G` | true, and the second part is a theorem for Pauli modes and Pauli-eigenstate inputs; false for non-multilinear targets; and `E_readout(k)` is not a limit for non-linear decoders |
-| 5. `E_perp = E_circuit + E_readout(k)` exactly | exact only for the population ridge at `lambda -> 0+`, `K = inf` (Pythagoras, `2e-14`); at `lambda > 0`, finite training set or finite `K` the cross term is as large as `E_readout` and negative |
+| 5. `E_perp = E_circuit + E_readout(k)` exactly | exact only for the population ridge at `lambda -> 0+`, `K = inf` (Pythagoras, `2e-14`); at `lambda > 0`, finite training set or finite `K` it needs a third term, `E_estimation >= 0` (measured 0.004 to 0.03), defined against the population terms so that no cross term remains |
 
 What survives is a correct and useful bookkeeping at `K = inf`: the circuit
 fixes a hard floor for every Pauli mode, and a linear readout of order `k`

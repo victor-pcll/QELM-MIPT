@@ -132,5 +132,9 @@ def test_two_filter_scripts_run_and_plot(tmp_path: Path) -> None:
     sh = script.run_shots([0.3], 1, 2, [4], 0)
     (tmp_path / "shots_N4_s0.json").write_text(json.dumps(sh))
     _load("plot_two_filters").main([str(tmp_path)])
-    for name in ("two_filters_additivity", "two_filters_locality"):
+    for name in (
+        "two_filters_additivity",
+        "two_filters_locality",
+        "two_filters_budget",
+    ):
         assert (tmp_path / "figures" / f"{name}.png").is_file()

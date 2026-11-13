@@ -268,6 +268,72 @@ def plot_locality(loc: dict[int, dict], out: Path) -> dict:
     return summary
 
 
+def plot_budget(shots: dict, out: Path) -> dict:
+    """Error budget with three non-negative terms, N = 4, k <= 2.
+
+    ``E_circuit`` and ``E_readout(k)`` are population terms (``lambda -> 0+``,
+    ``K = inf``). ``E_estimation = E_total - (E_circuit + E_readout)`` is the
+    excess of the trained ridge (finite training set, ``lambda``, ``K``). It
+    is non-negative because no predictor in ``Span F`` beats ``P_F``.
+    """
+    ks = shots["shots"]
+    labels = [f"K={k}" for k in ks] + ["K=∞"]
+    keys = [f"K{k}" for k in ks] + ["Kinf"]
+    p_show = [0.04, 0.16, 0.3]
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.8))
+    colors = {"circuit": "#4c72b0", "readout": "#dd8452", "estimation": "#55a868"}
+    summary: dict = {}
+    width = 0.8 / len(p_show)
+    x = np.arange(len(keys))
+    for j, p in enumerate(p_show):
+        r = nearest(shots["per_p"], p)
+        circ = m(r["population"]["circuit"])
+        read = m(r["population"]["readout"])
+        est = np.array([m(r[k]["total"]) - circ - read for k in keys])
+        err = np.array([s(r[k]["total"]) for k in keys])
+        summary[str(p)] = {
+            "E_circuit": circ, "E_readout": read,
+            "E_estimation": dict(zip(labels, est.tolist(), strict=True)),
+        }  # fmt: skip
+        pos = x + (j - 1) * width
+        hatch = ["", "//", ".."][j]
+        for ax in axes:
+            base = np.zeros(len(keys))
+            parts = (("circuit", circ), ("readout", read), ("estimation", est))
+            for name, val in parts:
+                if ax is axes[1] and name == "circuit":
+                    continue
+                v = np.broadcast_to(val, base.shape)
+                ax.bar(pos, v, width, bottom=base, color=colors[name], hatch=hatch,
+                       edgecolor="white",
+                       label=f"{name}" if j == 0 else None)  # fmt: skip
+                base = base + v
+            if ax is axes[1]:
+                ax.errorbar(pos, base, yerr=err, fmt="none", ecolor="k", lw=0.8)
+    for ax in axes:
+        ax.set_xticks(x, labels)
+    title_a = "(a) E_total = E_circuit + E_readout(k) + E_estimation"
+    axes[0].set(ylabel="error / Var y", ylim=(0, 1.05), title=title_a)
+    axes[1].set(ylabel="error / Var y",
+                title="(b) zoom: what the readout and the training add")  # fmt: skip
+    axes[0].legend(loc="lower right", fontsize=8)
+    from matplotlib.patches import Patch
+
+    hatches = [Patch(facecolor="white", edgecolor="k", hatch=h, label=f"p = {p}")
+               for h, p in zip(["", "//", ".."], p_show, strict=True)]  # fmt: skip
+    handles, _ = axes[1].get_legend_handles_labels()
+    axes[1].legend(handles=handles + hatches, loc="upper right", fontsize=8)
+    fig.suptitle(
+        "N = 4 Clifford QELM, readout by parities of ≤ 2 bits, 256 training inputs, "
+        "λ = 2^-8; bars: p = 0.04 / 0.16 / 0.3",
+        fontsize=9,
+    )
+    fig.tight_layout()
+    fig.savefig(out / "two_filters_budget.png", dpi=130)
+    plt.close(fig)
+    return summary
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("root", type=Path)
@@ -280,6 +346,7 @@ def main(argv: list[str] | None = None) -> None:
     summary = {
         "additivity": plot_additivity(exact, sh.get(4), out),
         "locality": plot_locality(loc, out),
+        "budget": plot_budget(sh[4], out) if 4 in sh else {},
     }
     (out / "summary_two_filters.json").write_text(json.dumps(summary, indent=1))
     print(f"wrote {out}")
