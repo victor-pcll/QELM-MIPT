@@ -16,4 +16,5 @@ Scientific notes:
 - [État des lieux des sondes de la MIPT](notes/etat-des-lieux-sondes-mipt.md) — note en français : quelles sondes ont été testées, avec quel décodeur, et la suite
 - [Le QELM voit-il la MIPT ?](notes/qelm-voit-il-la-mipt.md) — note en français : ce qui est prouvé, mesuré ou conjecturé, le critère de taille finie, le verdict par cas et les calculs manquants (#303)
 - [Rang de l'espace des effets : l'algorithme exact](notes/rang-espace-des-effets.md) — note en français : le calcul exact du rang de l'espace des effets, étape par étape avec preuves, pseudo-code et exemples à la main (#317)
+- [Le QELM dans le langage des modes de Fourier : le cadre général (Haar), puis Clifford](notes/cadre-fourier-general.md) — note en français : entrées, effets, parités et Ridge dans la base de Pauli pour un circuit quelconque, ce qui est exact en général, ce qui est propre à Clifford et ce qui est conjectural pour Haar, avec des vérifications exactes à petit N (#353)
 - [Bibliographie vérifiée et liste de lecture](bibliographie.md) — note en français : vérification de chaque citation du dépôt (arXiv, DOI) et liste de lecture par thème et par priorité

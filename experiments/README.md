@@ -1790,6 +1790,25 @@ At `N = 8`, `T = 16`, 3000 trajectories per `p` and 16 values of `p`, a run
 takes about 3 min on one core; the Z grid (120 runs) takes about 1.5 h on 4
 cores, the X grid (72 runs) about 1 h.
 
+## Check the general Fourier framework at small N (issue #353)
+
+`experiments/fourier_framework/small_n_table.py` builds, for each seed, one
+Haar and one Clifford circuit with the same mask (open brickwork, `T = N`),
+enumerates every record, expands every effect on the `4^N` Pauli strings, and
+prints the structure of the span (dimension, commutators, purification Renyi
+entropies) and the population ridge errors (with the two-filter split). It is
+exact; it backs section 9 of
+[`documentation/notes/cadre-fourier-general.md`](../documentation/notes/cadre-fourier-general.md).
+Results: [`fourier_framework/README.md`](fourier_framework/README.md).
+
+```bash
+uv run python experiments/fourier_framework/small_n_table.py \
+    --n 4 --seeds 10 --out outputs/fourier_framework
+```
+
+About 1 min at `N = 4` on 4 cores (circuits with more than 14 bits are
+skipped).
+
 ## Write your own
 
 1. Copy the test script and make the copy executable:
