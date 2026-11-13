@@ -66,7 +66,8 @@ def fig_parities(folder: Path, out: Path, summary: dict) -> None:
     runs = {}
     for path in sorted(folder.glob("parities_N*_s*.json")):
         d = json.loads(path.read_text())
-        runs[d["n"]] = d
+        if not d.get("mid_only", False):
+            runs[d["n"]] = d
     if not runs:
         return
     ns = sorted(runs)
