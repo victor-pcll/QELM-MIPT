@@ -6,7 +6,8 @@ its data in the output folder.
 
 Usage::
 
-    uv run python experiments/dictionary_spectrum/plot_clifford_weights.py outputs/dictionary_spectrum
+    uv run python experiments/dictionary_spectrum/plot_clifford_weights.py \
+        outputs/dictionary_spectrum
 """
 
 from __future__ import annotations
@@ -135,7 +136,7 @@ def draw_summary(axes: np.ndarray, data: dict[int, dict]) -> dict:
     ax_mean.set_ylabel("<l> / N (solid: all, dashed: no Y)")
     ax_mean.set_title("Position of the bulk, final readout")
     ax_local.set_ylabel("N(1) / N")
-    ax_local.set_title("Single-site strings per site, final readout")
+    ax_local.set_title("Single-site strings, final readout")
     for ax in axes:
         ax.axvline(P_C, color="grey", lw=1, alpha=0.5)
         ax.set_xlabel("p")

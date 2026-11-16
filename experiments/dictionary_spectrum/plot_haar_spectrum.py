@@ -7,7 +7,8 @@ index by index.
 
 Usage::
 
-    uv run python experiments/dictionary_spectrum/plot_haar_spectrum.py outputs/dictionary_spectrum
+    uv run python experiments/dictionary_spectrum/plot_haar_spectrum.py \
+        outputs/dictionary_spectrum
 """
 
 from __future__ import annotations
@@ -83,8 +84,14 @@ def main(argv: list[str] | None = None) -> None:
         for p, c in PICKS.items():
             haar = mean_sorted(rows_at(runs, "haar", p, record), size)
             cliff = mean_sorted(rows_at(runs, "clifford", p, record), size)
-            ax.semilogy(k, np.where(haar > 0, haar, np.nan), "-", color=c, lw=2,
-                        label=f"Haar, p = {p}")
+            ax.semilogy(
+                k,
+                np.where(haar > 0, haar, np.nan),
+                "-",
+                color=c,
+                lw=2,
+                label=f"Haar, p = {p}",
+            )
             ax.semilogy(k, np.where(cliff > 0, cliff, np.nan), ":", color=c, lw=1.5)
             extra["spectra"][f"{record}_{p}"] = {
                 "haar": haar.tolist(),
@@ -107,7 +114,10 @@ def main(argv: list[str] | None = None) -> None:
         span = np.mean([r["span_profile"] for r in rows], axis=0)
         ax.plot(ell[1:], (born / cap)[1:], "-o", color=c, ms=4, label=f"p = {p}")
         ax.plot(ell[1:], (span / cap)[1:], "--", color=c, lw=1)
-        extra["spectra"][f"profile_{p}"] = {"born": born.tolist(), "span": span.tolist()}
+        extra["spectra"][f"profile_{p}"] = {
+            "born": born.tolist(),
+            "span": span.tolist(),
+        }
     ax.set_yscale("log")
     ax.set_xlabel("degree l")
     ax.set_ylabel("fraction of the degree-l modes")
@@ -123,8 +133,12 @@ def main(argv: list[str] | None = None) -> None:
         for p in p_list:
             for kind in ("haar", "clifford"):
                 rows = rows_at(mruns, kind, p, "full")
-                res[f"{kind}_rank"].append(np.mean([r["span_rank"] - 1 for r in rows]) / dim)
-                res[f"{kind}_pr"].append(np.mean([r["ranks"]["participation"] for r in rows]))
+                res[f"{kind}_rank"].append(
+                    np.mean([r["span_rank"] - 1 for r in rows]) / dim
+                )
+                res[f"{kind}_pr"].append(
+                    np.mean([r["ranks"]["participation"] for r in rows])
+                )
                 res[f"{kind}_top"].append(np.mean([top_share(r["mu"]) for r in rows]))
                 res[f"{kind}_trace"].append(np.mean([r["trace_F"] for r in rows]))
                 for t, lam in enumerate(thresholds):
@@ -132,21 +146,71 @@ def main(argv: list[str] | None = None) -> None:
                         np.mean([r["ranks"]["above"][t] for r in rows]) / dim
                     )
         a = axes[1, 0]
-        a.plot(p_list, res["haar_rank"], ls, color=col, marker="o", ms=4,
-               label=f"N = {m}: span rank")
+        a.plot(
+            p_list,
+            res["haar_rank"],
+            ls,
+            color=col,
+            marker="o",
+            ms=4,
+            label=f"N = {m}: span rank",
+        )
         for lam, mk in zip(thresholds, ("s", "^", "v"), strict=False):
-            a.plot(p_list, res[f"haar_above_{lam:g}"], ls, color=col, marker=mk,
-                   ms=4, lw=1, label=f"N = {m}: mu > {lam:g}")
+            a.plot(
+                p_list,
+                res[f"haar_above_{lam:g}"],
+                ls,
+                color=col,
+                marker=mk,
+                ms=4,
+                lw=1,
+                label=f"N = {m}: mu > {lam:g}",
+            )
         b = axes[1, 1]
-        b.plot(p_list, res["haar_pr"], ls, color=col, marker="o", ms=4, label=f"Haar N = {m}")
-        b.plot(p_list, res["clifford_pr"], ls, color="#c0392b", marker="s", ms=3, lw=1,
-               alpha=0.4 + 0.1 * m / 2, label=f"Clifford N = {m}")
+        b.plot(
+            p_list,
+            res["haar_pr"],
+            ls,
+            color=col,
+            marker="o",
+            ms=4,
+            label=f"Haar N = {m}",
+        )
+        b.plot(
+            p_list,
+            res["clifford_pr"],
+            ls,
+            color="#c0392b",
+            marker="s",
+            ms=3,
+            lw=1,
+            alpha=0.4 + 0.1 * m / 2,
+            label=f"Clifford N = {m}",
+        )
         c_ = axes[1, 2]
-        c_.plot(p_list, res["haar_top"], ls, color=col, marker="o", ms=4,
-                label=f"Haar N = {m}")
-        c_.plot(p_list, res["clifford_top"], ls, color="#c0392b", marker="s", ms=3,
-                lw=1, label=f"Clifford N = {m}")
-        extra["vs_p"][str(m)] = {"p": p_list, **{key: list(v) for key, v in res.items()}}
+        c_.plot(
+            p_list,
+            res["haar_top"],
+            ls,
+            color=col,
+            marker="o",
+            ms=4,
+            label=f"Haar N = {m}",
+        )
+        c_.plot(
+            p_list,
+            res["clifford_top"],
+            ls,
+            color="#c0392b",
+            marker="s",
+            ms=3,
+            lw=1,
+            label=f"Clifford N = {m}",
+        )
+        extra["vs_p"][str(m)] = {
+            "p": p_list,
+            **{key: list(v) for key, v in res.items()},
+        }
     axes[1, 0].set_ylabel("fraction of the 3^N - 1 modes")
     axes[1, 0].set_title("Haar, final readout: rank and counts above lambda")
     axes[1, 1].set_ylabel("(Tr F)^2 / Tr F^2")

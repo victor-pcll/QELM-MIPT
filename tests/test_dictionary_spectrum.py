@@ -121,7 +121,7 @@ def test_clifford_span_and_born_profiles_agree(final: bool) -> None:
 
 
 def test_haar_profiles_are_bounded() -> None:
-    """Haar: 0 <= N_F(l) <= P(l) mode by mode is not required, but both stay in range."""
+    """Haar: both profiles lie between 0 and the number of degree-l modes."""
     n, depth = 3, 6
     gates = _open_circuit("haar", n, depth, 1)
     masks = np.random.default_rng(2).random((depth, n)) < 0.2
@@ -146,3 +146,36 @@ def test_effective_ranks() -> None:
     assert out["participation"] == pytest.approx(1.0 / 0.375)
     assert out["entropy"] == pytest.approx(np.exp(1.5 * np.log(2)))
     assert effective_ranks(np.zeros(3), [0.1])["participation"] == 0.0
+
+
+def _script(name: str):  # type: ignore[no-untyped-def]
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).parents[1] / "experiments" / "dictionary_spectrum" / name
+    spec = importlib.util.spec_from_file_location(name[:-3], path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_scripts_smoke(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    import json
+
+    cw = _script("clifford_weights.py")
+    for n in (6, 8):
+        res = cw.run(n, 3, [0.05, 0.3], seed=0)
+        assert np.allclose(np.sum(res["full_all"]["mean"], axis=1), 2**n)
+        (tmp_path / f"clifford_weights_N{n}.json").write_text(json.dumps(res))
+    _script("plot_clifford_weights.py").main([str(tmp_path), "--rows", "6"])
+    assert (tmp_path / "clifford_weights.png").exists()
+    hs = _script("haar_spectrum.py")
+    res = hs.run(3, 0, [0.04, 0.16, 0.3, 0.5], records=60)
+    rows = res["per_kind"]["clifford"]
+    for row in rows:
+        for rec in ("mid", "full"):
+            assert sum(row[rec]["span_profile"]) == pytest.approx(row[rec]["span_rank"])
+    (tmp_path / "haar_spectrum_N3_seed0.json").write_text(json.dumps(res))
+    _script("plot_haar_spectrum.py").main([str(tmp_path), "--n", "3"])
+    assert (tmp_path / "haar_spectrum.png").exists()

@@ -11,7 +11,8 @@ of them and those without ``Y``.
 
 Example::
 
-    uv run python experiments/dictionary_spectrum/clifford_weights.py --n 16 --samples 200
+    uv run python experiments/dictionary_spectrum/clifford_weights.py \
+        --n 16 --samples 200
 """
 
 from __future__ import annotations
@@ -50,9 +51,7 @@ def run(n: int, samples: int, p_grid: list[float], seed: int) -> dict:
             hist["full_all"][j, s], hist["full_vis"][j, s] = weight_enumerator(
                 groups.full
             )
-            hist["mid_all"][j, s], hist["mid_vis"][j, s] = weight_enumerator(
-                groups.mid
-            )
+            hist["mid_all"][j, s], hist["mid_vis"][j, s] = weight_enumerator(groups.mid)
             delta[j, s] = purification(circ, {}, seed=s).delta
         if (s + 1) % max(1, samples // 10) == 0:
             print(f"N={n} {s + 1}/{samples} {time.time() - t0:.0f}s", flush=True)

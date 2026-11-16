@@ -19,7 +19,8 @@ multiplicity ``P(l)``, which checks the sampled one.
 
 Example::
 
-    uv run python experiments/dictionary_spectrum/haar_spectrum.py --n 6 --seed 0
+    uv run python experiments/dictionary_spectrum/haar_spectrum.py \
+        --n 6 --seed 0
 """
 
 from __future__ import annotations
