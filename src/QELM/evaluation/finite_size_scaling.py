@@ -171,6 +171,32 @@ def collapse_quality(
     return float(np.mean(terms)) if terms else float("inf")
 
 
+def quality_map(
+    curves: Mapping[int, Curve],
+    p_c_grid: np.ndarray,
+    nu_grid: np.ndarray,
+    subtract: bool = False,
+) -> np.ndarray:
+    """:func:`collapse_quality` on every pair of a ``(p_c, nu)`` grid.
+
+    Args:
+        curves: ``{N: (p, O, err)}``, at least two sizes.
+        p_c_grid: Trial critical points, shape ``(a,)``.
+        nu_grid: Trial exponents, shape ``(b,)``.
+        subtract: As in :func:`collapse_quality`.
+
+    Returns:
+        The qualities, shape ``(a, b)``: row ``i`` is ``p_c_grid[i]``,
+        column ``j`` is ``nu_grid[j]``.
+    """
+    return np.array(
+        [
+            [collapse_quality(curves, float(a), float(b), subtract) for b in nu_grid]
+            for a in p_c_grid
+        ]
+    )
+
+
 @dataclass(frozen=True)
 class Collapse:
     """Result of :func:`fit_collapse`.
