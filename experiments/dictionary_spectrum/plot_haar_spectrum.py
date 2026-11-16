@@ -121,7 +121,7 @@ def main(argv: list[str] | None = None) -> None:
     ax.set_yscale("log")
     ax.set_xlabel("degree l")
     ax.set_ylabel("fraction of the degree-l modes")
-    ax.set_title("Haar, final readout: N_F(l) (solid), P(l) (dashed)")
+    ax.set_title("Haar, readout: N_F(l) solid, P(l) dashed")
     ax.legend(fontsize=7, frameon=False)
 
     # Bottom row: against p, every size.
@@ -212,12 +212,12 @@ def main(argv: list[str] | None = None) -> None:
             **{key: list(v) for key, v in res.items()},
         }
     axes[1, 0].set_ylabel("fraction of the 3^N - 1 modes")
-    axes[1, 0].set_title("Haar, final readout: rank and counts above lambda")
+    axes[1, 0].set_title("Haar, readout: rank, counts above lambda")
     axes[1, 1].set_ylabel("(Tr F)^2 / Tr F^2")
     axes[1, 1].set_yscale("log")
     axes[1, 1].set_title("Participation ratio of F, final readout")
     axes[1, 2].set_ylabel(f"share of Tr F in the top {TOP} modes")
-    axes[1, 2].set_title("Concentration of the spectrum, final readout")
+    axes[1, 2].set_title(f"Top-{TOP} share of Tr F, readout")
     for ax in axes[1]:
         ax.axvline(P_C, color="grey", lw=1, alpha=0.5)
         ax.set_xlabel("p")
