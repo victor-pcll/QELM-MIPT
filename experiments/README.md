@@ -59,6 +59,8 @@ commands and every option of the launchers.
 | [`effect_rank/`](effect_rank/README.md) | exact rank of the effect space against `p`, one fixed circuit and mask per seed, Haar / U(1) / Z2 / Clifford, angle and dense encodings | which functions of the input the record can reach at all (#313) |
 | [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
 | [`clifford_state_readout/`](clifford_state_readout/README.md) | `S_R` and purity of the reference qubit from the final Clifford state, ridge / quadratic / MLP | can a readout of the state probe purification (#292) |
+| [`clifford_collapse_map/`](clifford_collapse_map/README.md) | heat map of the collapse quality of `Delta` over `(p_c, nu)`, Clifford runs up to `N = 128` | which `(p_c, nu)` collapse the Clifford MIPT best (#346) |
+| [`haar_collapse_map/`](haar_collapse_map/README.md) | exact `W(m)` and `Delta` on the periodic Haar brickwork, `N = 4` to 12: crossings, collapse and `(p_c, nu)` quality map | does `Delta` recover the literature Haar `p_c` and `nu` (#348) |
 | [`symmetry_regimes/`](symmetry_regimes/README.md) | QELM on the state, on `M` and on both, and Bayes on `M`, for six gate families (Haar, Clifford, U(1), Z2, dipole, diagonal), four encodings and the Z or X label of `R` | which tasks put the label in the state, which in the record (#311) |
 | [`charge_variance/`](charge_variance/README.md) | per-trajectory `Var(Q)` from the final U(1) state, linear / two-point / quadratic readouts | can a readout of the state probe charge sharpening (#299) |
 | [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
@@ -1733,6 +1735,45 @@ Options of the launcher (environment variables):
 - `OUT_ROOT` / `OUT_DIR`: where the sweep is written.
 
 Each run writes `<OUT_DIR>/<model>_N<N>_T<T>_seed<seed>/metrics.json`. A run that fails leaves its log next to that folder and is listed in `failed_runs.txt`.
+
+## Run the effect spectrum and ridge bias/variance (issue #334)
+
+[`ridge_spectrum/`](ridge_spectrum/README.md) measures, on the Haar circuits
+of `effect_mipt`, the spectrum of the effects of the full record (`level1`)
+and the bias/variance of the ridge readout of the local features (`level2`):
+
+```bash
+# one run of each level
+uv run python experiments/ridge_spectrum/ridge_spectrum.py level1 --n 6 --seed 0 --records 6000
+uv run python experiments/ridge_spectrum/ridge_spectrum.py level2 --n 8 --seed 0 --kmax 256
+
+# the full sweep of the README (about 3 hours on 4 cores)
+JOBS=4 ./experiments/ridge_spectrum/ridge_spectrum.sh
+
+# figures and summary.json, in outputs/ridge_spectrum/figures
+uv run python experiments/ridge_spectrum/plot_ridge_spectrum.py outputs/ridge_spectrum
+```
+
+Options of the script: `--p` (grid), `--records` (level I, Born records per
+point), `--kmax` (level II, shots per input), `--sizes` (train, validation
+and test inputs), `--max-reps` (cap on the `K`-shot repetitions), `--out`,
+`--tag`. The launcher reads `JOBS` (parallel runs, default 4) and `OUT_ROOT`
+(default `outputs`). Each run writes
+`outputs/ridge_spectrum/level<1|2>_N<n>_seed<s>.json`.
+
+## Map the MIPT in the ridge readout at K = infinity (issue #337)
+
+Clifford QELM (stim): the group of the effect `G` gives the ridge with
+infinitely many shots exactly (span, `E_perp` of each monomial, spectrum of
+the covariance, locality). Run and plot:
+
+```bash
+experiments/clifford_ridge/population.sh
+uv run python experiments/clifford_ridge/plot_population.py outputs/clifford_ridge
+```
+
+The transition probes alone: `clifford_ridge.py transition --n 32 --t 64`.
+Results and reading in `experiments/clifford_ridge/README.md`.
 
 ## Draw the QELM verdict figures (issue #303)
 
