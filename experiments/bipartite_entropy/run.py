@@ -99,6 +99,13 @@ def main() -> None:
     args = parser.parse_args()
     n = args.n
     t = args.t or 2 * n
+    starts = range(0, n, args.stride)
+    if (n // 2) % 2 == 0 and 2 * sum(s % 2 for s in starts) != len(starts):
+        # With N/2 even both ends of the half chain have the parity of the
+        # start, and the last gate layer of the backward trajectory (the
+        # first forward one, even bonds) crosses only odd-type cuts: the
+        # area-law S(N/2) depends on that parity. Both must be averaged.
+        raise ValueError(f"stride {args.stride} does not balance the start parities.")
     grid = args.p or (P_HAAR if args.model == "haar" else P_CLIFFORD)
     out: dict = {"model": args.model, "n": n, "t": t, "samples": args.samples}
     out.update(seed=args.seed, stride=args.stride, p=grid, per_p=[])

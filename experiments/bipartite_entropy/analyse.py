@@ -95,26 +95,35 @@ class Case:
     p_window: tuple[float, float] = (0.0, 1.0)
 
 
+# Window of p for the S(N/2) collapse: the Li-Chen-Fisher form holds near
+# p_c only. Deep in the volume law S(N/2) ~ s(p) N, and the error bars there
+# are tiny, so a full-range fit is driven by corrections far from p_c.
+S_WINDOW = {"clifford": (0.10, 0.24), "haar": (0.10, 0.30)}
+
+
 def cases(model: str, sizes: list[int]) -> tuple[list[Case], list[Case]]:
     """Main cases (S(N/2), I3) and variants of a model."""
     second = sorted(sizes)[1] if len(sizes) > 1 else 0
+    lo, hi = S_WINDOW[model]
+    win = f"{lo:.2f} <= p <= {hi:.2f}"
     main = [
-        Case("S1", "S(N/2) - S(p_c, N)", "half_s1", True),
+        Case("S1", f"S(N/2) - S(p_c, N), {win}", "half_s1", True, p_window=(lo, hi)),
         Case("I3", "I3 of the quarters", "i3", False),
     ]
     variants = [
-        Case("S1_drop", f"S(N/2), N >= {second}", "half_s1", True, min_n=second),
         Case(
-            "S1_window",
-            "S(N/2), 0.10 <= p <= 0.24",
+            "S1_drop",
+            f"S(N/2), {win}, N >= {second}",
             "half_s1",
             True,
-            p_window=(0.10, 0.24),
+            min_n=second,
+            p_window=(lo, hi),
         ),
+        Case("S1_full", "S(N/2), every p", "half_s1", True),
     ]
     if model == "haar":
         variants += [
-            Case("S2", "S_2(N/2) - S_2(p_c, N)", "half_s2", True),
+            Case("S2", f"S_2(N/2), {win}", "half_s2", True, p_window=(lo, hi)),
             Case("I3_2", "I3 of S_2", "i3_2", False),
         ]
     else:
@@ -428,8 +437,7 @@ def draw_profiles(ax: Axes, run: dict[str, Any], p_show: list[float]) -> None:
             color=cmap(k / max(1, len(rows) - 1)),
             label=f"p = {r['p']}",
         )
-    ax.set_xscale("log", base=2)
-    ax.set_xlabel("l (log scale)")
+    ax.set_xlabel("l")
     ax.set_ylabel("S(l), bits")
     ax.legend(fontsize=6, ncol=2)
 
@@ -532,7 +540,9 @@ def main(argv: list[str] | None = None) -> None:
         curves[m]["S1_raw"] = c_raw
         summary[m]["S1_raw_crossings"] = _jsonable(pair_crossings(c_raw, n_boot=200))
 
-    by_name = {c.name: c for m in models for c in sum(cases(m, sorted(runs[m])), [])}
+    by_name = {
+        (m, c.name): c for m in models for c in sum(cases(m, sorted(runs[m])), [])
+    }
 
     # Figure 1: S(N/2) and I3 against p, crossing drift.
     fig, axes = subplots(len(models), 3, figsize=(17, 4.6 * len(models)), squeeze=False)
@@ -580,7 +590,7 @@ def main(argv: list[str] | None = None) -> None:
     for row, m in zip(axes, models, strict=True):
         for ax, name in zip(row, ("S1", "I3"), strict=True):
             if name in results[m]:
-                draw_collapse(ax, curves[m][name], by_name[name], results[m][name])
+                draw_collapse(ax, curves[m][name], by_name[(m, name)], results[m][name])
                 ax.set_title(f"{m}: " + ax.get_title(), fontsize=9)
     save_figure(
         fig,
@@ -600,7 +610,9 @@ def main(argv: list[str] | None = None) -> None:
             res = results[m][name]
             sizes = ", ".join(map(str, res["sizes"]))
             draw_map(row[2 * k], res["wide"], res, fig, m)
-            row[2 * k].set_title(f"{m}, {by_name[name].label}, N = {sizes}", fontsize=9)
+            row[2 * k].set_title(
+                f"{m}, {by_name[(m, name)].label}, N = {sizes}", fontsize=9
+            )
             draw_map(row[2 * k + 1], res["zoom"], res, fig, m)
             row[2 * k + 1].set_title(
                 f"zoom; white: Q = {LEVELS[0]}, {LEVELS[1]} x Q_min", fontsize=9
@@ -616,7 +628,8 @@ def main(argv: list[str] | None = None) -> None:
             ax.set_visible(True)
             draw_map(ax, res["zoom"], res, fig, m)
             ax.set_title(
-                f"{m}, {by_name[name].label}, N = {', '.join(map(str, res['sizes']))}",
+                f"{m}, {by_name[(m, name)].label}, "
+                f"N = {', '.join(map(str, res['sizes']))}",
                 fontsize=9,
             )
     save_figure(fig, args.out, "collapse_map_variants", data=_jsonable(variant_results))

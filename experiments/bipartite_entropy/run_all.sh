@@ -11,7 +11,7 @@ R="uv run python experiments/bipartite_entropy/run.py"
   for s in 0 1 2; do echo "$R clifford --n 256 --samples 50 --seed $s --out $OUT"; done
   for s in 0 1; do echo "$R haar --n 18 --samples 250 --stride 2 --seed $s --out $OUT"; done
   for s in 0 1; do echo "$R clifford --n 128 --samples 200 --seed $s --out $OUT"; done
-  echo "$R haar --n 16 --samples 1000 --stride 2 --out $OUT"
+  for s in 1 2 3 4; do echo "$R haar --n 16 --samples 250 --stride 3 --seed $s --out $OUT"; done
   echo "$R clifford --n 64 --samples 600 --out $OUT"
   echo "$R clifford --n 32 --samples 1000 --out $OUT"
   echo "$R clifford --n 16 --samples 1000 --out $OUT"
