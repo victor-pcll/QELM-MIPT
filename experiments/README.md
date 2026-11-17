@@ -1786,6 +1786,20 @@ Follow-up (issue #352), Haar trajectories against Haar ridge locality:
 `experiments/clifford_ridge/haar_order.sh`, then `plot_haar_order.py`.
 Results and reading in `experiments/clifford_ridge/README.md`.
 
+## Plot the spectrum of the effect dictionary (issue #356)
+
+[`dictionary_spectrum/`](dictionary_spectrum/README.md) plots the weight
+histogram `N(l)` of the Clifford effect group (`N = 12` to 24, with and
+without the final readout) and the sorted spectrum of the record covariance
+`F` with Haar gates (`N = 4, 6`). Reading in French:
+[`documentation/notes/spectre-du-dictionnaire.md`](../documentation/notes/spectre-du-dictionnaire.md).
+
+```bash
+experiments/dictionary_spectrum/run.sh
+uv run python experiments/dictionary_spectrum/plot_clifford_weights.py outputs/dictionary_spectrum
+uv run python experiments/dictionary_spectrum/plot_haar_spectrum.py outputs/dictionary_spectrum
+```
+
 ## Draw the QELM verdict figures (issue #303)
 
 `experiments/qelm_verdict/plot_verdict.py` runs no simulation. It reads

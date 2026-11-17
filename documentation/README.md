@@ -16,3 +16,4 @@ Scientific notes:
 - [État des lieux des sondes de la MIPT](notes/etat-des-lieux-sondes-mipt.md) — note en français : quelles sondes ont été testées, avec quel décodeur, et la suite
 - [Le QELM voit-il la MIPT ?](notes/qelm-voit-il-la-mipt.md) — note en français : ce qui est prouvé, mesuré ou conjecturé, le critère de taille finie, le verdict par cas et les calculs manquants (#303)
 - [La transition du rang de l'espace des effets est-elle une MIPT ?](notes/transition-rang-mipt.md) — note en français : le rang de Haar est une coupe minimale, son pic part vers p = 0, ce qu'il faut mesurer pour parler de MIPT et le plan d'expériences (#319)
+- [Le spectre du dictionnaire G(t=0) à travers la MIPT](notes/spectre-du-dictionnaire.md) — note en français : histogramme N(l) des poids de Pauli du groupe de l'effet (Clifford) et spectre de F (Haar), ce qui est exact, observé ou conjecturé (#356)
