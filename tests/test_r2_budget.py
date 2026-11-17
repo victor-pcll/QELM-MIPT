@@ -130,10 +130,46 @@ def test_run_and_plot_smoke(tmp_path: Path) -> None:
     common = ["--circuits", "2", "--targets", "3", "--p", "0.0", "0.2"]
     run.main(["dense", "--n", "3", *common, "--out", str(tmp_path)])
     run.main(["clifford", "--n", "4", "--k", "1", "2", *common, "--out", str(tmp_path)])
+    run.main(
+        [
+            "dense",
+            "--n",
+            "3",
+            "--depth",
+            "6",
+            "--no-final",
+            "--ensemble",
+            "sphere",
+            "--method",
+            "recursive",
+            "--prior",
+            "flat",
+            *common,
+            "--out",
+            str(tmp_path),
+        ]
+    )
+    nofinal = json.loads(
+        (tmp_path / "dense_N3_flat_sphere_nofinal_T6.json").read_text()
+    )
+    assert nofinal["per_p"]["haar"][0]["circuit"]["mean"] == pytest.approx(1.0)
     data = json.loads((tmp_path / "dense_N3_iid.json").read_text())
     assert data["per_p"]["haar"][0]["max_abs_sum_minus_one"] < 1e-10
-    load("plot").main(["--data", str(tmp_path), "--n", "3", "--clifford-n", "4"])
+    load("plot").main(
+        [
+            "--data",
+            str(tmp_path),
+            "--n",
+            "3",
+            "--clifford-n",
+            "4",
+            "--tags",
+            "",
+            "_sphere_nofinal_T6",
+        ]
+    )
     assert (tmp_path / "figures" / "budget_hist_k2_iid.png").exists()
+    assert (tmp_path / "figures" / "budget_hist_k2_flat_sphere_nofinal_T6.png").exists()
 
 
 @pytest.mark.parametrize("kind", ["haar", "clifford"])
@@ -166,3 +202,46 @@ def test_haar_dense_rank_is_two_to_the_min_cut() -> None:
     for p in (0.1, 0.3, 0.5):
         prof = rb.rank_profile(ff.draw_circuit(4, 4, p, "haar", rng))
         assert prof.dense == 2**prof.mincut
+
+
+@pytest.mark.parametrize("kind", ["haar", "clifford"])
+@pytest.mark.parametrize("final", [True, False])
+@pytest.mark.parametrize("ensemble", ["xz", "sphere"])
+@pytest.mark.parametrize("p", [0.0, 0.3])
+def test_recursive_budget_equals_record_listing(
+    kind: str, final: bool, ensemble: str, p: float
+) -> None:
+    rng = np.random.default_rng(10)
+    n = 3
+    circuit = ff.draw_circuit(n, 2 * n, p, kind, rng)
+    g = rb.draw_whitened_targets(n, 10, "flat", rng, ensemble)
+    ref = rb.dense_budget(circuit, (1, 2), g, final=final, ensemble=ensemble)
+    got = rb.recursive_budget(circuit, (1, 2, None), g, final=final, ensemble=ensemble)
+    np.testing.assert_allclose(got.circuit, ref.circuit, atol=1e-9)
+    np.testing.assert_allclose(got.readout[:2], ref.readout, atol=1e-9)
+    np.testing.assert_allclose(got.r2[:2], ref.r2, atol=1e-9)
+    np.testing.assert_allclose(got.readout[2], 0.0, atol=1e-12)
+    total = got.circuit[None] + got.readout + got.r2
+    np.testing.assert_allclose(total, 1.0, atol=1e-10)
+
+
+def test_parity_operators_match_walsh_operators() -> None:
+    rng = np.random.default_rng(11)
+    circuit = ff.draw_circuit(3, 3, 0.4, "haar", rng)
+    for final in (True, False):
+        records = ff.enumerate_records(circuit, final=final)
+        subsets = ff.parity_subsets(records.bits.shape[1], 2)
+        if not subsets:
+            continue
+        ref = ff.pauli_vectors(ff.walsh_operators(records, subsets)).real
+        got = rb.parity_operator_rows(circuit, subsets, final)
+        np.testing.assert_allclose(got, ref, atol=1e-12)
+
+
+def test_no_final_readout_and_no_measurement_reads_nothing() -> None:
+    rng = np.random.default_rng(12)
+    circuit = ff.draw_circuit(3, 6, 0.0, "haar", rng)
+    g = rb.draw_whitened_targets(3, 5, "flat", rng, "sphere")
+    b = rb.recursive_budget(circuit, (2, None), g, final=False, ensemble="sphere")
+    np.testing.assert_allclose(b.circuit, 1.0)
+    np.testing.assert_allclose(b.r2, 0.0)

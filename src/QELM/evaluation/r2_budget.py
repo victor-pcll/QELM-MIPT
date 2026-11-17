@@ -84,7 +84,11 @@ class Budget:
 
 
 def draw_whitened_targets(
-    n: int, n_targets: int, prior: str, rng: np.random.Generator
+    n: int,
+    n_targets: int,
+    prior: str,
+    rng: np.random.Generator,
+    ensemble: str = "xz",
 ) -> np.ndarray:
     """Whitened coefficients ``g_a = sqrt(w_a) beta_a`` of random dense targets.
 
@@ -93,15 +97,18 @@ def draw_whitened_targets(
         n_targets: Number of targets.
         prior: ``"iid"`` or ``"flat"`` (module docstring).
         rng: Random generator.
+        ensemble: ``"xz"`` (weights ``2^{-|a|}``, no ``Y``) or ``"sphere"``
+            (dense encoding, weights ``3^{-|a|}`` on every string).
 
     Returns:
         ``(n_targets, 4^n - 1)`` array over the strings ``a != I`` in the order
         of :func:`QELM.evaluation.fourier_framework.pauli_codes`; zero on the
-        strings with a ``Y``.
+        strings the ensemble does not see. With ``"flat"`` the target is
+        isotropic in ``L^2``: every visible mode carries the same variance.
     """
     if prior not in PRIORS:
         raise ValueError(f"unknown prior {prior!r}")
-    w = ff.input_weights(n, "xz")[1:]
+    w = ff.input_weights(n, ensemble)[1:]
     z = rng.standard_normal((n_targets, w.size))
     scale = np.sqrt(w) if prior == "iid" else (w > 0).astype(float)
     return np.asarray(z * scale)
@@ -152,12 +159,17 @@ def project_budget(v_s: np.ndarray, v_ks: list[np.ndarray], g: np.ndarray) -> Bu
 
 
 def dense_budget(
-    circuit: ff.Circuit, ks: tuple[int, ...], g: np.ndarray, max_bits: int = 16
+    circuit: ff.Circuit,
+    ks: tuple[int, ...],
+    g: np.ndarray,
+    max_bits: int = 16,
+    final: bool = True,
+    ensemble: str = "xz",
 ) -> Budget:
-    """Exact budget on any circuit of :mod:`fourier_framework` (final readout on)."""
+    """Exact budget on any circuit of :mod:`fourier_framework`, by listing records."""
     n = circuit.n
-    w = ff.input_weights(n, "xz")
-    records = ff.enumerate_records(circuit, final=True, max_bits=max_bits)
+    w = ff.input_weights(n, ensemble)
+    records = ff.enumerate_records(circuit, final=final, max_bits=max_bits)
     c = ff.feature_matrix(records.effects)
     v_s = span_basis(c, w)
     v_ks = [span_basis(ff.parity_features(c, records.bits, k), w) for k in ks]
@@ -284,14 +296,21 @@ class RankProfile:
     mean_r2: float
 
 
-def effect_basis(circuit: ff.Circuit, tol: float = 1e-6) -> np.ndarray:
+def effect_basis(
+    circuit: ff.Circuit, tol: float = 1e-6, final: bool = True
+) -> np.ndarray:
     """Orthonormal rows spanning the effects, Pauli order of ``pauli_codes``.
 
     The backward recursion of :mod:`QELM.evaluation.effect_rank`, without
-    listing the records.
+    listing the records. Without the final readout the recursion starts from
+    the identity alone.
     """
     n = circuit.n
-    basis = er.final_readout_basis(n)
+    if final:
+        basis = er.final_readout_basis(n)
+    else:
+        basis = np.zeros((1, 4**n))
+        basis[0, 0] = 1.0
     for t in reversed(range(len(circuit.gates))):
         for measured in np.flatnonzero(circuit.mask[t]):
             basis = er.measure_site(basis, n, int(measured), tol)
@@ -315,3 +334,95 @@ def rank_profile(circuit: ff.Circuit) -> RankProfile:
         n_first=int(mask[0].sum()),
         mean_r2=float(np.sum(w[1:] * np.sum(v**2, axis=0)) / np.sum(w[1:])),
     )
+
+
+# ---------------------------------------------------------------------------
+# Records without listing them: parities by backward evolution (issue #363)
+# ---------------------------------------------------------------------------
+
+
+def parity_operator_rows(
+    circuit: ff.Circuit,
+    subsets: list[tuple[int, ...]],
+    final: bool = True,
+) -> np.ndarray:
+    """Pauli rows of ``O_S`` with ``E[(-1)^{m_S} | rho] = Tr[rho O_S]``.
+
+    Backward (Heisenberg) evolution of one operator per subset, so the cost
+    does not grow with the number of records. Bits are numbered as in
+    :func:`QELM.evaluation.fourier_framework.enumerate_records`: mid-circuit
+    bits layer by layer, sites in increasing order, then the final readout.
+    A measured bit ``j`` maps ``O -> P_0 O P_0 + s P_1 O P_1`` with ``s = -1``
+    if ``j`` is in ``S``; a gate maps ``O -> U^dagger O U``.
+
+    Returns:
+        ``(len(subsets), 4^n)`` real array (column 0 the identity).
+    """
+    n = circuit.n
+    dim = 2**n
+    mid = [
+        (t, int(i))
+        for t in range(len(circuit.gates))
+        for i in np.flatnonzero(circuit.mask[t])
+    ]
+    n_mid = len(mid)
+    sets = [set(s) for s in subsets]
+    ops = np.empty((len(subsets), dim, dim), dtype=complex)
+    for k, s in enumerate(sets):
+        if final:
+            diag = np.ones(dim)
+            for site in range(n):
+                if n_mid + site in s:
+                    bits = (np.arange(dim) >> (n - 1 - site)) & 1
+                    diag *= 1.0 - 2.0 * bits
+            ops[k] = np.diag(diag)
+        else:
+            if any(j >= n_mid for j in s):
+                raise ValueError("bit index beyond the mid-circuit record")
+            ops[k] = np.eye(dim)
+    index = {tm: j for j, tm in enumerate(mid)}
+    for t in reversed(range(len(circuit.gates))):
+        for measured in np.flatnonzero(circuit.mask[t]):
+            j = index[(t, int(measured))]
+            bits = (np.arange(dim) >> (n - 1 - int(measured))) & 1
+            sign = np.array([-1.0 if j in s else 1.0 for s in sets])
+            # P_b O P_b keeps the blocks where row and column share bit b.
+            same = bits[:, None] == bits[None, :]
+            one = (bits[:, None] == 1) & same
+            factor = np.where(one[None], sign[:, None, None], 1.0) * same[None]
+            ops = ops * factor
+        u = np.eye(dim, dtype=complex)
+        for left, gate in circuit.gates[t]:
+            u = ff._embed(gate, left, n) @ u
+        ops = np.einsum("ji,mjk,kl->mil", u.conj(), ops, u)
+    return np.asarray(ff.pauli_vectors(ops).real)
+
+
+def recursive_budget(
+    circuit: ff.Circuit,
+    ks: tuple[int | None, ...],
+    g: np.ndarray,
+    final: bool = True,
+    ensemble: str = "xz",
+) -> Budget:
+    """Exact budget without listing records (any number of measurements).
+
+    ``Pi_C`` from :func:`effect_basis`; ``Pi_C^(k)`` from the parity
+    operators of at most ``k`` bits (``k = None``: every parity, the same
+    span as ``Pi_C``).
+    """
+    n = circuit.n
+    w = ff.input_weights(n, ensemble)
+    v_s = span_basis(effect_basis(circuit, final=final), w)
+    nb = ff.n_bits(circuit, final)
+    v_ks = []
+    for k in ks:
+        if k is None or k >= nb:
+            v_ks.append(v_s)
+            continue
+        subsets = ff.parity_subsets(nb, k)
+        rows = parity_operator_rows(circuit, subsets, final) if subsets else None
+        v_ks.append(
+            span_basis(rows, w) if rows is not None else np.zeros((0, v_s.shape[1]))
+        )
+    return project_budget(v_s, v_ks, g)

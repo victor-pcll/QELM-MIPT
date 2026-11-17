@@ -127,3 +127,39 @@ rank (rows of `span_basis`), min cut `C` (`effect_rank.mincut_bits`, #321),
 - **Clifford** (same masks): the visible rank is the number of visible
   strings of `G`, from 0 to 15, broadly spread at every `p`
   (`clifford.levels` in the JSON).
+
+## No final readout, `T = 2N`, isotropic target in dense encoding (issue #363)
+
+Same budget, now with the record made of the mid-circuit measurements only,
+`T = 2N = 8`, the dense encoding (six Pauli eigenstates per site, weights
+`w_a = 3^{-|a|}` on all `4^N` strings) and an isotropic target
+(`√w_a β_a ~ N(0, 1)` on the 255 non-identity strings: every mode carries the
+same variance). 300 masks × 40 targets per `p`, Haar and Clifford on the
+same masks and targets.
+
+At `T = 2N` a record can hold 30 bits, too many to list. `recursive_budget`
+does not list records: `Π_C` comes from `effect_basis` (the backward
+recursion of #317, started from the identity alone when there is no final
+readout) and `Π_C^(k)` from `parity_operator_rows`, which evolves each parity
+operator `O_S` backwards (`E[(-1)^{m_S} | ρ] = Tr[ρ O_S]`; a measured bit maps
+`O → P_0 O P_0 ± P_1 O P_1`). Both are tested against record listing
+(`N = 3`, with and without final readout, XZ and sphere, Haar and Clifford).
+
+    uv run python experiments/r2_budget/run.py dense --n 4 --depth 8 --no-final \
+        --ensemble sphere --method recursive --prior flat   # about 16 min
+
+![k = 2, no final readout](figures/budget_hist_k2_flat_sphere_nofinal_T8.png)
+![k = inf, no final readout](figures/budget_hist_kinf_flat_sphere_nofinal_T8.png)
+
+- Identity exact to `2.1e-11` over every sample.
+- `p = 0`: no bit at all, `E_circuit = 1` for both.
+- **Haar.** `R²(∞) = 1 − E_circuit` rises to 0.29 at `p = 0.3`, then falls
+  to 0.22 at `p = 0.5`. With `k = 2`, `R²(2)` goes up to 0.19 and stays
+  there, while `E_readout(2)` peaks at 0.14 near `p = 0.25` and drops to 0.03
+  at `p = 0.5`. `E_circuit` is bimodal from `p = 0.2` on (one mode near
+  0.5, one near 0.8): rank levels again.
+- **Clifford.** `R²(∞)` grows slowly to 0.056 at `p = 0.5`; `E_circuit`
+  stays above 0.94 at every `p`.
+- For an isotropic target, `E[R²(∞)] ≈ dim / 255` with `dim` the rank of the
+  span (minus the identity): the budget is the rank seen as a fraction of
+  all modes.

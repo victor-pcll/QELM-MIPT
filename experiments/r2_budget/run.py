@@ -93,8 +93,12 @@ def run_dense(args: argparse.Namespace) -> None:
         "max_bits": args.max_bits,
         "bins": args.bins,
         "p": args.p,
+        "ensemble": args.ensemble,
+        "final": not args.no_final,
+        "method": args.method,
         "geometry": "open brickwork, layer = even bonds, odd bonds, then Z "
-        "measurement of each site with probability p; final Z readout",
+        "measurement of each site with probability p"
+        + ("" if args.no_final else "; final Z readout"),
         "per_p": {"haar": [], "clifford": []},
     }
     raw: dict[str, np.ndarray] = {}
@@ -106,16 +110,25 @@ def run_dense(args: argparse.Namespace) -> None:
         bits = []
         for _ in range(args.circuits):
             haar = ff.draw_circuit(n, depth, p, "haar", rng)
-            while ff.n_bits(haar) > args.max_bits:
+            while args.method == "list" and ff.n_bits(haar) > args.max_bits:
                 redrawn += 1
                 haar = ff.with_mask(haar, rng.random((depth, n)) < p)
             cliff = ff.with_mask(
                 ff.draw_circuit(n, depth, p, "clifford", rng), haar.mask
             )
-            bits.append(ff.n_bits(haar))
-            g = rb.draw_whitened_targets(n, args.targets, args.prior, rng)
+            final = not args.no_final
+            bits.append(ff.n_bits(haar, final))
+            g = rb.draw_whitened_targets(
+                n, args.targets, args.prior, rng, args.ensemble
+            )
             for kind, circ in (("haar", haar), ("clifford", cliff)):
-                res[kind].append(rb.dense_budget(circ, tuple(ks), g, args.max_bits))
+                if args.method == "list":
+                    b = rb.dense_budget(
+                        circ, tuple(ks), g, args.max_bits, final, args.ensemble
+                    )
+                else:
+                    b = rb.recursive_budget(circ, tuple(ks), g, final, args.ensemble)
+                res[kind].append(b)
         for kind, budgets in res.items():
             arr = stack(budgets)
             d = describe(arr, ks, args.bins)
@@ -131,7 +144,14 @@ def run_dense(args: argparse.Namespace) -> None:
             f"{max(h['max_abs_cross'], c['max_abs_cross']):.1e}",
             flush=True,
         )
-    save(args, out, raw, f"dense_N{n}_{args.prior}")
+    save(args, out, raw, f"dense_N{n}_{args.prior}{dense_tag(args)}")
+
+
+def dense_tag(args: argparse.Namespace) -> str:
+    """File suffix of a dense run: empty for the default (XZ, final readout)."""
+    tag = "" if args.ensemble == "xz" else f"_{args.ensemble}"
+    tag += "_nofinal" if args.no_final else ""
+    return tag + (f"_T{args.depth}" if args.depth else "")
 
 
 def run_clifford(args: argparse.Namespace) -> None:
@@ -202,6 +222,14 @@ def main(argv: list[str] | None = None) -> None:
         s.add_argument("--out", type=Path, default=Path("outputs/r2_budget"))
         if name == "dense":
             s.add_argument("--max-bits", type=int, default=16)
+            s.add_argument("--ensemble", choices=["xz", "sphere"], default="xz")
+            s.add_argument("--no-final", action="store_true")
+            s.add_argument(
+                "--method",
+                choices=["list", "recursive"],
+                default="list",
+                help="list the records, or evolve the parities backwards",
+            )
     args = parser.parse_args(argv)
     {"dense": run_dense, "clifford": run_clifford}[args.route](args)
 

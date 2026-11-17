@@ -92,3 +92,28 @@ est un niveau de rang.
 
 Fichiers `_flat` : mêmes figures pour `√w_a β_a ~ N(0, 1)` ; losanges
 `1 − rang / (3^N − 1)`.
+
+## `budget_hist_k2_flat_sphere_nofinal_T8.png` et `budget_hist_kinf_flat_sphere_nofinal_T8.png` — sans lecture finale (issue #363)
+
+`N = 4`, `T = 2N = 8`, brickwork ouvert, **pas de lecture finale** : le
+record ne contient que les mesures en milieu de circuit. Encodage dense
+(sphère de Bloch, poids `w_a = 3^{-|a|}` sur les `4^N` chaînes). Cible
+synthétique isotrope : `√w_a β_a ~ N(0, 1)` sur les 255 chaînes non
+triviales, chaque mode de Fourier porte la même variance. Haar (bleu) et
+Clifford (orange) sur le même histogramme, mêmes masques et mêmes cibles,
+300 masques × 40 cibles par `p`. Première figure : décodeur `k = 2`
+(lignes `E_circuit`, `E_readout(2)`, `R²_pop(2)`) ; seconde : `k = ∞`
+(`E_readout = 0`, `R² = 1 − E_circuit`). Calcul exact sans lister les
+records (évolution à rebours des opérateurs de parité). À `p = 0`, aucun
+bit : `E_circuit = 1`. Haar : `R²(∞)` culmine à 0.29 vers `p = 0.3` puis
+redescend à 0.22 ; `R²(2)` sature vers 0.19 ; `E_circuit` bimodal (niveaux
+de rang). Clifford : `R²(∞)` monte lentement jusqu'à 0.056, `E_circuit`
+reste au-dessus de 0.94.
+
+## `budget_mean_flat_sphere_nofinal_T8.png` — budget moyen sans lecture finale
+
+Même cadre que ci-dessus. Moyenne des trois termes en fonction de `p`,
+barres empilées (rouge `E_circuit`, jaune `E_readout(k)`, vert `R²_pop(k)`),
+Haar à gauche et Clifford (hachuré) à droite, pour `k = 1`, `k = 2` et
+`k = ∞`. Haar : la part verte culmine vers `p = 0.3` puis diminue ;
+Clifford : la colonne reste presque entièrement rouge.

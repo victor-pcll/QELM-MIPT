@@ -13,5 +13,6 @@ D=experiments/r2_budget
     echo "$D/run.py clifford --n 8 --k 1 2 3 --circuits 200 --targets 40 --prior $prior"
     echo "$D/run.py clifford --n 12 --k 1 2 3 --circuits 100 --targets 40 --prior $prior"
   done
+  echo "$D/run.py dense --n 4 --depth 8 --no-final --ensemble sphere --method recursive --prior flat --circuits 300 --targets 40"
 } | xargs -P "$JOBS" -I{} sh -c "uv run --locked python {} --out $OUT >> $OUT/log.txt 2>&1"
 echo "Done: outputs in $OUT"

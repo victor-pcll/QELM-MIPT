@@ -244,22 +244,34 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--clifford-n", type=int, nargs="+", default=[8, 12])
     parser.add_argument("--p-show", type=float, nargs="+", default=P_SHOW)
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument(
+        "--tags",
+        nargs="+",
+        default=["", "_sphere_nofinal_T8"],
+        help="suffixes of the dense runs to plot (run.py dense_tag)",
+    )
     args = parser.parse_args(argv)
     out = args.out or args.data / "figures"
     out.mkdir(parents=True, exist_ok=True)
     prior_text = {
         "iid": r"$\beta_a \sim N(0,1)$",
-        "flat": r"$\sqrt{w_a}\,\beta_a \sim N(0,1)$",
+        "flat": r"isotropic $\sqrt{w_a}\,\beta_a \sim N(0,1)$",
     }
-    for prior in ("iid", "flat"):
-        dense = args.data / f"dense_N{args.n}_{prior}.json"
+    for prior, tag in [(pr, t) for pr in ("iid", "flat") for t in args.tags]:
+        dense = args.data / f"dense_N{args.n}_{prior}{tag}.json"
         if dense.exists():
             raw, meta = load(dense)
+            setting = ""
+            if meta.get("ensemble", "xz") == "sphere":
+                setting += "dense (sphere) encoding, "
+            if not meta.get("final", True):
+                setting += "no final readout, "
             head = (
-                f"R² budget, N = {meta['n']}, T = {meta['depth']}, "
+                f"R² budget, N = {meta['n']}, T = {meta['depth']}, {setting}"
                 f"{prior_text[prior]}, K = ∞, λ → 0+  "
                 f"({meta['circuits']} masks × {meta['targets']} targets per p)"
             )
+            name = prior + tag
             if 2 in meta["k"]:
                 hist_figure(
                     raw,
@@ -267,7 +279,7 @@ def main(argv: list[str] | None = None) -> None:
                     ["haar", "clifford"],
                     2,
                     ["circuit", "readout", "r2"],
-                    out / f"budget_hist_k2_{prior}.png",
+                    out / f"budget_hist_k2_{name}.png",
                     head + ", decoder k = 2",
                     args.p_show,
                 )
@@ -277,16 +289,16 @@ def main(argv: list[str] | None = None) -> None:
                 ["haar", "clifford"],
                 None,
                 ["circuit", "r2"],
-                out / f"budget_hist_kinf_{prior}.png",
+                out / f"budget_hist_kinf_{name}.png",
                 head + ", decoder k = ∞ (E_readout = 0)",
                 args.p_show,
             )
-            mean_figure(raw, meta, out / f"budget_mean_{prior}.png", head)
+            mean_figure(raw, meta, out / f"budget_mean_{name}.png", head)
         # Clifford route at larger N: N on the same axes.
         sizes = [
             n
             for n in args.clifford_n
-            if (args.data / f"clifford_N{n}_{prior}.json").exists()
+            if tag == "" and (args.data / f"clifford_N{n}_{prior}.json").exists()
         ]
         if sizes:
             merged: dict = {}
