@@ -497,3 +497,277 @@ falls to 0.059 at `p = 0.04`, and the curve becomes monotone. Above
   measurements. The final readout matters only for non-local components,
   which a linear readout with few-bit features cannot reach anyway
   (#341).
+
+# Follow-up (issue #349): is `E_perp = E_circuit + E_readout(k)`? Testing the "two filters" reading
+
+A proposed reading of #337 to #344 says that the ridge error is set by two
+successive filters, the circuit (`Span G`) and the readout (parities of at
+most `k` bits), with five claims:
+
+1. `dim Span G = 2^N` with the final readout, `2^(N - Delta)` without it;
+2. below `p_c` the generators of `G` are non-local (about `N/2` sites),
+   above `p_c` local (at most `xi(p)` sites);
+3. a local readout (`k = 1, 2`) misses the non-local stabilizers below
+   `p_c`, so the ridge wrongly looks blind at small `p`, and "lights up"
+   above `p_c` when the stabilizers fit in the window;
+4. `F^(k) ⊂ Span G ⊂ H_Pauli`, and a Pauli mode outside `G` cannot be
+   extracted by any classical algorithm;
+5. `E_perp = E_circuit + E_readout(k)`, exactly.
+
+Each claim is tested here on the same Clifford circuits (periodic brickwork,
+`T = 2N`, final readout, Pauli-eigenstate inputs).
+
+## Run
+
+    experiments/clifford_ridge/two_filters.sh
+    uv run python experiments/clifford_ridge/plot_two_filters.py outputs/two_filters
+
+The launcher runs, over `p` from 0.02 to 0.5 (0.4 for `N = 20`):
+
+- `exact`, `N = 4` (40 circuits per `p`) and `N = 6` (16 circuits), parities
+  up to `k = 4`. It uses the whole population of `4^N` inputs, so every
+  number is a population number.
+- `shots`, `N = 4`, `k <= 2`, `K = 4` to 256 shots, 256 training inputs,
+  20 circuits. Circuits with more than 18 bits are skipped, so only 17 and
+  5 circuits are kept at `p = 0.4` and 0.5.
+- `locality`, `N = 8` (`k <= 4`, 200 circuits), `N = 12` (`k <= 3`, 60),
+  `N = 16` (`k <= 3`, 100), `N = 20` (`k <= 3`, 30). No input is drawn: for a
+  monomial target `a`, `E_circuit = 1[a not in G]` and
+  `E_readout(k) = 1[a in G, a not in D_k]` exactly, where `D_k` is the set of
+  strings reached by the parities of at most `k` bits (`exact` checks this
+  to `1e-30`).
+
+The script `exact_N8` was dropped: the `3^8` monomial targets on `4^8`
+inputs do not fit in memory.
+
+Definitions. `R_F` and `R_S` are the ridge on `F^(k)` and on all parities
+(`S`, whose span is `Span G`, #344). For a target `y`,
+`total = ||y - R_F y||^2`, `circuit = ||y - R_S y||^2`,
+`readout = ||R_S y - R_F y||^2` and `cross = 2 <y - R_S y, R_S y - R_F y>`,
+all divided by `Var y`. Then `total = circuit + readout + cross` always
+holds, and claim 5 is `cross = 0`. `m` identical feature columns are one
+column scaled by `sqrt(m)` for any ridge, so `F^(k)` keeps the true
+multiplicities; at `lambda > 0`, `S` has one column per string of `G`.
+
+Figures: `figures/two_filters_additivity.png`,
+`figures/two_filters_locality.png` and `figures/two_filters_budget.png`;
+numbers in
+`figures/summary_two_filters.json`.
+
+## Claim 5: additivity
+
+**Exact at the population level with `lambda -> 0+` and `K = inf`, and
+nowhere else.** It is Pythagoras: `F^(k) ⊂ Span G` and both ridges are
+orthogonal projections for the same inner product, so the two residuals
+are orthogonal. It is an identity, not a property of the circuit.
+
+| setting | size of `cross` |
+|---|---|
+| population, `lambda = 0`, all `3^N - 1` monomials and a dense target, `N = 4, 6` | at most `2e-14` (round-off) |
+| population, `lambda = 2^-4`, dense target, `N = 6`, `k = 1` | `+0.005` to `+0.009`, as large as `readout` (0.004 to 0.008) |
+| 64 training inputs, exact features, `lambda = 2^-8`, `N = 6`, `k = 1` | `-0.25` to `-0.55` |
+| 1024 training inputs, same | `-0.012` to `-0.019` |
+| `K = 4` shots, 256 training inputs, `N = 4`, `k = 2` | `-0.02` to `-0.09`, about `-readout` |
+| `K = 256` shots, same | `-0.007` to `-0.033` |
+
+With finite data or finite shots, the cross term is negative and about as
+large as `readout`: the bigger readout `S` overfits more than `F^(k)`, and at
+small `K` the readout of order `k` can even beat the full one
+(`p = 0.04`, `K = 4`: `total = 0.981` against `circuit = 0.987`). The split
+then needs a third term, the estimation error, which depends on both
+filters at once.
+
+**A three-term budget that holds without cross terms.** Write
+`E_estimation = E_total - E_total^pop(k)`, the excess of the trained ridge
+on `F^(k)` (finite training set, `lambda`, `K`) over its population value at
+`lambda -> 0+`, `K = inf`. Then
+
+    E_total = E_circuit + E_readout(k) + E_estimation,
+
+with the first two terms the population terms above (orthogonal, so no
+cross term) and `E_estimation >= 0`. It is non-negative because the mean
+prediction of any ridge trained on `F^(k)` lies in `Span F^(k)`, and no
+function of that span beats the projection `P_F y`; the shot noise only adds
+variance. The negative cross terms of the table come from training the
+*full* readout `S` on the same finite data, which is the wrong reference:
+`E_circuit` must stay a population quantity. Measured at `N = 4`, `k <= 2`,
+256 training inputs, `lambda = 2^-8` (`figures/two_filters_budget.png`):
+
+| p | `E_circuit` | `E_readout(2)` | `E_estimation`, K = 4 / 16 / 64 / 256 / inf |
+|---|---|---|---|
+| 0.04 | 0.905 | 0.045 | 0.031 / 0.022 / 0.014 / 0.009 / 0.007 |
+| 0.16 | 0.924 | 0.051 | 0.024 / 0.013 / 0.006 / 0.005 / 0.004 |
+| 0.30 | 0.925 | 0.033 | 0.020 / 0.014 / 0.009 / 0.006 / 0.006 |
+
+`E_estimation` is positive at every `p` and `K` of the run, and decreases
+with `K`. The circuit term is about 0.9 of the variance, the other two a few
+percent each. `E_estimation` depends on both filters (on `k` through the
+number of features, on the circuit through the weights `2^-|a|` of the
+modes), so it is not a third filter.
+
+For a single monomial, the population split is a pair of 0/1 indicators
+(`a not in G`; `a in G` but `a not in D_k`), as predicted in #337 and #341.
+
+## Claim 4: inclusions, and "no algorithm can ever extract it"
+
+- `F^(k) ⊂ Span G`: **holds**, on every circuit (no string of `D_k`
+  outside `G` for any `k`, `N = 4` to 20). It follows from the definitions:
+  any record feature has a mean in `Span{E_m}`.
+- `Span G ⊂ H_Pauli`: holds, but the relevant space for these inputs is the
+  `3^N`-dimensional space of the `Y`-free strings, inside the `4^N`
+  functions of the inputs (4 states per site).
+- **"A Pauli mode outside `G` cannot be extracted by any algorithm":
+  holds exactly, as a theorem, for these inputs.** If `a` is not in `G`,
+  some `Q` in the centralizer of `G` anticommutes with `a` (the double
+  centralizer of a Pauli group is the group). Conjugating every input by
+  `Q` maps the input set to itself, leaves every feature `Tr[g rho]` with
+  `g in G` unchanged, and flips the sign of `Tr[a rho]`, so no function of
+  the features correlates with `a`. The test computes the best decoder of
+  any form (the conditional mean on the fibres of the exact features). It
+  finds an error of exactly 1 for every monomial outside the full-record
+  `G`, outside the mid-record `G_mid`, and outside the group generated by
+  `D_k`, at `N = 4` and 6 and every `p`.
+- **But it holds only for Pauli modes.** A target that is not multilinear,
+  such as `x_0^2 - z_0^2` (which basis site 0 was prepared in), has linear
+  error 1, while the best non-linear decoder of the same `K = inf` features
+  reaches 0.4 to 0.7 (`S`) and 0.73 to 0.98 (`F^(1)`), panel (f).
+- **The readout filter is not a hard limit for a non-linear decoder.** A
+  non-linear decoder of the parities of at most `k` bits recovers 72 % to
+  100 % of the monomials of the group generated by `D_k` that are not in
+  `D_k` (products of features with disjoint supports), panel (e). So
+  `E_readout(k)` is a property of the *linear* readout, while the circuit
+  floor is a property of every readout.
+
+## Claim 1: dimension of `Span G`
+
+**True as stated, misleading as used.** `dim Span G = 2^N` with the final
+readout and `2^(N - Delta)` without it (#337, #344). But for inputs in the
+XZ plane a string with a `Y` is invisible, and almost all of `G` has one.
+The visible part is
+
+| visible strings / `2^N` | p = 0.02 | 0.16 | 0.3 | 0.5 |
+|---|---|---|---|---|
+| N = 8 | 0.101 | 0.127 | 0.151 | 0.156 |
+| N = 12 | 0.034 | 0.039 | 0.057 | 0.066 |
+| N = 16 | 0.011 | 0.015 | 0.018 | 0.026 |
+| N = 20 | 0.003 | 0.004 | 0.009 | – |
+
+So below `p_c` the `2^N` modes are *not* all there for the ridge: about 1 %
+of them are visible at `N = 16`, fewer than above `p_c`, and the fraction
+falls with `N`. Against all `3^N` visible functions, `G` holds
+`690 / 43 046 720` at `N = 16`, `p = 0.04`.
+
+## Claim 2: locality of the generators
+
+**Partly true.** In the clipped gauge (#339), the density of generator
+lengths has a peak near `N/2` below `p_c` (volume law), is scale-free
+(`~ l^-2`) at `p_c`, and has an exponential cut-off of 2 to 5 sites above
+`p_c` (area law). Two corrections: below `p_c` a small number of local
+generators remain (`1 - S(l)/l = 0.17` at `l = 8`, `p = 0.04`,
+`N = 128`), and the *elements* of `G` are non-local at every `p`. At
+`N = 16` most visible strings of `G` have an extent of 12 to 15 sites for
+every `p` (panel f); the peak moves only from 14 sites (`p = 0.04`) to
+12-14 sites (`p = 0.3`).
+
+## Claim 3: the local readout is "wrongly blind" below `p_c` and "lights up" above
+
+**False in our data.** For local targets, the error is set by the circuit
+filter at every `p`, and the readout term is *smaller* below `p_c` than
+above. `N = 16`, `k = 1` / `k <= 3`:
+
+| target | p | `E_circuit` | `E_readout(1)` | `E_readout(<=3)` |
+|---|---|---|---|---|
+| `Z_i` | 0.04 | 0.991 | 0.002 | 0.000 |
+| `Z_i` | 0.16 | 0.944 | 0.026 | 0.013 |
+| `Z_i` | 0.30 | 0.906 | 0.047 | 0.019 |
+| `Z_i` | 0.50 | 0.826 | 0.085 | 0.023 |
+| `Z_i Z_{i+1}` | 0.04 | 0.994 | 0.000 | 0.000 |
+| `Z_i Z_{i+1}` | 0.30 | 0.937 | 0.032 | 0.014 |
+| `Z_i Z_{i+N/2}` | 0.04 | 1.000 | 0.000 | 0.000 |
+| `Z_i Z_{i+N/2}` | 0.30 | 0.994 | 0.006 | 0.004 |
+| isotropic, 2 sites | 0.04 | 0.993 | 0.001 | 0.000 |
+| isotropic, 2 sites | 0.30 | 0.911 | 0.048 | 0.021 |
+| isotropic, 8 sites | 0.04 | 0.999 | 0.000 | 0.000 |
+| isotropic, 8 sites | 0.30 | 0.989 | 0.009 | 0.005 |
+
+- **Below `p_c` the local readout misses nothing local, because the circuit
+  has kept nothing local.** `E_readout ≈ 0` and `E_circuit ≈ 1`. The ridge
+  is not "wrongly" blind: no readout, of any order or form, can do better
+  on these targets (claim 4).
+- **Above `p_c` the ridge improves because `E_circuit` falls**, smoothly
+  and the same for every `N` (#337). `E_readout(k)` grows with `p`.
+- **Targets drawn inside `G`.** For a target that is an element of `G` of
+  extent `e` (so `E_circuit = 0`), `E_readout(<=3)` at `N = 16` is 0, 0.04
+  and 0.15 for `e = 1, 2, 3` at `p = 0.04`, and 0.20, 0.24 and 0.51 at
+  `p = 0.3` (panel c). Averaged over `e <= 3`, it rises from 0.06 to 0.33
+  between `p = 0.04` and 0.25 (panel d). `N = 12` (0.21 to 0.35) and
+  `N = 20` (0.00 to 0.33) do the same. The few local elements of `G` below
+  `p_c` are read *better* by a local readout than the many local elements
+  above. Elements of extent `>= N/2` are missed (`E_readout` 0.91 to 1.00
+  at `N = 12` to 20) at every `p`.
+- **The exception is `N = 8` with `k <= 4 = N/2`**, where the readout order
+  reaches half the chain. There, short elements of `G` are read better as
+  `p` grows (`E_readout` from 0.54 at `p = 0.04` to 0.16 at `p = 0.5`), and
+  long elements have a maximum of 0.84 for `p = 0.08` to 0.16 (0.59 at
+  `p = 0.02`, 0.58 at `p = 0.5`). This is the two-branch behaviour already
+  seen in #341 when `k` approaches `N/2`. It is a small-size effect of a
+  readout of order `N/2`, not a local readout "lighting up".
+- Nothing in these curves is sharp at `p_c`, nor depends on `N` near it.
+  What is non-local below `p_c` is invisible to a local *target*, not just
+  to a local readout: a local target is outside `G` there.
+
+## Verdict
+
+| claim | verdict |
+|---|---|
+| 1. `dim = 2^N` / `2^(N - Delta)` | true; but only about 1 % of `G` is visible for XZ inputs (`N = 16`), less below `p_c` than above |
+| 2. non-local generators below `p_c`, local above | partly true: true for the generators (#339), not for the elements of `G`, which are non-local at every `p` |
+| 3. local readout wrongly blind below `p_c`, lights up above | false: for local targets the circuit term dominates (`E_circuit ≥ 0.82` for `Z_i`), the readout term is ≈ 0 below `p_c` and grows above; the improvement with `p` is smooth and comes from the circuit |
+| 4. `F^(k) ⊂ Span G ⊂ H_Pauli`; no algorithm extracts a mode outside `G` | true, and the second part is a theorem for Pauli modes and Pauli-eigenstate inputs; false for non-multilinear targets; and `E_readout(k)` is not a limit for non-linear decoders |
+| 5. `E_perp = E_circuit + E_readout(k)` exactly | exact only for the population ridge at `lambda -> 0+`, `K = inf` (Pythagoras, `2e-14`); at `lambda > 0`, finite training set or finite `K` it needs a third term, `E_estimation >= 0` (measured 0.004 to 0.03), defined against the population terms so that no cross term remains |
+
+What survives is a correct and useful bookkeeping at `K = inf`: the circuit
+fixes a hard floor for every Pauli mode, and a linear readout of order `k`
+adds a loss inside `Span G`. What does not survive is the story that the
+MIPT shows up as a "representation alignment" between the readout window
+and the stabilizers. In this Clifford QELM, the transition is in the
+geometry of `G` (#337, #339) and in `Delta` without the final readout
+(#344). Local targets see neither: their error is the circuit floor, which
+is analytic in `p`.
+
+Caveats. Clifford circuits only: with Haar gates `Span{E_m}` is much
+larger than `2^N` (#339) and the symmetry argument of claim 4 does not
+apply. Exact populations only at `N <= 6`; the locality numbers are exact
+counts but `k <= 3` beyond `N = 8`.
+
+## Two order parameters read from the ridge at K = infinity
+
+No local target and no local feature sees the transition (#337, #341,
+above). Two properties of the ridge's function space do. The figures
+re-plot data already computed (no new simulation):
+
+    uv run python experiments/clifford_ridge/plot_ridge_order.py \
+        --transition outputs/clifford_ridge \
+        --locality experiments/clifford_ridge/figures/summary_locality.json \
+        --out experiments/clifford_ridge/figures
+
+- **Without the final readout: the rank of the ridge**
+  (`figures/ridge_order_rank.png`). The features of the mid-circuit record
+  span `2^(N - Delta)` functions. `log2(rank) / N = 1 - Delta / N` is the
+  share of the input bits the ridge can represent. It sharpens into a step
+  at `p_c`. `Delta`, the number of bits it cannot represent, is scale
+  invariant at the transition: the curves for `N = 16` to 128 cross at
+  `p_c = 0.161` and collapse with `nu = 1.30` (#346). Data: the
+  `transition` runs of #337 (`T = 2N`).
+- **With the final readout: the locality of the ridge dictionary**
+  (`figures/ridge_order_locality.png`). The rank is `2^N` at every `p`,
+  but only `2^(l - S(l))` of its functions fit in `l` sites. The fraction
+  `1 - S(l)/l` of local functions stays small up to `l ~ N` below `p_c` and
+  reaches 1 within a few sites above. `S(N/2)` grows linearly with `N`
+  below `p_c` and stays flat above. Its growth exponent
+  `d log S(N/2) / d log N` drops from 0.9 to 0 around `p_c`, more sharply
+  as `N` grows (`N = 16` to 256). Data: `summary_locality.json` (#339).
+
+Both are `K = inf` quantities of an exponentially large readout (all the
+parities of the record); whether they survive finite shots and inputs is
+the next question.
