@@ -217,7 +217,7 @@ def test_run_and_analyse_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
 def test_summary_table_from_committed_summaries(tmp_path: Path) -> None:
     table = _load("summary_table")
     table.main(["--out", str(tmp_path)])
-    data = json.loads((tmp_path / "summary_table.json").read_text())
+    data = json.loads((tmp_path / "summary_table.json").read_text())["extra"]
     assert set(data["cells"]) == {"clifford", "haar"}
     assert data["cells"]["clifford"]["I3"]["p_c"].startswith("0.15")
     assert (tmp_path / "summary_table.png").exists()
