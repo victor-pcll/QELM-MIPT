@@ -104,8 +104,17 @@ def main() -> None:
     out.update(seed=args.seed, stride=args.stride, p=grid, per_p=[])
     args.out.mkdir(parents=True, exist_ok=True)
     path = args.out / f"{args.model}_N{n}_T{t}_s{args.seed}.json"
+    done: dict[float, dict] = {}
+    if path.exists():
+        # Resume: each p has its own seed, so the p already written are kept.
+        old = json.loads(path.read_text())
+        if old["samples"] == args.samples and old["stride"] == args.stride:
+            done = {row["p"]: row for row in old["per_p"]}
     model_id = 0 if args.model == "haar" else 1
     for j, p in enumerate(grid):
+        if p in done:
+            out["per_p"].append(done[p])
+            continue
         t0 = time.time()
         rng = np.random.default_rng((args.seed, model_id, n, t, j, 358))
         profs = [
