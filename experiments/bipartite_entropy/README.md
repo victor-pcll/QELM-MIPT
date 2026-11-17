@@ -182,6 +182,10 @@ writes `figures/` and `summary.json` (every fit, crossing, profile and
 
 ## Figures
 
+- `figures/summary_table.png` (`summary_table.py`): `p_c` and `nu` from the
+  collapses of `Delta` (#346, #348), `S(N/2)` and `I3`, with the literature,
+  for Clifford and Haar. Each cell is the main collapse, value(bootstrap
+  error), and below it the range over the data variants.
 - `figures/order.png`: (a) `S(N/2)` against `p` for every `N` (crosses:
   crossings of neighbouring sizes; orange band: literature `p_c`). (b) `I3`
   of the quarters against `p`. (c) Crossing of neighbouring sizes against
