@@ -187,7 +187,8 @@ def _load(name: str) -> ModuleType:
 def test_run_and_analyse_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     run, analyse = _load("run"), _load("analyse")
     runs = tmp_path / "runs"
-    grid = ["0.05", "0.15", "0.25", "0.4"]
+    # Three p inside the S(N/2) collapse windows (0.10-0.24 and 0.10-0.30).
+    grid = ["0.05", "0.12", "0.17", "0.22", "0.4"]
     for model, sizes in (("haar", (4, 8)), ("clifford", (8, 12))):
         for n in sizes:
             argv = [
@@ -203,7 +204,7 @@ def test_run_and_analyse_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
             monkeypatch.setattr(sys, "argv", [*argv, "--p", *grid])
             run.main()
     data = json.loads((runs / "haar_N8_T16_s0.json").read_text())
-    assert len(data["per_p"]) == 4 and len(data["per_p"][0]["s1"]) == 5
+    assert len(data["per_p"]) == 5 and len(data["per_p"][0]["s1"]) == 5
     out = tmp_path / "figures"
     analyse.main(["--runs", str(runs), "--out", str(out), "--n-boot", "2"])
     summary = json.loads((out / "summary.json").read_text())
