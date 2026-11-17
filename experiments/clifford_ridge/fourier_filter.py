@@ -179,18 +179,24 @@ def run_transfer(
     return out
 
 
-def parity_dictionary(circuit, k_max: int, chunk: int = 200_000) -> list[dict]:
+def parity_dictionary(
+    circuit, k_max: int, mid_only: bool = False, chunk: int = 200_000
+) -> list[dict]:
     """Visible modes reached by the parities of at most ``k`` bits, ``k = 1..k_max``.
 
     Every ``k``-subset of the measured bits is propagated; the dictionary of
     order ``k`` is the union of the distinct visible strings of orders 1 to
-    ``k``. Returns one :func:`dictionary_stats`-like row per order, plus the
-    fraction of the visible strings of ``G`` reached.
+    ``k``. With ``mid_only``, only the mid-circuit bits are used (no final
+    readout). Returns one :func:`dictionary_stats`-like row per order, plus
+    the fraction of the visible strings of the full-record group ``G``
+    reached (``G_fraction``) and of the mid-record group (``Gmid_fraction``).
     """
     n = circuit.N
-    n_bits = circuit.n_mid + n
-    basis = GroupBasis(effect_groups(circuit).full)
-    g_visible = visible_weights(enumerate_group(basis.rows)).size
+    n_bits = circuit.n_mid + (0 if mid_only else n)
+    groups = effect_groups(circuit)
+    g_visible = visible_weights(enumerate_group(GroupBasis(groups.full).rows)).size
+    mid_rows = GroupBasis(groups.mid).rows
+    gmid_visible = visible_weights(enumerate_group(mid_rows)).size
     seen: dict[bytes, np.ndarray] = {}
     out = []
     for k in range(1, k_max + 1):
@@ -208,16 +214,23 @@ def parity_dictionary(circuit, k_max: int, chunk: int = 200_000) -> list[dict]:
         keys = np.array(list(seen.values())) if seen else np.zeros((0, 2 * n), bool)
         stats = dictionary_stats(keys, np.ones(len(keys), dtype=bool), n)
         stats["G_fraction"] = len(keys) / g_visible if g_visible else 0.0
+        stats["Gmid_fraction"] = len(keys) / gmid_visible if gmid_visible else 0.0
         out.append(stats)
     return out
 
 
 def run_parities(
-    n: int, p_grid: list[float], samples: int, k_max: int, seed: int
+    n: int,
+    p_grid: list[float],
+    samples: int,
+    k_max: int,
+    seed: int,
+    mid_only: bool = False,
 ) -> dict:
     """Dictionary of the readout by parities of at most ``k`` bits."""
     t = 2 * n
     out: dict = {"probe": "parities", "n": n, "t": t, "samples": samples}
+    out["mid_only"] = mid_only
     out.update(seed=seed, p=p_grid, k_max=k_max, lambdas=LAMBDAS, K=K_GRID, per_p=[])
     for j, p in enumerate(p_grid):
         t0 = time.time()
@@ -228,14 +241,17 @@ def run_parities(
             rows.append(
                 {
                     f"k{k + 1}": r
-                    for k, r in enumerate(parity_dictionary(circuit, k_max))
+                    for k, r in enumerate(
+                        parity_dictionary(circuit, k_max, mid_only=mid_only)
+                    )
                 }
             )
         res = {"p": p, **mean_tree(rows)}  # type: ignore[dict-item]
         out["per_p"].append(res)
         frac = [res[f"k{k}"]["G_fraction"]["mean"] for k in range(1, k_max + 1)]
         print(
-            f"parities N={n} p={p}: fraction of G reached for k=1..{k_max}: "
+            f"parities N={n} mid_only={mid_only} p={p}: "
+            f"fraction of G reached for k=1..{k_max}: "
             + " ".join(f"{f:.3f}" for f in frac)
             + f" {time.time() - t0:.1f}s",
             flush=True,
@@ -294,6 +310,7 @@ def main() -> None:
     parser.add_argument("--samples", type=int, default=200)
     parser.add_argument("--pairs", action="store_true")
     parser.add_argument("--k-max", type=int, default=3)
+    parser.add_argument("--mid-only", action="store_true")
     parser.add_argument("--circuits", type=int, default=6)
     parser.add_argument("--inputs", type=int, default=3000)
     parser.add_argument("--kmax", type=int, default=256)
@@ -307,8 +324,9 @@ def main() -> None:
         )
     elif args.probe == "parities":
         res = run_parities(
-            args.n, args.p or P_GRID, args.samples, args.k_max, args.seed
-        )
+            args.n, args.p or P_GRID, args.samples, args.k_max, args.seed,
+            mid_only=args.mid_only,
+        )  # fmt: skip
     else:
         res = run_validate(
             args.n, args.p or [0.08, 0.16, 0.3], args.circuits, args.inputs,

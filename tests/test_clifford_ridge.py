@@ -475,3 +475,60 @@ def test_fourier_filter_scripts_run_and_plot(tmp_path: Path) -> None:
     load("plot_fourier_filter").main([str(tmp_path)])
     assert (tmp_path / "figures" / "fourier_filter.png").is_file()
     assert (tmp_path / "figures" / "parities.png").is_file()
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_all_parities_reach_the_whole_group(seed: int) -> None:
+    """Parities of all subsets of the bits give every visible string of the group.
+
+    With the mid bits only, they give every visible string of the mid group.
+    """
+    path = Path(__file__).resolve().parents[1] / "experiments" / "clifford_ridge"
+    spec = importlib.util.spec_from_file_location("ff", path / "fourier_filter.py")
+    assert spec is not None and spec.loader is not None
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    rng = np.random.default_rng(seed)
+    n, t = 4, 8
+    circuit = with_mask(draw_circuit(n, t, rng), rng.random((t, n)), 0.12)
+    n_mid = circuit.n_mid
+    assert 1 <= n_mid <= 9
+    mid = script.parity_dictionary(circuit, n_mid, mid_only=True)[-1]
+    assert mid["Gmid_fraction"] == pytest.approx(1.0)
+    assert mid["G_fraction"] <= 1.0
+    full = script.parity_dictionary(circuit, n_mid + n)[-1]
+    assert full["G_fraction"] == pytest.approx(1.0)
+
+
+def test_final_readout_plot_runs(tmp_path: Path) -> None:
+    path = Path(__file__).resolve().parents[1] / "experiments" / "clifford_ridge"
+
+    def load(name: str) -> ModuleType:
+        spec = importlib.util.spec_from_file_location(name, path / f"{name}.py")
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    pop = load("clifford_ridge").run_population(8, 16, [0.1, 0.3], 3, 0)
+    (tmp_path / "population_N8_T16_s0.json").write_text(json.dumps(pop))
+    haar = load("haar_span")
+    for seed in (0, 1):
+        res = haar.run(3, seed, [0.0, 0.3])
+        (tmp_path / f"haar_span_N3_seed{seed}.json").write_text(json.dumps(res))
+    ff = load("fourier_filter")
+    full = ff.run_parities(8, [0.1, 0.3], 2, 2, 0)
+    mid = ff.run_parities(8, [0.1, 0.3], 2, 2, 0, mid_only=True)
+    assert mid["mid_only"] and not full["mid_only"]
+    for a, b in zip(mid["per_p"], full["per_p"], strict=True):
+        assert a["k2"]["G_fraction"]["mean"] <= b["k2"]["G_fraction"]["mean"] + 1e-12
+    (tmp_path / "parities_N8_s0.json").write_text(json.dumps(full))
+    (tmp_path / "parities_N8_s0_mid.json").write_text(json.dumps(mid))
+    out = tmp_path / "out"
+    load("plot_final_readout").main(
+        ["--population", str(tmp_path), "--haar", str(tmp_path),
+         "--parities", str(tmp_path), "--out", str(out)]
+    )  # fmt: skip
+    assert (out / "with_without_final.png").is_file()
+    summary = json.loads((out / "summary_final_readout.json").read_text())
+    assert set(summary["parities"]) == {"N8_full", "N8_mid"}
