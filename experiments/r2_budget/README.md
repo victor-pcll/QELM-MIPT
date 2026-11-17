@@ -88,3 +88,42 @@ the repository (about 20 MB).
   feature at `p_c = 0.161`.
 - **Priors.** `flat` gives the same picture with larger Haar `E_circuit`
   (0.81 at `p = 0`, 0.26 at `p = 0.3`); Clifford is unchanged at `N = 4`.
+
+## Rank structure of the Haar modes (issue #362)
+
+`rank_structure.py` replays the circuits of `run.py dense` (same seeds and
+order of draws; the first circuit of each `p` is recomputed from scratch and
+matches the stored samples) and computes `r2_budget.rank_profile` for each:
+dense rank (backward recursion of `effect_rank`, no record listed), visible
+rank (rows of `span_basis`), min cut `C` (`effect_rank.mincut_bits`, #321),
+`K_eff` (mid-circuit measurements before the last layer), `n_1`
+(first-layer measurements), and `mean_r2 = Σ_a w_a [Π_C]_aa / Σ_a w_a`.
+`plot_rank_structure.py` draws the figures.
+
+    uv run python experiments/r2_budget/rank_structure.py --prior iid   # about 10 min
+    uv run python experiments/r2_budget/plot_rank_structure.py
+
+![rank levels](figures/rank_levels_iid.png)
+![histograms by rank](figures/ecirc_hist_by_rank_iid.png)
+
+- **Exact.** The Haar dense rank is `2^C` for all 3300 circuits (as in
+  #321). The visible rank takes five values only: `C = 4, 5, 6` give
+  `15, 31, 63` (`= 2^C − 1`), `C = 7` gives `71` (155 circuits) or `80`
+  (179 circuits), `80 = 3^4 − 1` being every visible string.
+- **The modes are the rank levels.** `E_circuit` is set by the rank level
+  to within a spread of 0.02 (std over circuits): 0.75, 0.52, 0.16, 0.09
+  and 0 for ranks 15, 31, 63, 71 and 80 (`iid`). The mean `E_circuit(p)` is
+  the level fractions times these five values, to within 0.002 at every `p`.
+- **What moves the levels.** The rank is `2^C`, and `C` is bounded by the
+  records, `N + K_eff`, and by the first-layer measurements, `2N − n_1`.
+  `min(N + K_eff, 2N − n_1)` equals `C` for 100 % of circuits at
+  `p ≤ 0.05` and 67–77 % at `p ≥ 0.2`; the full min cut is needed beyond.
+  Mean `C` rises from 4 (`p = 0`) to a maximum of 6.0 at `p = 0.3`, then
+  falls to 5.66 at `p = 0.5` as the first-layer bound takes over.
+- **The optimum at `p = 0.3` is not a saturation.** Rank 63 is the most
+  common level from `p = 0.15` on (57 % at `p = 0.3`); the full rank 80 is
+  reached by at most 11 % of circuits (at `p = 0.3`). The minimum of the mean
+  `E_circuit` is where the level fractions are shifted furthest up.
+- **Clifford** (same masks): the visible rank is the number of visible
+  strings of `G`, from 0 to 15, broadly spread at every `p`
+  (`clifford.levels` in the JSON).

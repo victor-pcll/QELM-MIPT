@@ -47,6 +47,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from QELM.evaluation import effect_rank as er
 from QELM.evaluation import fourier_framework as ff
 from QELM.evaluation.clifford_ridge import (
     CliffordQELM,
@@ -251,3 +252,66 @@ def clifford_budget(
     if np.any(in_d & ~in_g):
         raise AssertionError("a parity string lies outside the effect group")
     return counting_budget(in_g, in_d, q)
+
+
+# ---------------------------------------------------------------------------
+# Rank structure of a circuit (issue #362)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RankProfile:
+    """Rank of the effect space of one circuit and what sets it.
+
+    Attributes:
+        dense: Dimension of the span of the effects (dense encoding).
+        visible: Rank seen by the XZ inputs without the constant, the number
+            of rows of :func:`span_basis` (``0`` to ``3^N - 1``).
+        mincut: Min cut ``C`` in bits of the space-time graph
+            (:func:`QELM.evaluation.effect_rank.mincut_bits`).
+        k_eff: Mid-circuit measurements before the last layer (a measurement
+            of the last layer repeats the final readout).
+        n_first: Measurements of the first layer.
+        mean_r2: ``sum_a w_a [Pi_C]_aa / sum_a w_a``, the ratio of the means
+            ``E[||Pi_C g||^2] / E[||g||^2]`` for the ``"iid"`` prior.
+    """
+
+    dense: int
+    visible: int
+    mincut: int
+    k_eff: int
+    n_first: int
+    mean_r2: float
+
+
+def effect_basis(circuit: ff.Circuit, tol: float = 1e-6) -> np.ndarray:
+    """Orthonormal rows spanning the effects, Pauli order of ``pauli_codes``.
+
+    The backward recursion of :mod:`QELM.evaluation.effect_rank`, without
+    listing the records.
+    """
+    n = circuit.n
+    basis = er.final_readout_basis(n)
+    for t in reversed(range(len(circuit.gates))):
+        for measured in np.flatnonzero(circuit.mask[t]):
+            basis = er.measure_site(basis, n, int(measured), tol)
+        for left, gate in reversed(circuit.gates[t]):
+            basis = er.apply_gate(basis, n, left, er.heisenberg_transfer(gate))
+    return basis
+
+
+def rank_profile(circuit: ff.Circuit) -> RankProfile:
+    """Ranks, min cut, measurement counts and mean ``R^2`` of one circuit."""
+    n = circuit.n
+    basis = effect_basis(circuit)
+    w = ff.input_weights(n, "xz")
+    v = span_basis(basis, w)
+    mask = np.asarray(circuit.mask, dtype=bool)
+    return RankProfile(
+        dense=int(basis.shape[0]),
+        visible=int(v.shape[0]),
+        mincut=er.mincut_bits(mask),
+        k_eff=int(mask[:-1].sum()),
+        n_first=int(mask[0].sum()),
+        mean_r2=float(np.sum(w[1:] * np.sum(v**2, axis=0)) / np.sum(w[1:])),
+    )

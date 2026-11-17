@@ -65,3 +65,30 @@ pour chaque `p` l'histogramme (40 classes sur `[0, 1]`), la moyenne,
 l'écart-type et les quantiles 5/25/50/75/95 % de chaque terme, ainsi que
 le plus grand terme croisé et le plus grand écart `|somme − 1|` (au plus
 `3.8e-10`).
+
+## `rank_levels_iid.png` — structure des rangs en Haar (issue #362)
+
+Mêmes 300 circuits Haar × 11 valeurs de `p` que les histogrammes (rejoués
+depuis les seeds, vérifiés sur les échantillons stockés). (a) Fraction des
+circuits à chaque rang visible de l'espace des effets (15, 31, 63, 71, 80),
+en fonction de `p`. (b) `E_circuit` de chaque circuit (moyenne sur ses 40
+cibles), tous `p` confondus, en fonction de son rang ; trait noir : moyenne
+par niveau (0.75, 0.52, 0.16, 0.09, 0) ; losanges : prédiction
+`1 − Σ_a w_a [Π_C]_aa / Σ_a w_a`. (c) `E_circuit` moyen mesuré (noir) et
+reconstruit comme Σ fraction(p) × valeur du niveau (orange) : les deux
+courbes se superposent. (d) Coupe minimale `C` du graphe espace-temps
+(`log2` du rang dense, exact pour chaque circuit Haar), et ses deux bornes :
+`N + K_eff` (nombre de bits de record utiles) et `2N − n_1` (mesures de la
+première couche). `C` moyen culmine à 6.0 à `p = 0.3`. Lecture : le rang
+plein (80) n'est atteint que par au plus 11 % des circuits ; l'optimum
+vient de la distribution des niveaux, poussée vers le haut par les records
+puis rabattue par les mesures précoces de la première couche.
+
+## `ecirc_hist_by_rank_iid.png` — histogrammes colorés par rang
+
+Les histogrammes Haar de `E_circuit` (`budget_hist_k2_iid.png`, première
+ligne), chaque échantillon coloré par le rang de son circuit : chaque bosse
+est un niveau de rang.
+
+Fichiers `_flat` : mêmes figures pour `√w_a β_a ~ N(0, 1)` ; losanges
+`1 − rang / (3^N − 1)`.

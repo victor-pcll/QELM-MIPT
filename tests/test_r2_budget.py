@@ -134,3 +134,35 @@ def test_run_and_plot_smoke(tmp_path: Path) -> None:
     assert data["per_p"]["haar"][0]["max_abs_sum_minus_one"] < 1e-10
     load("plot").main(["--data", str(tmp_path), "--n", "3", "--clifford-n", "4"])
     assert (tmp_path / "figures" / "budget_hist_k2_iid.png").exists()
+
+
+@pytest.mark.parametrize("kind", ["haar", "clifford"])
+@pytest.mark.parametrize("p", [0.0, 0.2, 0.4])
+def test_rank_profile_matches_the_enumerated_records(kind: str, p: float) -> None:
+    rng = np.random.default_rng(8)
+    n = 3
+    circuit = ff.draw_circuit(n, n, p, kind, rng)
+    prof = rb.rank_profile(circuit)
+    records = ff.enumerate_records(circuit)
+    c = ff.feature_matrix(records.effects)
+    w = ff.input_weights(n, "xz")
+    v = rb.span_basis(c, w)
+    assert prof.visible == v.shape[0]
+    assert prof.dense == ff.span_rank(c)
+    assert prof.k_eff == circuit.mask[:-1].sum()
+    assert prof.n_first == circuit.mask[0].sum()
+    expected = np.sum(w[1:] * np.sum(v**2, axis=0)) / np.sum(w[1:])
+    assert prof.mean_r2 == pytest.approx(expected, abs=1e-10)
+    # Many targets: the mean of ||Pi g||^2 / mean ||g||^2 tends to mean_r2.
+    g = rb.draw_whitened_targets(n, 20_000, "iid", rng)
+    proj = np.sum((g @ v.T) ** 2, axis=1)
+    assert proj.mean() / np.sum(g**2, axis=1).mean() == pytest.approx(
+        prof.mean_r2, abs=0.02
+    )
+
+
+def test_haar_dense_rank_is_two_to_the_min_cut() -> None:
+    rng = np.random.default_rng(9)
+    for p in (0.1, 0.3, 0.5):
+        prof = rb.rank_profile(ff.draw_circuit(4, 4, p, "haar", rng))
+        assert prof.dense == 2**prof.mincut
