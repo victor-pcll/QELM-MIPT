@@ -1773,7 +1773,32 @@ uv run python experiments/clifford_ridge/plot_population.py outputs/clifford_rid
 ```
 
 The transition probes alone: `clifford_ridge.py transition --n 32 --t 64`.
+Follow-up (issue #339), Haar against Clifford and the entropy profile `S(l)`:
+`experiments/clifford_ridge/haar_locality.sh`, then `plot_locality.py` and
+`plot_haar_span.py`.
+Follow-up (issue #341), the ridge on record features as an exact Fourier
+filter: `experiments/clifford_ridge/fourier_filter.sh`, then
+`plot_fourier_filter.py`.
+Follow-up (issue #349), the two-filter split
+`E_perp = E_circuit + E_readout(k)`: `experiments/clifford_ridge/two_filters.sh`,
+then `plot_two_filters.py outputs/two_filters`.
+Follow-up (issue #352), Haar trajectories against Haar ridge locality:
+`experiments/clifford_ridge/haar_order.sh`, then `plot_haar_order.py`.
 Results and reading in `experiments/clifford_ridge/README.md`.
+
+## Plot the spectrum of the effect dictionary (issue #356)
+
+[`dictionary_spectrum/`](dictionary_spectrum/README.md) plots the weight
+histogram `N(l)` of the Clifford effect group (`N = 12` to 24, with and
+without the final readout) and the sorted spectrum of the record covariance
+`F` with Haar gates (`N = 4, 6`). Reading in French:
+[`documentation/notes/spectre-du-dictionnaire.md`](../documentation/notes/spectre-du-dictionnaire.md).
+
+```bash
+experiments/dictionary_spectrum/run.sh
+uv run python experiments/dictionary_spectrum/plot_clifford_weights.py outputs/dictionary_spectrum
+uv run python experiments/dictionary_spectrum/plot_haar_spectrum.py outputs/dictionary_spectrum
+```
 
 ## Draw the QELM verdict figures (issue #303)
 

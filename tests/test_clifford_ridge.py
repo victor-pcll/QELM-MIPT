@@ -22,8 +22,11 @@ from QELM.evaluation.clifford_ridge import (
     empirical_spectrum,
     enumerate_group,
     interval,
+    interval_entropies,
+    local_strings,
     local_visible_weights,
     monomial_values,
+    parity_strings,
     population_r2,
     purification,
     range_targets,
@@ -332,3 +335,200 @@ def test_scripts_run_and_plot(tmp_path: Path) -> None:
     load("plot_population").main([str(tmp_path)])
     for name in ("order", "eperp", "range", "spectrum", "collapse"):
         assert (tmp_path / "figures" / f"population_{name}.png").is_file()
+
+
+def test_interval_entropies_match_the_local_ranks() -> None:
+    n, t = 10, 8
+    rng = np.random.default_rng(40)
+    for p in (0.1, 0.3):
+        circuit = with_mask(draw_circuit(n, t, rng), rng.random((t, n)), p)
+        full = effect_groups(circuit).full
+        basis = GroupBasis(full)
+        s = interval_entropies(full)
+        assert s.shape == (n, n + 1)
+        for start in (0, 3, 9):
+            for ell in range(n + 1):
+                k = basis.local_rank(interval(start, ell, n))
+                assert s[start, ell] == ell - k
+        np.testing.assert_array_equal(s[:, n], 0)
+        # Pure state: S of [0, l) equals S of its complement [l, n).
+        for ell in range(1, n):
+            assert s[0, ell] == s[ell, n - ell]
+
+
+def test_locality_and_haar_scripts_run_and_plot(tmp_path: Path) -> None:
+    path = Path(__file__).resolve().parents[1] / "experiments" / "clifford_ridge"
+
+    def load(name: str) -> ModuleType:
+        spec = importlib.util.spec_from_file_location(name, path / f"{name}.py")
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    script = load("clifford_ridge")
+    for n in (8, 12):
+        lo = script.run_locality(n, 2 * n, [0.04, 0.1, 0.16, 0.3], 3, 0)
+        (tmp_path / f"locality_N{n}_T{2 * n}_s0.json").write_text(json.dumps(lo))
+    s = np.asarray(lo["per_p"][0]["s"])
+    assert s.shape == (13,) and s[0] == 0 and s[-1] == 0
+    load("plot_locality").main([str(tmp_path)])
+    assert (tmp_path / "figures" / "dictionary_locality.png").is_file()
+    haar = load("haar_span")
+    for seed in (0, 1):
+        res = haar.run(3, seed, [0.0, 0.3])
+        (tmp_path / f"haar_span_N3_seed{seed}.json").write_text(json.dumps(res))
+    full = res["per_kind"]["clifford"][1]["full"]
+    assert full["dense"] == 8
+    assert res["per_kind"]["haar"][0]["full"]["dense"] == 8
+    load("plot_haar_span").main([str(tmp_path)])
+    assert (tmp_path / "figures" / "haar_vs_clifford.png").is_file()
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_local_strings_give_the_exact_bit_means(seed: int) -> None:
+    """|E[(-1)^m_j | rho]| = |Tr[rho O_j]| for random (also Y) product inputs."""
+    n, t = 4, 4
+    rng = np.random.default_rng(50 + seed)
+    circuit = with_mask(draw_circuit(n, t, rng), rng.random((t, n)), 0.35)
+    strings, alive = local_strings(circuit)
+    assert strings.shape == (circuit.n_mid + n, 2 * n)
+    for _ in range(3):
+        rho = np.ones((1, 1), dtype=complex)
+        for _q in range(n):
+            v = rng.normal(size=3)
+            v /= np.linalg.norm(v)
+            y = np.array([[0, -1j], [1j, 0]])
+            rho = np.kron(rho, (I2 + v[0] * X + v[1] * y + v[2] * Z) / 2)
+        rho_in = rho
+        means = []
+        for step in range(t):
+            u = _step_unitary(circuit, step)
+            rho = u @ rho @ u.conj().T
+            for site in np.flatnonzero(circuit.measured[step]):
+                means.append(np.trace(_site(Z, int(site), n) @ rho).real)
+                p0, p1 = _site(P[0], int(site), n), _site(P[1], int(site), n)
+                rho = p0 @ rho @ p0 + p1 @ rho @ p1
+        means += [np.trace(_site(Z, q, n) @ rho).real for q in range(n)]
+        predicted = [
+            abs(np.trace(rho_in @ _string(row, n)).real) if ok else 0.0
+            for row, ok in zip(strings, alive, strict=True)
+        ]
+        np.testing.assert_allclose(np.abs(means), predicted, atol=1e-10)
+
+
+@pytest.mark.parametrize("seed", [0, 1])
+def test_parity_strings_give_the_exact_parity_means(seed: int) -> None:
+    """Single bits match local_strings; pairs match the record distribution."""
+    n, t = 4, 3
+    rng = np.random.default_rng(60 + seed)
+    circuit = with_mask(draw_circuit(n, t, rng), rng.random((t, n)), 0.35)
+    n_bits = circuit.n_mid + n
+    single, ok1 = parity_strings(circuit, [[j] for j in range(n_bits)])
+    ref, ok_ref = local_strings(circuit)
+    np.testing.assert_array_equal(ok1, ok_ref)
+    np.testing.assert_array_equal(single[ok1], ref[ok_ref])
+    pairs = [[j, k] for j in range(n_bits) for k in range(j + 1, n_bits)]
+    strings, alive = parity_strings(circuit, pairs)
+    y = np.array([[0, -1j], [1j, 0]])
+    rho = np.ones((1, 1), dtype=complex)
+    for _q in range(n):
+        v = rng.normal(size=3)
+        v /= np.linalg.norm(v)
+        rho = np.kron(rho, (I2 + v[0] * X + v[1] * y + v[2] * Z) / 2)
+    probs = np.zeros(2**n_bits)
+    for m in range(2**n_bits):
+        k = _kraus(circuit, [(m >> b) & 1 for b in range(n_bits)], True)
+        probs[m] = np.trace(k @ rho @ k.conj().T).real
+    bits = (np.arange(2**n_bits)[:, None] >> np.arange(n_bits)[None, :]) & 1
+    for (j, k), row, ok in zip(pairs, strings, alive, strict=True):
+        mean = float(probs @ (1 - 2 * (bits[:, j] ^ bits[:, k])))
+        expected = abs(np.trace(rho @ _string(row, n)).real) if ok else 0.0
+        assert abs(mean) == pytest.approx(expected, abs=1e-10)
+
+
+def test_fourier_filter_scripts_run_and_plot(tmp_path: Path) -> None:
+    path = Path(__file__).resolve().parents[1] / "experiments" / "clifford_ridge"
+
+    def load(name: str) -> ModuleType:
+        spec = importlib.util.spec_from_file_location(name, path / f"{name}.py")
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    script = load("fourier_filter")
+    assert script.ring_range(np.array([1, 0, 0, 0, 0, 1], dtype=bool)) == 2
+    assert script.ring_range(np.array([0, 1, 0, 1, 0, 0], dtype=bool)) == 3
+    for n, pairs in ((8, True), (12, False)):
+        res = script.run_transfer(n, [0.1, 0.3], 3, pairs, 0)
+        (tmp_path / f"transfer_N{n}_s0.json").write_text(json.dumps(res))
+    row = res["per_p"][1]
+    assert 0 <= row["L1"]["member"]["Z"]["mean"] <= row["G_member"]["Z"]["mean"]
+    par = script.run_parities(8, [0.1, 0.3], 2, 2, 0)
+    (tmp_path / "parities_N8_s0.json").write_text(json.dumps(par))
+    k1 = par["per_p"][1]["k1"]["G_fraction"]["mean"]
+    k2 = par["per_p"][1]["k2"]["G_fraction"]["mean"]
+    assert 0 <= k1 <= k2 <= 1
+    val = script.run_validate(8, [0.3], 1, 300, 16, 0)
+    (tmp_path / "validate_N8_s0.json").write_text(json.dumps(val))
+    load("plot_fourier_filter").main([str(tmp_path)])
+    assert (tmp_path / "figures" / "fourier_filter.png").is_file()
+    assert (tmp_path / "figures" / "parities.png").is_file()
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_all_parities_reach_the_whole_group(seed: int) -> None:
+    """Parities of all subsets of the bits give every visible string of the group.
+
+    With the mid bits only, they give every visible string of the mid group.
+    """
+    path = Path(__file__).resolve().parents[1] / "experiments" / "clifford_ridge"
+    spec = importlib.util.spec_from_file_location("ff", path / "fourier_filter.py")
+    assert spec is not None and spec.loader is not None
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    rng = np.random.default_rng(seed)
+    n, t = 4, 8
+    circuit = with_mask(draw_circuit(n, t, rng), rng.random((t, n)), 0.12)
+    n_mid = circuit.n_mid
+    assert 1 <= n_mid <= 9
+    mid = script.parity_dictionary(circuit, n_mid, mid_only=True)[-1]
+    assert mid["Gmid_fraction"] == pytest.approx(1.0)
+    assert mid["G_fraction"] <= 1.0
+    full = script.parity_dictionary(circuit, n_mid + n)[-1]
+    assert full["G_fraction"] == pytest.approx(1.0)
+
+
+def test_final_readout_plot_runs(tmp_path: Path) -> None:
+    path = Path(__file__).resolve().parents[1] / "experiments" / "clifford_ridge"
+
+    def load(name: str) -> ModuleType:
+        spec = importlib.util.spec_from_file_location(name, path / f"{name}.py")
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    pop = load("clifford_ridge").run_population(8, 16, [0.1, 0.3], 3, 0)
+    (tmp_path / "population_N8_T16_s0.json").write_text(json.dumps(pop))
+    haar = load("haar_span")
+    for seed in (0, 1):
+        res = haar.run(3, seed, [0.0, 0.3])
+        (tmp_path / f"haar_span_N3_seed{seed}.json").write_text(json.dumps(res))
+    ff = load("fourier_filter")
+    full = ff.run_parities(8, [0.1, 0.3], 2, 2, 0)
+    mid = ff.run_parities(8, [0.1, 0.3], 2, 2, 0, mid_only=True)
+    assert mid["mid_only"] and not full["mid_only"]
+    for a, b in zip(mid["per_p"], full["per_p"], strict=True):
+        assert a["k2"]["G_fraction"]["mean"] <= b["k2"]["G_fraction"]["mean"] + 1e-12
+    (tmp_path / "parities_N8_s0.json").write_text(json.dumps(full))
+    (tmp_path / "parities_N8_s0_mid.json").write_text(json.dumps(mid))
+    out = tmp_path / "out"
+    load("plot_final_readout").main(
+        ["--population", str(tmp_path), "--haar", str(tmp_path),
+         "--parities", str(tmp_path), "--out", str(out)]
+    )  # fmt: skip
+    assert (out / "with_without_final.png").is_file()
+    summary = json.loads((out / "summary_final_readout.json").read_text())
+    assert set(summary["parities"]) == {"N8_full", "N8_mid"}
