@@ -2,7 +2,7 @@
 
 A Python library managed with [uv](https://docs.astral.sh/uv/). Requires Python 3.12 or newer.
 
-Longer notes are in [`documentation/`](documentation/README.md): setup, Hydra and `.env`, the project layout, checkpoints, and code quality.
+Longer notes are in [`documentation/`](documentation/README.md): setup, Hydra and `.env`, the project layout, checkpoints, and code quality. The algorithms of the library (simulation, measurements, ridge readout, Fourier framework, finite-size scaling) are described in [`documentation/algorithmes.md`](documentation/algorithmes.md) (in French).
 
 ## Install uv
 

@@ -1,6 +1,6 @@
 # Documentation
 
-Notes for this repository. Scientific parameters stay in Hydra YAML under `conf/`. Secrets stay in `.env`. Most of the pipeline is still a scaffold: it routes a config and records a status string. The transverse-field Ising Hamiltonian is built (`TransverseFieldIsingModel.hamiltonian`). Time evolution, training, and scoring are not implemented yet.
+Notes for this repository. Scientific parameters stay in Hydra YAML under `conf/`. Secrets stay in `.env`. The generic entrypoint `main.py` (`QELM.pipeline`) is still a scaffold: it routes a config and records a status string. The science runs through the library and the scripts of `experiments/`: encodings, Hamiltonian and circuit dynamics, mid-circuit measurements, ridge readout, entropies and finite-size analysis are implemented and tested; the [algorithm guide](algorithmes.md) describes them.
 
 - [Setup](setup.md) — install uv and sync the project
 - [Configuration](configuration.md) — Hydra YAML versus `.env` secrets
@@ -12,6 +12,7 @@ Notes for this repository. Scientific parameters stay in Hydra YAML under `conf/
 
 Scientific notes:
 
+- [Guide des algorithmes](algorithmes.md) — note en français : chaque algorithme de la bibliothèque (encodages, circuits Haar et Clifford, mesures en milieu de circuit, tableau de stabilisateurs, entropies, Ridge, cadre de Fourier/Bloch et budget de R², décodeurs bayésiens, analyse de taille finie), avec ses conventions, son coût, ses limites et ses tests (#366)
 - [The early-layers hypothesis of the linear QELM on M](notes/early-layers-proof.md) — what is proven about which rounds of the record the linear readout uses (#288)
 - [État des lieux des sondes de la MIPT](notes/etat-des-lieux-sondes-mipt.md) — note en français : quelles sondes ont été testées, avec quel décodeur, et la suite
 - [Le QELM voit-il la MIPT ?](notes/qelm-voit-il-la-mipt.md) — note en français : ce qui est prouvé, mesuré ou conjecturé, le critère de taille finie, le verdict par cas et les calculs manquants (#303)
