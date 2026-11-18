@@ -211,3 +211,88 @@ def test_figure_script_smoke(tmp_path) -> None:  # type: ignore[no-untyped-def]
     ):
         assert (tmp_path / f"{name}.png").exists()
         assert (tmp_path / f"{name}.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# The Pauli transfer matrix as a Fourier kernel (issue #369)
+# ---------------------------------------------------------------------------
+
+
+def test_ptm_maps_input_modes_to_output_features() -> None:
+    from QELM.evaluation.fourier_framework import pauli_transfer_matrix
+    from QELM.models.circuits.haar import haar_gate
+
+    n = 2
+    U = haar_gate(np.random.default_rng(8))
+    R = pauli_transfer_matrix(U)
+    enc = DenseAngleEncoding({"N": n})
+    for x in _inputs(n, 5, seed=9):
+        rho = U @ enc.rho(x) @ U.conj().T
+        feats = np.array([np.trace(pauli_matrix(c) @ rho).real for c in pauli_codes(n)])
+        assert np.allclose(feats, R @ dense_monomials(x), atol=1e-12)
+
+
+def test_dephasing_ptm_matches_the_channel() -> None:
+    from QELM.evaluation.fourier import dephase
+    from QELM.evaluation.pauli_bloch import dephasing_ptm
+
+    n, p = 2, 0.3
+    D = dephasing_ptm(n, p)
+    for a, code in enumerate(pauli_codes(n)):
+        out = pauli_vectors(dephase(pauli_matrix(code), p)).real
+        assert np.allclose(out, D[a])
+    assert D[pauli_labels(n).index("XY"), pauli_labels(n).index("XY")] == pytest.approx(
+        0.49
+    )
+    with pytest.raises(ValueError, match="p must"):
+        dephasing_ptm(1, 1.5)
+
+
+def test_circuit_kernel_matches_heisenberg_and_forward() -> None:
+    from QELM.evaluation.pauli_bloch import circuit_kernel, layer_unitary
+
+    n, p = 3, 0.2
+    layers = brickwork_layers(n, 3, np.random.default_rng(10))
+    K = circuit_kernel(layers, n, p)
+    z1 = pauli_labels(n).index("IZI")
+    assert np.allclose(K[z1], heisenberg_z(layers, n, 1, p), atol=1e-12)
+    assert np.allclose(circuit_kernel(layers, n, 0.0) @ np.eye(4**n)[0], np.eye(64)[0])
+    U = layer_unitary(layers[0], n)
+    assert np.allclose(U.conj().T @ U, np.eye(8))
+    with pytest.raises(ValueError, match="neighbours"):
+        layer_unitary([(0, 2, np.eye(4))], 3)
+
+
+def test_trig_kernel_acts_on_trig_coefficients() -> None:
+    from QELM.evaluation.fourier_framework import pauli_transfer_matrix
+    from QELM.evaluation.pauli_bloch import trig_kernel
+    from QELM.models.circuits.haar import haar_gate
+
+    n = 2
+    R = pauli_transfer_matrix(haar_gate(np.random.default_rng(11)))
+    Kt = trig_kernel(R, n)
+    M = passage_matrix(n)
+    x = _inputs(n, 6, seed=12)
+    # Feature a: row trig_index(a) of Kt applied to the trig monomials.
+    for a, code in enumerate(pauli_codes(n)):
+        row = Kt[trig_index(code)]
+        assert np.allclose(trig_monomials(x) @ row, dense_monomials(x) @ R[a])
+    unreachable = M.sum(axis=0) == 0
+    assert np.all(Kt[unreachable] == 0) and np.all(Kt[:, unreachable] == 0)
+
+
+def test_ptm_figure_script_smoke(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    import importlib.util
+    from pathlib import Path
+
+    folder = Path(__file__).parents[1] / "experiments" / "pauli_bloch"
+    spec = importlib.util.spec_from_file_location(
+        "plot_ptm_kernel", folder / "plot_ptm_kernel.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.main([str(tmp_path)])
+    for name in ("ptm_noyau_fourier", "ptm_composition"):
+        assert (tmp_path / f"{name}.png").exists()
+        assert (tmp_path / f"{name}.json").exists()

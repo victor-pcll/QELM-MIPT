@@ -56,7 +56,7 @@ commands and every option of the launchers.
 | [`pnt_decay/`](pnt_decay/README.md) | exact signal of the record-averaged state, light-cone volume `V_feat`, sampled noise, oracle linear readout and Gaussian prediction, Haar U(4) | why the state readout decays with `p N T` (#305) |
 | [`fourier_expressivity/`](fourier_expressivity/README.md) | exact Fourier coefficients of the record and readout features on the `3^N` Bloch monomials: rank, degree profile, `d_eff`, selection rules; Haar, U(1), Z2, Clifford | which functions of the input the QELM can read across the MIPT (#309) |
 | [`operator_cones/`](operator_cones/README.md) | operator light cones of monitored Haar U(4) circuits: outcome-averaged Pauli weight (N = 41), exact trajectory-resolved Pauli weight of a reference qubit and purification (N = 8, 10), Krylov chain of the Floquet channel, Parker et al. `b_n`, one operator in the circuits of #314 (exact span N <= 7, one sampled branch N = 10, 12) | does operator growth (OTOC, Krylov) see the MIPT (#315) |
-| [`pauli_bloch/`](pauli_bloch/README.md) | pedagogical figures, no simulation campaign: Pauli strings as Bloch/Fourier monomials of the dense encoding, change-of-basis and Gram matrices, numerical check, reconstruction of a feature, Pauli weight = frequency | the dictionary behind the Fourier framework (#364) |
+| [`pauli_bloch/`](pauli_bloch/README.md) | pedagogical figures, no simulation campaign: Pauli strings as Bloch/Fourier monomials of the dense encoding, change-of-basis and Gram matrices, numerical check, reconstruction of a feature, Pauli weight = frequency | the dictionary behind the Fourier framework (#364), the PTM as the Fourier kernel (#369) |
 | [`effect_rank/`](effect_rank/README.md) | exact rank of the effect space against `p`, one fixed circuit and mask per seed, Haar / U(1) / Z2 / Clifford, angle and dense encodings | which functions of the input the record can reach at all (#313) |
 | [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
 | [`clifford_state_readout/`](clifford_state_readout/README.md) | `S_R` and purity of the reference qubit from the final Clifford state, ridge / quadratic / MLP | can a readout of the state probe purification (#292) |
@@ -1814,6 +1814,13 @@ uv run python experiments/pauli_bloch/plot_pauli_bloch.py experiments/pauli_bloc
 Options: `--seed` (circuits and random inputs), `--n` (qubits of the last
 figure, default 6), `--circuits` (Haar circuits averaged, default 20),
 `--depth` (largest number of layers, default 6).
+
+The two figures of the Pauli transfer matrix as the Fourier kernel (issue
+#369), options `--seed` and `--p` (dephasing probability, default 0.5):
+
+```bash
+uv run python experiments/pauli_bloch/plot_ptm_kernel.py experiments/pauli_bloch/figures
+```
 
 ## Draw the QELM verdict figures (issue #303)
 

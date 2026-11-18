@@ -124,3 +124,47 @@ strings of `N = 4` by `(|a|, #X + #Y)`. (d) Share of the variance of `Z_3`
 (`N = 6`) per weight against the number of Haar layers, 20 circuits.
 (e) The feature along a cut for a few depths, one circuit. (f) At `t = 6`,
 share per weight and mean weight (dashed) against `p`.
+
+## The Pauli transfer matrix as the Fourier kernel (issue #369)
+
+Through `P_a <-> B_a`, the Heisenberg PTM of a gate,
+`R[a, b] = Tr[P_b U^† P_a U] / 2^N`, is the matrix that maps the input
+Fourier modes to the output features:
+
+```
+U^† P_a U = sum_b R_ab P_b      <=>      Tr[P_a U rho(x) U^†] = sum_b R_ab B_b(x).
+```
+
+Script `plot_ptm_kernel.py` (about 5 s); module functions `layer_unitary`,
+`dephasing_ptm`, `circuit_kernel` (`K = D R_T ... D R_1`, row `Z_i` equal to
+`heisenberg_z`) and `trig_kernel` (`M^T K M` on the `9^N` trigonometric
+monomials).
+
+- `N = 2`, Haar gate, seed 0: the kernel reproduces the 16 outputs on 200
+  random inputs to `6e-16`; `R R^T = I` to round-off.
+- A Clifford PTM has one nonzero entry per row (a signed permutation of
+  modes); the Haar PTM of figure 8 has 15 of 15 non-identity entries per row.
+- The Z-dephasing PTM is `diag((1 - p)^(#X + #Y))`: a filter on the `phi`
+  frequencies. For the `<Z_0>` feature of a two-layer circuit, the share of
+  `sum c_b^2` on modes with a `phi` frequency goes from 0.83 (`p = 0`) to 0.78
+  (`p = 0.5`).
+
+![PTM as Fourier kernel](figures/ptm_noyau_fourier.png)
+
+**Figure 7. The PTM is the Fourier kernel, `N = 2`.** (a) The commutative
+square: conjugation by `U` on the operator side, the kernel `R` on the
+function side, the isomorphism `Phi: P -> B` vertically. (b) PTM of a Haar
+U(4) gate in the Pauli basis. (c) The same matrix with the trigonometric
+monomials as labels. (d) Row `ZI`: the 16 input modes `B_b` on the plane
+`(s_0, s_1)` (path `theta_i = phi_i = s_i`), each multiplied by `R_{ZI,b}`;
+frame colour = weight. (e) Their sum, the feature `<ZI>` after `U`.
+(f) Direct `Tr[P_a U rho U^†]` against the kernel, 16 outputs x 200 inputs.
+
+![Composition of kernels](figures/ptm_composition.png)
+
+**Figure 8. Composing gates and measurements multiplies kernels, `N = 2`.**
+(a) Clifford PTM. (b) Haar PTM. (c) Dephasing PTM, `p = 0.5`. (d) Kernel of
+`U_1`, measurement, `U_2`, measurement: `K = D R_2 D R_1`. (e, f) Clifford and
+Haar PTMs as bipartite graphs from input modes to outputs (red positive, blue
+negative, width = `|R|`, node colour = weight; Haar edges `|R| > 0.15`).
+(g, h) The `<Z_0>` feature of the circuit at `p = 0` and `p = 0.5`.
