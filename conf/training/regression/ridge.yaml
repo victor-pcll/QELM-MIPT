@@ -4,3 +4,11 @@ name: ridge
 # fit(..., alpha=...) overrides it. 1e-3 rather than 1.0: alpha also shrinks
 # the weight of the constant (bias) column, and alpha=1.0 costs R2 (issue #92).
 alpha: 0.001
+# Scale of alpha (issue #372): sum (default, (Phi^T Phi + alpha I) W = Phi^T y),
+# mean (penalty alpha * n_samples, on the mean Gram) or relative (penalty
+# alpha * tr(Phi^T Phi) / n_features, independent of the number of samples and
+# of the scale of the features). See QELM.training.regression.ridge.ridge_penalty.
+penalty: sum
+# true: centre Phi and y and fit an unpenalized intercept (issue #372). The
+# scripts that append a column of ones keep false.
+fit_intercept: false

@@ -541,7 +541,12 @@ def range_targets(N: int, ranges: Sequence[int]) -> dict[str, np.ndarray]:
 
 
 def effective_dimension(weights: np.ndarray, lambdas: Sequence[float]) -> np.ndarray:
-    """``d_eff(lambda) = sum_g w_g / (w_g + lambda)``, with ``w_g = 2^{-|g|}``."""
+    """``d_eff(lambda) = sum_g w_g / (w_g + lambda)``, with ``w_g = 2^{-|g|}``.
+
+    ``lambda`` penalizes the population covariance, whose eigenvalues are the
+    ``w_g``: the ``"mean"`` convention of
+    :func:`QELM.training.regression.ridge.ridge_penalty` (issue #372).
+    """
     w = 0.5 ** np.asarray(weights, dtype=float)
     lam = np.asarray(lambdas, dtype=float)
     return np.asarray((w[None, :] / (w[None, :] + lam[:, None])).sum(axis=1))

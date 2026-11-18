@@ -355,7 +355,10 @@ def _whitened_filter(
 
     With ``A = C W^{1/2} = U s V^T`` (columns ``a != I``), ``Sigma = A A^T``
     and the population ridge maps ``g`` to ``V s^2 / (s^2 + lam) V^T g``;
-    ``lam = 0`` is the ``lambda -> 0+`` limit, the projection ``V V^T``. The
+    ``lam = 0`` is the ``lambda -> 0+`` limit, the projection ``V V^T``.
+    ``lam`` penalizes the population (mean) covariance: the ``"mean"``
+    convention of :func:`QELM.training.regression.ridge.ridge_penalty`
+    (issue #372). The
     SVD keeps the cost at ``(rank) x 4^n`` whatever the number of records.
     """
     sw = np.sqrt(w[1:])
