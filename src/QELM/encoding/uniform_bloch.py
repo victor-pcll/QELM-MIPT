@@ -14,13 +14,16 @@ class UniformBlochEncoding(ProductEncoding):
     is the population of ``|0>``, so ``<Z> = 2 x_{2i-1} - 1`` is linear in
     it, where the angle encoding gives ``<Z> = cos(x)``: equal steps of the
     feature cut equal areas of the sphere (Archimedes). The second, in
-    ``[0, pi]``, is the phase. Config block:
+    ``[0, 2 pi]``, is the phase, so that the whole sphere is covered and a
+    feature pair uniform on its box gives a Bloch vector uniform on the
+    sphere (issue #368; before it the phase stopped at ``pi`` and
+    ``<Y> >= 0``). ``phi = 0`` and ``phi = 2 pi`` give the same state. Config block:
     ``uniform_bloch_encoding: {N, n_features}``.
     """
 
     name: str = "uniform_bloch_encoding"
     features_per_qubit: int = 2
-    bounds: tuple[tuple[float, float], ...] = ((0.0, 1.0), (0.0, np.pi))
+    bounds: tuple[tuple[float, float], ...] = ((0.0, 1.0), (0.0, 2 * np.pi))
 
     def amplitudes(self, groups: np.ndarray) -> np.ndarray:
         """Return ``(sqrt(u), e^{i phi} sqrt(1 - u))`` per qubit."""

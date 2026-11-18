@@ -42,9 +42,10 @@ rotation_encoding:
 # [0, pi] on each qubit (the state of rotation_encoding with axis y); the
 # three others put two on each qubit, so the image is reduced to n_features =
 # 2 N principal components (the default):
-#   dense_angle_encoding    cos(x1/2)|0> + e^{i x2} sin(x1/2)|1>, x1, x2 in [0, pi]
+#   dense_angle_encoding    cos(x1/2)|0> + e^{i x2} sin(x1/2)|1>,
+#                           x1 in [0, pi], x2 in [0, 2 pi] (whole sphere, #368)
 #   uniform_bloch_encoding  sqrt(x1)|0> + e^{i x2} sqrt(1 - x1)|1>,
-#                           x1 in [0, 1], x2 in [0, pi]
+#                           x1 in [0, 1], x2 in [0, 2 pi]
 #   general_encoding        (x1|0> + x2|1>) / sqrt(x1^2 + x2^2), x1, x2 in [0, 1]
 angle_encoding:
   N: ${N}
