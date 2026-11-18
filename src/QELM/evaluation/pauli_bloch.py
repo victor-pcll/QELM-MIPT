@@ -40,7 +40,11 @@ from collections.abc import Sequence
 import numpy as np
 
 from QELM.evaluation.fourier import dephase, heisenberg_layer
-from QELM.evaluation.fourier_framework import pauli_codes, pauli_vectors
+from QELM.evaluation.fourier_framework import (
+    pauli_codes,
+    pauli_transfer_matrix,
+    pauli_vectors,
+)
 from QELM.models.circuits.base import Layer
 from QELM.models.circuits.haar import haar_gate
 
@@ -226,6 +230,65 @@ def heisenberg_z(layers: Sequence[Layer], n: int, site: int, p: float) -> np.nda
     for layer in reversed(layers):
         obs = heisenberg_layer(dephase(obs, p), layer)
     return np.asarray(pauli_vectors(obs).real)
+
+
+def layer_unitary(layer: Layer, n: int) -> np.ndarray:
+    """Return the ``2^n x 2^n`` unitary of a layer of nearest-neighbour gates.
+
+    The gates act in the order of the list, gate ``(i, i + 1, g)`` on the
+    qubits ``i, i + 1`` (``i`` the most significant bit of ``g``).
+    """
+    U = np.eye(2**n, dtype=complex)
+    for i, j, gate in layer:
+        if j != i + 1:
+            raise ValueError(f"Gates must act on neighbours, got ({i}, {j}).")
+        G = np.kron(np.kron(np.eye(2**i), gate), np.eye(2 ** (n - i - 2)))
+        U = G @ U
+    return U
+
+
+def dephasing_ptm(n: int, p: float) -> np.ndarray:
+    """Return the PTM of the Z-dephasing of probability ``p`` on every site.
+
+    Diagonal: each ``X`` or ``Y`` of a string multiplies it by ``1 - p``; ``I``
+    and ``Z`` are untouched. Through ``P_a <-> B_a`` it damps every mode with
+    a frequency in ``phi`` by ``(1 - p)^(#X + #Y)``.
+    """
+    if not 0.0 <= p <= 1.0:
+        raise ValueError(f"p must lie in [0, 1], got {p}.")
+    _, k_phi = frequencies(n)
+    return np.diag((1.0 - p) ** k_phi.astype(float))
+
+
+def circuit_kernel(layers: Sequence[Layer], n: int, p: float) -> np.ndarray:
+    """Return the Fourier kernel ``K`` of a monitored circuit, ``(4^n, 4^n)``.
+
+    Forward, each layer ``U_t`` is followed by the Z-dephasing ``D`` of
+    probability ``p``. Row ``a`` holds the coefficients of the mean final
+    ``P_a`` on the monomials: ``E[P_a | x] = sum_b K_ab B_b(x)``, with
+
+        K = D R_T D R_{T-1} ... D R_1,
+
+    ``R_t`` the Heisenberg PTM of layer ``t``
+    (:func:`QELM.evaluation.fourier_framework.pauli_transfer_matrix`). Row
+    ``Z_i`` is :func:`heisenberg_z`.
+    """
+    D = dephasing_ptm(n, p)
+    K = np.eye(4**n)
+    for layer in layers:
+        K = D @ pauli_transfer_matrix(layer_unitary(layer, n)) @ K
+    return K
+
+
+def trig_kernel(K: np.ndarray, n: int) -> np.ndarray:
+    """Return ``M^T K M``: the kernel on the ``9^n`` trigonometric monomials.
+
+    With the trigonometric coefficients ``t`` of a function, ``M^T K M t`` are
+    the trigonometric coefficients of its image. Only the ``4^n`` rows and
+    columns of the reachable monomials are nonzero.
+    """
+    M = passage_matrix(n)
+    return np.asarray(M.T @ K @ M)
 
 
 def weight_profile(c: np.ndarray, n: int, w: np.ndarray | None = None) -> np.ndarray:
