@@ -1,0 +1,226 @@
+{
+  "title": "Reconstruction d'une feature du QELM cha\u00eene de Pauli par cha\u00eene de Pauli (N = 2, chemin \u03b8_i = \u03c6_i = s_i)",
+  "panels": [
+    {
+      "title": "cible : \u27e8Z\u2080\u27e9 apr\u00e8s 2 couches Haar",
+      "xlabel": "s\u2081 / \u03c0",
+      "ylabel": "s\u2080 / \u03c0",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "1 cha\u00eene (+ XI)",
+      "xlabel": "s\u2081 / \u03c0",
+      "ylabel": "s\u2080 / \u03c0",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "2 cha\u00eenes (+ ZY)",
+      "xlabel": "s\u2081 / \u03c0",
+      "ylabel": "s\u2080 / \u03c0",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "3 cha\u00eenes (+ YI)",
+      "xlabel": "s\u2081 / \u03c0",
+      "ylabel": "s\u2080 / \u03c0",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "4 cha\u00eenes (+ ZI)",
+      "xlabel": "s\u2081 / \u03c0",
+      "ylabel": "s\u2080 / \u03c0",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "6 cha\u00eenes (+ YX)",
+      "xlabel": "s\u2081 / \u03c0",
+      "ylabel": "s\u2080 / \u03c0",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "9 cha\u00eenes (+ IX)",
+      "xlabel": "s\u2081 / \u03c0",
+      "ylabel": "s\u2080 / \u03c0",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "15 cha\u00eenes (+ IY)",
+      "xlabel": "s\u2081 / \u03c0",
+      "ylabel": "s\u2080 / \u03c0",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "valeur de la feature",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "coefficients de Fourier/Pauli, dans l'ordre o\u00f9 on les ajoute",
+      "xlabel": "",
+      "ylabel": "puissance w_a c_a\u00b2",
+      "xscale": "linear",
+      "yscale": "log",
+      "curves": [],
+      "histograms": [
+        {
+          "label": "_container0",
+          "edges": [
+            -0.4,
+            0.6,
+            1.6,
+            2.6,
+            3.6,
+            4.6,
+            5.6,
+            6.6,
+            7.6,
+            8.6,
+            9.6,
+            10.6,
+            11.6,
+            12.6,
+            13.6,
+            14.4
+          ],
+          "heights": [
+            0.17554233815029197,
+            0.03629178707061823,
+            0.01930024543181964,
+            0.008754535383840313,
+            0.004130103764220849,
+            0.002136472555382721,
+            0.002000224909999113,
+            0.0006669749474074574,
+            0.0005678603790476472,
+            0.0003149093910043698,
+            9.137371665533231e-05,
+            6.389435416713884e-05,
+            5.881694237525086e-05,
+            4.325285501204693e-05,
+            3.51299962477695e-05
+          ]
+        }
+      ],
+      "heatmaps": []
+    },
+    {
+      "title": "Parseval : 1 \u2212 \u03a3_{gard\u00e9es} w_a c_a\u00b2 / Var",
+      "xlabel": "nombre de cha\u00eenes gard\u00e9es m",
+      "ylabel": "variance restante (sph\u00e8re)",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    }
+  ],
+  "extra": {
+    "order": [
+      "XI",
+      "ZY",
+      "YI",
+      "ZI",
+      "IZ",
+      "YX",
+      "XY",
+      "ZX",
+      "IX",
+      "YZ",
+      "XX",
+      "ZZ",
+      "XZ",
+      "YY",
+      "IY"
+    ],
+    "coefficients": {
+      "XI": 0.7256907154228142,
+      "ZY": 0.571512102790102,
+      "YI": 0.24062571827520624,
+      "ZI": -0.16206050151570228,
+      "IZ": -0.11131177517523719,
+      "YX": -0.13866597635485242,
+      "XY": 0.13417162214861986,
+      "ZX": -0.07747757434682062,
+      "IX": -0.041274461076347704,
+      "YZ": 0.05323705963930886,
+      "XX": 0.028676880058646388,
+      "ZZ": -0.02398018322499329,
+      "XZ": -0.023007661362625664,
+      "YY": -0.01973007083384199,
+      "IY": -0.010265962631108128
+    },
+    "power": {
+      "XI": 0.17554233815029197,
+      "ZY": 0.03629178707061823,
+      "YI": 0.01930024543181964,
+      "ZI": 0.008754535383840313,
+      "IZ": 0.004130103764220849,
+      "YX": 0.002136472555382721,
+      "XY": 0.002000224909999113,
+      "ZX": 0.0006669749474074574,
+      "IX": 0.0005678603790476472,
+      "YZ": 0.0003149093910043698,
+      "XX": 9.137371665533231e-05,
+      "ZZ": 6.389435416713884e-05,
+      "XZ": 5.881694237525086e-05,
+      "YY": 4.325285501204693e-05,
+      "IY": 3.51299962477695e-05
+    },
+    "residual_variance": [
+      1.0,
+      0.29782480487453855,
+      0.1526564487031321,
+      0.07545482461143038,
+      0.04043639170142865,
+      0.023915839183509813,
+      0.015369877854387815,
+      0.007368911641490672,
+      0.0047009896531288176,
+      0.002429529237007344,
+      0.0011698811919527152,
+      0.0008043832841667653,
+      0.0005488037409210333,
+      0.000313534013832939,
+      0.0001405211542125917,
+      1.1102230246251565e-16
+    ],
+    "seed": 0
+  }
+}

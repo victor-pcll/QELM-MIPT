@@ -1,0 +1,167 @@
+{
+  "title": "Un qubit : chaque matrice de Pauli est une fonction de l'angle encod\u00e9",
+  "panels": [
+    {
+      "title": "I   \u27f7   1",
+      "xlabel": "\u03c6 / \u03c0",
+      "ylabel": "\u03b8 / \u03c0",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "\u2113 = 0 : constante",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "4 des 9 fonctions de (\u03b8, \u03c6)",
+      "xlabel": "facteur en \u03c6",
+      "ylabel": "facteur en \u03b8",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "X   \u27f7   sin \u03b8 cos \u03c6",
+      "xlabel": "\u03c6 / \u03c0",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "\u2113 = 1 : coordonn\u00e9e x",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "4 des 9 fonctions de (\u03b8, \u03c6)",
+      "xlabel": "facteur en \u03c6",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "Y   \u27f7   sin \u03b8 sin \u03c6",
+      "xlabel": "\u03c6 / \u03c0",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "\u2113 = 1 : coordonn\u00e9e y",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "4 des 9 fonctions de (\u03b8, \u03c6)",
+      "xlabel": "facteur en \u03c6",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "Z   \u27f7   cos \u03b8",
+      "xlabel": "\u03c6 / \u03c0",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "\u2113 = 1 : coordonn\u00e9e z",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "4 des 9 fonctions de (\u03b8, \u03c6)",
+      "xlabel": "facteur en \u03c6",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "Tr[P \u03c1(\u03b8, \u03c6)]",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    }
+  ],
+  "extra": {
+    "pauli": [
+      "I",
+      "X",
+      "Y",
+      "Z"
+    ],
+    "formula": [
+      "1",
+      "sin \u03b8 cos \u03c6",
+      "sin \u03b8 sin \u03c6",
+      "cos \u03b8"
+    ],
+    "trig_cell": [
+      [
+        0,
+        0
+      ],
+      [
+        2,
+        1
+      ],
+      [
+        2,
+        2
+      ],
+      [
+        1,
+        0
+      ]
+    ]
+  }
+}
