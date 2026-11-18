@@ -153,3 +153,102 @@ def test_double_descent_config_uses_ridge_without_penalty() -> None:
     cfg = load_config(config_name="double_descent")
     assert cfg.training.name == "ridge"
     assert RidgeReadout.from_config(cfg).config_alpha == 0.0
+
+
+# Scale of the penalty and intercept (issue #372).
+
+
+def test_default_penalty_is_the_historical_sum() -> None:
+    phi, y = _data()
+    default = RidgeReadout({"alpha": 0.3})
+    explicit = RidgeReadout({"alpha": 0.3, "penalty": "sum", "fit_intercept": False})
+    default.fit(phi, y)
+    explicit.fit(phi, y)
+    expected = np.linalg.solve(phi.T @ phi + 0.3 * np.eye(phi.shape[1]), phi.T @ y)
+    np.testing.assert_array_equal(default.W, explicit.W)
+    np.testing.assert_allclose(default.W, expected, atol=1e-12)
+    assert default.b == 0.0
+    assert set(default.state_dict()) == {"weights"}
+
+
+def test_the_three_penalties_agree_after_conversion() -> None:
+    phi, y = _data(n=50, d=6)
+    S, d = phi.shape
+    lam = 2.5
+    ref = RidgeReadout({"alpha": lam})
+    ref.fit(phi, y)
+    mean = RidgeReadout({"alpha": lam / S, "penalty": "mean"})
+    mean.fit(phi, y)
+    rel = RidgeReadout(
+        {"alpha": lam * d / float(np.sum(phi**2)), "penalty": "relative"}
+    )
+    rel.fit(phi, y)
+    np.testing.assert_allclose(mean.W, ref.W, atol=1e-10)
+    np.testing.assert_allclose(rel.W, ref.W, atol=1e-10)
+    # The mean convention is (Phi^T Phi / S + alpha I) W = Phi^T y / S.
+    a = 0.07
+    direct = np.linalg.solve(phi.T @ phi / S + a * np.eye(d), phi.T @ y / S)
+    mean.fit(phi, y, alpha=a)
+    np.testing.assert_allclose(mean.W, direct, atol=1e-10)
+
+
+def test_relative_penalty_ignores_sample_count_and_feature_scale() -> None:
+    phi, y = _data(n=30, d=4)
+    first = RidgeReadout({"alpha": 0.1, "penalty": "relative"})
+    first.fit(phi, y)
+    # Duplicating every sample and rescaling the features leaves the
+    # predictions unchanged.
+    twice = RidgeReadout({"alpha": 0.1, "penalty": "relative"})
+    big = 7.0 * np.vstack([phi, phi])
+    twice.fit(big, np.concatenate([y, y]))
+    np.testing.assert_allclose(twice.predict(7.0 * phi), first.predict(phi), atol=1e-10)
+
+
+def test_fit_intercept_is_not_penalized() -> None:
+    phi, y = _data(n=60, d=3)
+    y = y + 5.0
+    readout = RidgeReadout({"alpha": 0.5, "fit_intercept": True})
+    readout.fit(phi, y)
+    pm, ym = phi.mean(axis=0), y.mean()
+    xc = phi - pm
+    W = np.linalg.solve(xc.T @ xc + 0.5 * np.eye(3), xc.T @ (y - ym))
+    np.testing.assert_allclose(readout.W, W, atol=1e-12)
+    np.testing.assert_allclose(readout.b, ym - pm @ W, atol=1e-12)
+    np.testing.assert_allclose(readout.predict(phi), phi @ W + ym - pm @ W, atol=1e-12)
+    assert set(readout.state_dict()) == {"weights", "intercept"}
+    # Same solution as scikit-learn's Ridge, which centres the same way.
+    sk = Ridge(alpha=0.5, fit_intercept=True).fit(phi, y)
+    np.testing.assert_allclose(readout.W, sk.coef_, atol=1e-10)
+    np.testing.assert_allclose(readout.b, sk.intercept_, atol=1e-10)
+
+
+def test_relative_with_intercept_matches_the_ridge_spectrum_sweep() -> None:
+    from QELM.evaluation.ridge_spectrum import ridge_sweep
+
+    rng = np.random.default_rng(3)
+    S, d = 40, 5
+    train = rng.normal(size=(1, S, d)) + 2.0
+    test = rng.normal(size=(1, 15, d)) + 2.0
+    w = rng.normal(size=d)
+    y_train, y_test = train[0] @ w + 1.0, test[0] @ w + 1.0
+    y_train = y_train + 0.3 * rng.normal(size=S)
+    lambdas = np.array([1e-3, 0.1, 1.0])
+    sweep = ridge_sweep(train, y_train, test, y_test, test, y_test, lambdas)
+    for k, lam in enumerate(lambdas):
+        readout = RidgeReadout(
+            {"alpha": lam, "penalty": "relative", "fit_intercept": True}
+        )
+        readout.fit(train[0], y_train)
+        mse = float(np.mean((readout.predict(test[0]) - y_test) ** 2))
+        np.testing.assert_allclose(sweep.test_mse[k], mse, rtol=1e-9)
+
+
+def test_unknown_penalty_raises() -> None:
+    with pytest.raises(ValueError, match="penalty"):
+        RidgeReadout({"penalty": "median"})
+
+
+def test_config_records_the_convention() -> None:
+    cfg = load_config()
+    assert cfg.training.penalty == "sum"
+    assert cfg.training.fit_intercept is False

@@ -70,6 +70,7 @@ from QELM.evaluation.effect_rank import (
 from QELM.evaluation.fourier import bloch_monomials, monomial_degrees
 from QELM.evaluation.fourier_tasks import product_state
 from QELM.models.circuits.base import Layer
+from QELM.training.regression.ridge import ridge_penalty
 
 TWO_PI = 2.0 * np.pi
 
@@ -464,7 +465,13 @@ def ridge_sweep(
             (independent shot draws on the same inputs).
         y_train, y_val, y_test: Targets of the inputs, shape ``(S,)``.
         lambdas: Relative regularisations; the absolute one is
-            ``lambda * S * tr(Sigma_hat) / d`` for each repetition.
+            ``lambda * S * tr(Sigma_hat) / d`` for each repetition, the
+            ``"relative"`` convention of
+            :func:`QELM.training.regression.ridge.ridge_penalty` on the
+            centred features (issue #372). The sweep is vectorised over
+            ``lambda`` through one SVD; it equals
+            ``RidgeReadout(penalty="relative", fit_intercept=True)`` for each
+            ``lambda`` (``tests/test_ridge.py``).
     """
     reps = train.shape[0]
     lambdas = np.asarray(lambdas, dtype=float)
@@ -475,7 +482,8 @@ def ridge_sweep(
         x = train[r] - mean
         ym = float(y_train.mean())
         u, s, vt = np.linalg.svd(x, full_matrices=False)
-        scale = float(np.sum(s**2)) / x.shape[1]
+        # ridge_penalty(x, 1, "relative") = tr(x^T x) / d = sum(s**2) / d.
+        scale = ridge_penalty(x, 1.0, "relative")
         lam = lambdas * max(scale, 1e-300)
         uty = u.T @ (y_train - ym)
         filt = s[None, :] / (s[None, :] ** 2 + lam[:, None])  # (L, k)

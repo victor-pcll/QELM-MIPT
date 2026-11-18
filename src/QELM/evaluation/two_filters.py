@@ -32,6 +32,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from QELM.evaluation.clifford_ridge import bloch_components
+from QELM.training.regression.ridge import RidgeReadout
 
 
 def all_codes(N: int) -> np.ndarray:
@@ -82,19 +83,15 @@ def ridge_fit(phi: np.ndarray, y: np.ndarray, lam: float) -> np.ndarray:
 
     ``lam = 0`` is the orthogonal projection (pseudo-inverse). Rows carry
     equal weight, so on the full population this is the population ridge.
+    ``lam`` is the ``"mean"`` convention of
+    :func:`QELM.training.regression.ridge.ridge_penalty` (issue #372): the fit
+    is :class:`~QELM.training.RidgeReadout` with ``penalty="mean"``.
     """
     phi = np.asarray(phi, dtype=float)
     y = np.asarray(y, dtype=float)
     if phi.shape[1] == 0:
         return np.zeros_like(y)
-    s = phi.shape[0]
-    gram = phi.T @ phi / s
-    rhs = phi.T @ y / s
-    if lam == 0:
-        coef = np.linalg.lstsq(phi, y, rcond=None)[0]
-    else:
-        coef = np.linalg.solve(gram + lam * np.eye(gram.shape[0]), rhs)
-    return np.asarray(phi @ coef)
+    return np.asarray(phi @ ridge_coef(phi, y, lam))
 
 
 def ridge_coef(phi: np.ndarray, y: np.ndarray, lam: float) -> np.ndarray:
@@ -103,12 +100,10 @@ def ridge_coef(phi: np.ndarray, y: np.ndarray, lam: float) -> np.ndarray:
     y = np.asarray(y, dtype=float)
     if phi.shape[1] == 0:
         return np.zeros(0)
-    if lam == 0:
-        return np.asarray(np.linalg.lstsq(phi, y, rcond=None)[0])
-    s = phi.shape[0]
-    gram = phi.T @ phi / s
-    reg = gram + lam * np.eye(gram.shape[0])
-    return np.asarray(np.linalg.solve(reg, phi.T @ y / s))
+    readout = RidgeReadout({"alpha": lam, "penalty": "mean"})
+    readout.fit(phi, y)
+    assert readout.W is not None
+    return np.asarray(readout.W)
 
 
 def any_decoder_error(phi: np.ndarray, y: np.ndarray) -> float:
