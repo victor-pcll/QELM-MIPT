@@ -1,0 +1,303 @@
+{
+  "title": "Deux qubits : la cha\u00eene P_a \u2297 P_b est le produit des deux fonctions \u00e0 un qubit",
+  "panels": [
+    {
+      "title": "qubit 1 : I",
+      "xlabel": "s\u2081 / \u03c0",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "qubit 1 : X",
+      "xlabel": "s\u2081 / \u03c0",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "qubit 1 : Y",
+      "xlabel": "s\u2081 / \u03c0",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "qubit 1 : Z",
+      "xlabel": "s\u2081 / \u03c0",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "qubit 0 : I\ns\u2080 / \u03c0",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "qubit 0 : X\ns\u2080 / \u03c0",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "qubit 0 : Y\ns\u2080 / \u03c0",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "qubit 0 : Z\ns\u2080 / \u03c0",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "chemin \u03b8 = \u03c6 = s",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    },
+    {
+      "title": "",
+      "xlabel": "",
+      "ylabel": "B_ab(s\u2080, s\u2081) = n\u2080^a \u00b7 n\u2081^b",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    }
+  ],
+  "extra": {
+    "strings": [
+      "II",
+      "IX",
+      "IY",
+      "IZ",
+      "XI",
+      "XX",
+      "XY",
+      "XZ",
+      "YI",
+      "YX",
+      "YY",
+      "YZ",
+      "ZI",
+      "ZX",
+      "ZY",
+      "ZZ"
+    ],
+    "weight": [
+      0,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      1,
+      2,
+      2,
+      2,
+      1,
+      2,
+      2,
+      2
+    ]
+  }
+}
