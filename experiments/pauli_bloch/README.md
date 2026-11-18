@@ -42,8 +42,8 @@ campaign: every figure is exact and the script runs in about 15 s.
 2. **Inner product.** `E[B_a B_b]` is the tensor power of the single-qubit
    moments (`gram_matrix`): `diag(1, 1/3, 1/3, 1/3)` for a Bloch vector uniform
    on the sphere, hence `w_a = 3^{-|a|}`; for `theta, phi` uniform in
-   `[0, pi]^2`, the bounds of `DenseAngleEncoding`, the moments are not
-   diagonal (Gauss-Legendre quadrature).
+   `[0, pi]^2`, the bounds of `DenseAngleEncoding` until issue #368 (the phase
+   now spans `[0, 2 pi]`), the moments are not diagonal (Gauss-Legendre quadrature).
 3. **Check.** `Tr[P_a rho(x)]` from `DenseAngleEncoding.rho` against the
    closed-form `B_a(x)`, and a random Hermitian `O` against `sum_a c_a B_a`.
 4. **Features.** `heisenberg_z`: the Heisenberg image of `Z_i` through the

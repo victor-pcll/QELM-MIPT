@@ -11,13 +11,17 @@ class DenseAngleEncoding(ProductEncoding):
     """``⊗_i (cos(x_{2i-1} / 2) |0> + e^{i x_{2i}} sin(x_{2i-1} / 2) |1>)``.
 
     Two features per qubit, ``N = ceil(M / 2)``: the first sets the polar
-    angle of the Bloch vector, the second its azimuth. Both lie in
-    ``[0, pi]``. Config block: ``dense_angle_encoding: {N, n_features}``.
+    angle of the Bloch vector, in ``[0, pi]``, the second its azimuth, in
+    ``[0, 2 pi]``, so that the Bloch vector
+    ``(sin t cos phi, sin t sin phi, cos t)`` covers the whole sphere
+    (issue #368; before it the phase stopped at ``pi`` and ``<Y> >= 0``).
+    The phase is periodic: ``phi = 0`` and ``phi = 2 pi`` give the same
+    state. Config block: ``dense_angle_encoding: {N, n_features}``.
     """
 
     name: str = "dense_angle_encoding"
     features_per_qubit: int = 2
-    bounds: tuple[tuple[float, float], ...] = ((0.0, np.pi), (0.0, np.pi))
+    bounds: tuple[tuple[float, float], ...] = ((0.0, np.pi), (0.0, 2 * np.pi))
 
     def amplitudes(self, groups: np.ndarray) -> np.ndarray:
         """Return ``(cos(t/2), e^{i phi} sin(t/2))`` per qubit."""

@@ -133,8 +133,10 @@ def test_out_of_bounds_inputs_raise(cls: type[ProductEncoding]) -> None:
 def test_bounds_of_each_encoding() -> None:
     pi = np.pi
     assert AngleEncoding({"N": 2}).feature_bounds().tolist() == [[0, pi], [0, pi]]
-    assert DenseAngleEncoding({"N": 1}).feature_bounds().tolist() == [[0, pi], [0, pi]]
-    assert UniformBlochEncoding({"N": 1}).feature_bounds().tolist() == [[0, 1], [0, pi]]
+    dense = DenseAngleEncoding({"N": 1}).feature_bounds().tolist()
+    assert dense == [[0, pi], [0, 2 * pi]]
+    uniform = UniformBlochEncoding({"N": 1}).feature_bounds().tolist()
+    assert uniform == [[0, 1], [0, 2 * pi]]
     assert GeneralEncoding({"N": 1}).feature_bounds().tolist() == [[0, 1], [0, 1]]
 
 
@@ -184,3 +186,41 @@ def test_registry_and_config() -> None:
         enc = cls.from_config(cfg)
         assert (enc.N, enc.Nr) == (8, 0)
         assert enc.n_features == 8 * cls.features_per_qubit
+
+
+@pytest.mark.parametrize("cls", [DenseAngleEncoding, UniformBlochEncoding])
+def test_phase_covers_the_whole_sphere(cls: type) -> None:
+    """The phase spans [0, 2 pi]: <Y> < 0 is reached, and <X>, <Y> are centred
+    for a phase uniform on its interval (issue #368)."""
+    enc = cls({"N": 1})
+    (low_t, high_t), (low_p, high_p) = enc.feature_bounds()
+    mid = (low_t + high_t) / 2  # equator for the dense encoding, u = 1/2
+    # phi = 3 pi / 2 points along -Y.
+    r = enc.bloch_vectors(np.array([mid, 3 * np.pi / 2]))
+    np.testing.assert_allclose(r, [[0.0, -1.0, 0.0]], atol=1e-12)
+    # The two ends of the phase interval are the same state.
+    np.testing.assert_allclose(
+        enc.bloch_vectors(np.array([mid, low_p])),
+        enc.bloch_vectors(np.array([mid, high_p])),
+        atol=1e-12,
+    )
+    # A phase uniform on [0, 2 pi) centres <X> and <Y> on every parallel.
+    phi = np.linspace(low_p, high_p, 64, endpoint=False)
+    for theta in np.linspace(low_t, high_t, 5):
+        x = np.stack([np.full_like(phi, theta), phi], axis=1)
+        mean = enc.bloch_vectors(x)[:, 0, :2].mean(axis=0)
+        np.testing.assert_allclose(mean, [0.0, 0.0], atol=1e-12)
+
+
+def test_uniform_bloch_box_maps_to_the_uniform_sphere() -> None:
+    """Features uniform on the box give Bloch vectors uniform on the sphere:
+    zero mean and second moments I / 3 (Archimedes, issue #368)."""
+    enc = UniformBlochEncoding({"N": 1})
+    u, phi = np.meshgrid(
+        (np.arange(200) + 0.5) / 200,
+        2 * np.pi * np.arange(64) / 64,
+        indexing="ij",
+    )
+    r = enc.bloch_vectors(np.stack([u.ravel(), phi.ravel()], axis=1))[:, 0, :]
+    np.testing.assert_allclose(r.mean(axis=0), 0.0, atol=1e-12)
+    np.testing.assert_allclose(r.T @ r / len(r), np.eye(3) / 3, atol=1e-4)
