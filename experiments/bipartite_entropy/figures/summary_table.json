@@ -1,0 +1,59 @@
+{
+  "title": "",
+  "panels": [
+    {
+      "title": "Critical point p_c and exponent nu of the MIPT from three collapses (periodic brickwork, T = 2N)\nvalue(bootstrap error) of the main collapse; [range over data variants] = systematic spread",
+      "xlabel": "",
+      "ylabel": "",
+      "xscale": "linear",
+      "yscale": "linear",
+      "curves": [],
+      "histograms": [],
+      "heatmaps": []
+    }
+  ],
+  "extra": {
+    "cells": {
+      "clifford": {
+        "Delta": {
+          "p_c": "0.1610(2)\n[0.160 - 0.161]",
+          "nu": "1.30(1)\n[1.28 - 1.30]"
+        },
+        "S": {
+          "p_c": "0.1630(11)\n[0.163 - 0.164]",
+          "nu": "1.15(2)\n[1.15 - 1.21]"
+        },
+        "I3": {
+          "p_c": "0.1590(3)\n[0.159 - 0.160]",
+          "nu": "1.37(1)\n[1.28 - 1.42]"
+        }
+      },
+      "haar": {
+        "Delta": {
+          "p_c": "0.1805(8)\n[0.177 - 0.183]",
+          "nu": "1.59(2)\n[1.57 - 1.63]"
+        },
+        "S": {
+          "p_c": "not constrained\n(flat valley 0.15 - 0.25;\nmin. 0.153)",
+          "nu": "not constrained\n(flat valley 0.6 - 1.0;\nmin. 0.63)"
+        },
+        "I3": {
+          "p_c": "0.1888(10)\n[0.181 - 0.189]",
+          "nu": "1.05(2)\n[1.03 - 1.05]"
+        }
+      }
+    },
+    "sizes": {
+      "clifford": {
+        "Delta": "N = 16-128",
+        "S": "N = 16-256",
+        "I3": "N = 16-256"
+      },
+      "haar": {
+        "Delta": "N = 4-12",
+        "S": "N = 8-20",
+        "I3": "N = 8, 12, 16, 20"
+      }
+    }
+  }
+}

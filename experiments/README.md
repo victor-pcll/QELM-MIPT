@@ -61,6 +61,7 @@ commands and every option of the launchers.
 | [`clifford_state_readout/`](clifford_state_readout/README.md) | `S_R` and purity of the reference qubit from the final Clifford state, ridge / quadratic / MLP | can a readout of the state probe purification (#292) |
 | [`clifford_collapse_map/`](clifford_collapse_map/README.md) | heat map of the collapse quality of `Delta` over `(p_c, nu)`, Clifford runs up to `N = 128` | which `(p_c, nu)` collapse the Clifford MIPT best (#346) |
 | [`haar_collapse_map/`](haar_collapse_map/README.md) | exact `W(m)` and `Delta` on the periodic Haar brickwork, `N = 4` to 12: crossings, collapse and `(p_c, nu)` quality map | does `Delta` recover the literature Haar `p_c` and `nu` (#348) |
+| [`bipartite_entropy/`](bipartite_entropy/README.md) | entanglement profile `S(l)` and `I3` of the references after the full readout (Clifford `N = 16`-256, Haar backward trajectories `N = 8`-20): crossings, collapse, `(p_c, nu)` quality map, `alpha(p)` | does the bipartite entropy of the effect dictionary give the same `p_c`, `nu` as `Delta` (#358) |
 | [`symmetry_regimes/`](symmetry_regimes/README.md) | QELM on the state, on `M` and on both, and Bayes on `M`, for six gate families (Haar, Clifford, U(1), Z2, dipole, diagonal), four encodings and the Z or X label of `R` | which tasks put the label in the state, which in the record (#311) |
 | [`charge_variance/`](charge_variance/README.md) | per-trajectory `Var(Q)` from the final U(1) state, linear / two-point / quadratic readouts | can a readout of the state probe charge sharpening (#299) |
 | [`QELM_S/`](QELM_S/README.md) | entanglement entropy and phase label, TFIM vs Floquet / Haar / U(1) | Floquet vs continuous, phase classification (task 1C) |
@@ -1777,6 +1778,19 @@ Follow-up (issue #339), Haar against Clifford and the entropy profile `S(l)`:
 `experiments/clifford_ridge/haar_locality.sh`, then `plot_locality.py` and
 `plot_haar_span.py`.
 Results and reading in `experiments/clifford_ridge/README.md`.
+
+## Map the bipartite entropy S(l) of the effect dictionary (issue #358)
+
+```bash
+experiments/bipartite_entropy/run_all.sh          # OUT=..., JOBS=4; about 5 h
+uv run python experiments/bipartite_entropy/analyse.py --runs outputs/bipartite_entropy
+```
+
+One size by hand: `run.py haar --n 12 --samples 2000` or
+`run.py clifford --n 64 --samples 600` (options `--t`, `--p`, `--seed`,
+`--stride` for the Haar interval starts, `--out`). A run resumes from the
+`p` already written. Results and reading in
+`experiments/bipartite_entropy/README.md`.
 
 ## Draw the QELM verdict figures (issue #303)
 
