@@ -171,11 +171,12 @@ def test_encoding_inputs_follow_the_bounds() -> None:
     script = _load(SCRIPT)
     cfg = _cfg("double_descent.encoding=uniform_bloch_encoding")
     bounds = script.input_bounds(script.build_encoding(cfg))
-    np.testing.assert_allclose(bounds, [[0, 1], [0, np.pi]] * 3)
+    # The phase spans the whole azimuth, [0, 2 pi] (issue #368).
+    np.testing.assert_allclose(bounds, [[0, 1], [0, 2 * np.pi]] * 3)
     u = np.array([[0.0] * 6, [0.5] * 6, [1.0] * 6])
     np.testing.assert_allclose(
         script.encoding_inputs(u, bounds),
-        [[0] * 6, [0.5, np.pi / 2] * 3, [1, np.pi] * 3],
+        [[0] * 6, [0.5, np.pi] * 3, [1, 2 * np.pi] * 3],
     )
     # The default encoding keeps the angles of issue #181, in [0, pi].
     default = script.build_encoding(_cfg())
