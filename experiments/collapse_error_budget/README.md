@@ -100,7 +100,8 @@ to them.
 
 One figure that explains the method on Clifford, from the mode measurement
 `W(m)` only: `Delta = N - log2(1 + W(m))` of #346, `T = 2N`,
-`N = 16, 32, 64, 128`, 23 values of `p` from 0.08 to 0.30. `I3` and
+`N = 16, 32, 64, 128`, the 14 values of `p` from 0.08 to 0.21 (above,
+`Delta` of the large sizes is tiny and noisy). `I3` and
 `S(N/2)` (#358) are left out on purpose: they come from the state of the
 references, not from `W(m)`.
 
@@ -112,9 +113,10 @@ references, not from `W(m)`.
 `N`): the curves cross at `p_c` (grey band `p_c ± δp_c`, linear zoom in
 the inset). **(b)** the collapse against `(p - p_c) N^(1/nu)` at the
 optimum. **(c)** the exact Houdayer-Hartmann quality `Q` over
-`(p_c, nu)` (red, log scale): the optimum `Q_min = 5.4` at
-`p_c = 0.1615 ± 0.0007`, `nu = 1.32 ± 0.03`, the contour
+`(p_c, nu)` (red, log scale): the optimum `Q_min = 6.2` at
+`p_c = 0.1619 ± 0.0008`, `nu = 1.33 ± 0.03`, the contour
 `Q = 1.3 Q_min` whose projections give these bars, and Gullans & Huse
 (PRL 2020, entropy of a reference qubit: `0.1598 ± 0.0005`, `1.30 ± 0.05`).
-The optimum and bars are read from `pc_nu_plane_full.json` (no refit);
-only the map of (c) is recomputed, in a few seconds.
+The fit is redone on `p <= 0.21` (`--p-max`); with all 23 values of `p`
+it gives `0.1615 ± 0.0007`, `1.32 ± 0.03`, `Q_min = 5.4`
+(`pc_nu_plane.py`). A few seconds.

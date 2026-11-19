@@ -4,7 +4,9 @@
 Everything comes from the mode measurement ``W(m)`` through the order
 parameter ``Delta = N - log2(1 + W(m))`` of #346 (periodic brickwork of
 random Clifford gates, ``Z`` measurements with probability ``p``,
-``T = 2N``, ``N = 16, 32, 64, 128``, 23 values of ``p`` from 0.08 to 0.30).
+``T = 2N``, ``N = 16, 32, 64, 128``, the values of ``p`` from 0.08 to
+0.21 only (``--p-max``): above, ``Delta`` of the large sizes is tiny and
+noisy and carries no information on the transition).
 One figure, three panels:
 
 (a) ``Delta`` against ``p`` for every ``N`` (shades of blue, light for small
@@ -17,9 +19,9 @@ One figure, three panels:
     Gullans & Huse value for the same circuit and the closest quantity (the
     entropy of a reference qubit).
 
-The optimum and its error bars are read from ``figures/pc_nu_plane_full.json``
-(written by ``pc_nu_plane.py``, no refit here). Only the map of panel (c) is
-recomputed, on a wider grid (a few seconds). Run from this folder:
+The optimum is refitted on these points (grid then Nelder-Mead, as in
+``pc_nu_plane.py``), and its error bars are the projected half-widths of the
+region ``Q <= 1.3 Q_min``. A few seconds. Run from this folder:
 
     uv run python clifford_methodology.py
 """
@@ -36,10 +38,11 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+from error_budget import GRID, fit  # noqa: E402
 from matplotlib.colors import LogNorm  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 from matplotlib.patches import Patch  # noqa: E402
-from pc_nu_plane import CLIFFORD_RUNS, FACTOR, clifford_delta  # noqa: E402
+from pc_nu_plane import CLIFFORD_RUNS, FACTOR, clifford_delta, region  # noqa: E402
 
 from QELM.evaluation.finite_size_scaling import Curve, hh_quality  # noqa: E402
 
@@ -75,7 +78,7 @@ def crossing_panel(ax: Any, curves: dict[int, Curve], pc: float, dpc: float) -> 
     """(a) ``Delta(p)`` per size, the band ``p_c ± δp_c`` and a linear zoom."""
     sizes = sorted(curves)
     cols = blues(len(sizes))
-    ins = ax.inset_axes([0.56, 0.56, 0.4, 0.4])
+    ins = ax.inset_axes([0.08, 0.08, 0.4, 0.4])
     lo, hi = pc - 0.02, pc + 0.02
     zoom = []
     for col, n in zip(cols, sizes, strict=True):
@@ -173,17 +176,25 @@ def figure(curves: dict[int, Curve], row: dict[str, Any], out: Path) -> dict[str
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out", type=Path, default=HERE / "figures")
+    ap.add_argument("--p-max", type=float, default=0.21,
+                    help="keep only p <= p_max (default 0.21)")  # fmt: skip
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
-    rows = json.loads((a.out / "pc_nu_plane_full.json").read_text())["clifford"]
-    row = next(r for r in rows if r["label"].startswith("Δ"))
-    curves = clifford_delta(CLIFFORD_RUNS)
-    assert row["sizes"] == sorted(curves) and not row["subtract"]
+    curves: dict[int, Curve] = {}
+    for n, (p, y, e) in clifford_delta(CLIFFORD_RUNS).items():
+        m = p <= a.p_max + 1e-9
+        curves[n] = (p[m], y[m], e[m])
+    best = fit(curves, None, GRID)
+    wp, wn, _ = region(curves, False, best)
+    row = {"p_c": best[0], "nu": best[1], "S_min": best[2],
+           "p_c_err_1.3": wp, "nu_err_1.3": wn}  # fmt: skip
     summary = figure(curves, row, a.out)
+    summary["p_max"] = a.p_max
+    summary["points_per_N"] = {n: len(c[0]) for n, c in curves.items()}
     (a.out / "clifford_methodology_delta.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False) + "\n"
     )
-    print(summary["file"])
+    print(json.dumps(summary, ensure_ascii=False))
 
 
 if __name__ == "__main__":
