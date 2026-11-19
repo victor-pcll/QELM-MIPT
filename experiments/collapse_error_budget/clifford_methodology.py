@@ -4,8 +4,8 @@
 Everything comes from the mode measurement ``W(m)`` through the order
 parameter ``Delta = N - log2(1 + W(m))`` of #346 (periodic brickwork of
 random Clifford gates, ``Z`` measurements with probability ``p``,
-``T = 2N``, ``N = 16, 32, 64, 128``, the values of ``p`` from 0.08 to
-0.23, ``--p-max``; above, ``Delta`` of the large sizes is tiny and noisy).
+``T = 2N``, ``N = 16, 32, 64, 128``, all 23 values of ``p`` from 0.08 to
+0.30: they give the lowest ``Q_min``; ``--p-max`` can cut the tail).
 One figure, three panels:
 
 (a) ``Delta`` against ``p`` for every ``N`` (shades of blue, light for small
@@ -77,7 +77,7 @@ def crossing_panel(ax: Any, curves: dict[int, Curve], pc: float, dpc: float) -> 
     """(a) ``Delta(p)`` per size, the band ``p_c ± δp_c`` and a linear zoom."""
     sizes = sorted(curves)
     cols = blues(len(sizes))
-    ins = ax.inset_axes([0.08, 0.08, 0.4, 0.4])
+    ins = ax.inset_axes([0.57, 0.56, 0.4, 0.4])
     lo, hi = pc - 0.02, pc + 0.02
     zoom = []
     for col, n in zip(cols, sizes, strict=True):
@@ -175,8 +175,8 @@ def figure(curves: dict[int, Curve], row: dict[str, Any], out: Path) -> dict[str
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out", type=Path, default=HERE / "figures")
-    ap.add_argument("--p-max", type=float, default=0.23,
-                    help="keep only p <= p_max (default 0.23)")  # fmt: skip
+    ap.add_argument("--p-max", type=float, default=1.0,
+                    help="keep only p <= p_max (default: all p)")  # fmt: skip
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
     curves: dict[int, Curve] = {}
