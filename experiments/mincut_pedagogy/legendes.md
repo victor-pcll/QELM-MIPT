@@ -80,4 +80,15 @@ On découpe le circuit avec des ciseaux pour séparer **l'entrée ρ(x)** (en ba
 
 Dans le budget `1 = E_circuit + E_readout(k) + R²(k)` (#360), la coupe fixe la dimension de l'espace engendré par **tout** le record, c'est-à-dire le projecteur Π_C. Elle prédit donc **E_circuit = 1 − R²(∞)**. #362 a déjà montré que les modes de E_circuit sont les niveaux 2^C. Pour une cible isotrope, on attend E[R²(∞)] ≈ (2^C − 1)/(4^N − 1) en dense (#363). **E_readout(k)** compare tout le record aux parités d'au plus k bits. La coupe ne le fixe pas seule, mais elle lui donne un plafond : E_readout(k) ≤ 1 − E_circuit.
 
+## 6. E_circuit niveau par niveau de C (figure 5)
+
+![E_circuit contre C](figures/ecircuit_vs_mincut.png)
+
+**Figure 5. E_circuit = 1 − R²(∞) contre la coupe minimale, Haar, cibles isotropes (prior `flat`), 40 cibles par circuit.** En haut : lecture finale, entrées XZ, T = N (comme #362). En bas : sans lecture finale, entrées denses, T = 2N (comme #363). N = 3, 4, 5.
+
+- **Prédiction.** Pour une cible isotrope, E[R²(∞)] = d/M. Ici d est la dimension de l'espace vu par les entrées, sans la constante (2^C − 1 quand le rang vaut 2^C), et M le nombre de modes non constants visibles (3^N − 1 en XZ, 4^N − 1 en dense). Donc **E_circuit = 1 − (2^C − 1)/M**. En dense, log₂ R²(∞) ≈ C − 2N : **chaque bit qui manque à la coupe divise R²(∞) par 2**.
+- **(a, d) Par niveau.** En dense, chaque niveau est à moins de 0,005 de la prédiction (N = 4, 5), avec une dispersion d'au plus 0,006 entre circuits. En XZ à N = 4 : 0,813 ; 0,611 ; 0,213 pour C = 4, 5, 6, contre 0,812 ; 0,613 ; 0,213 prévus. La troncature XZ coupe le niveau du haut en deux : d = 71 ou 80 à C = 7 pour N = 4, et dès C = 7 (d = 95 ou 127) pour N = 5.
+- **(b, e) Contre p.** En dense, la moyenne de 1 − (2^C − 1)/M sur les masques redonne E_circuit(p) à 0,003 près pour chaque p. La dépendance en p de E_circuit est donc entièrement celle de la distribution de C. En XZ, l'écart monte jusqu'à 0,07, et il vient entièrement des niveaux du haut tronqués : la prédiction y vaut 0, alors que d = 71 donne 0,11.
+- **(c, f)** log₂ R²(∞) contre la valeur prédite. Tirets : égalité.
+
 Fichiers : figures PNG et JSON dans `figures/`. Bibliothèque : `QELM.evaluation.mincut_graph`. Scripts : `fig_circuits.py`, `data.py`, `fig_curves.py`, `draw.py`.

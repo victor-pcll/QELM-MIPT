@@ -1949,4 +1949,6 @@ cd experiments/mincut_pedagogy
 uv run python fig_circuits.py figures                 # figures 1 and 2, seconds
 uv run python data.py figures/mincut_data.json        # about 3 minutes
 uv run python fig_curves.py figures/mincut_data.json figures   # figures 3 and 4
+uv run python ecircuit_data.py figures/ecircuit_data.json      # about 1 minute
+uv run python fig_ecircuit.py figures/ecircuit_data.json figures  # figure 5
 ```

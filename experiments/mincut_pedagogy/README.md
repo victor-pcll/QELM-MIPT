@@ -11,7 +11,7 @@ The French legends of the figures are in [`legendes.md`](legendes.md).
 
 | | |
 | --- | --- |
-| Scripts | `fig_circuits.py` (drawings), `data.py` (curves), `fig_curves.py` (figures 3 and 4), `draw.py` (drawing helper) |
+| Scripts | `fig_circuits.py` (drawings), `data.py` (curves), `fig_curves.py` (figures 3 and 4), `draw.py` (drawing helper), `ecircuit_data.py` and `fig_ecircuit.py` (figure 5) |
 | Library | `QELM.evaluation.mincut_graph` (new: graph with or without final readout, causal pruning, partition, SRN `S_0`), `QELM.evaluation.r2_budget.effect_basis` (exact rank) |
 | Physical model | open brickwork, one layer = even bonds, then odd bonds, then `Z` measurements with probability `p`; with or without the final `Z` readout of every site |
 | Sizes | drawings `N = 4` (`T = 8` without readout, `T = 4` with readout); min cut `N = 4` to 32, `T = 2N`; exact Haar rank `N = 3, 4, 5`, `T = 2N`; `S_0`: `N = 8` to 64 |
@@ -101,4 +101,46 @@ or inside the circuit.
 **Figure 4. `S_0` of a half chain by min cut (SRN), in their geometry (a) and in
 the geometry of the repository (b), against our cut (c).**
 
-The JSON next to the figures holds the plotted values.
+## E_circuit level by level of C
+
+`ecircuit_data.py` computes the circuit error `E_circuit = 1 - R^2(inf)` of the
+population ridge of #360 for Haar circuits, flat (isotropic) targets and 40
+targets per circuit, in two settings. Setting 1: final readout, XZ inputs,
+`T = N` (as in #362). Setting 2: no final readout, dense inputs, `T = 2N` (as in
+#363). Sizes `N = 3, 4, 5`, with 40 circuits per `p` (16 at `N = 5`), `p` from 0
+to 0.5.
+
+**Prediction.** For an isotropic target, `E[R^2(inf)] = d / M`, where `d` is the
+dimension of the span seen by the inputs, without the constant, and `M` is the
+number of visible non-constant modes (`3^N - 1` in XZ, `4^N - 1` in dense). Since
+`d = 2^C - 1` when the rank is `2^C`, we get
+`E_circuit = 1 - (2^C - 1) / M`, and in dense `log2 R^2(inf) ≈ C - 2N`: each bit
+missing from the cut halves `R^2(inf)`.
+
+- **Dense, no final readout: the prediction holds level by level.** The mean
+  over each level is within 0.005 of `1 - (2^C - 1)/(4^N - 1)` (`N = 4, 5`), with
+  a spread over circuits of at most 0.006. At `N = 3` the spread reaches 0.02,
+  and a few masks fall below `2^C` (rank 12 against 16, or 24 against 32).
+- **XZ, final readout: the levels are sharp until the XZ truncation.** At
+  `N = 4`, the levels `C = 4, 5, 6` give 0.813, 0.611 and 0.213 against 0.812,
+  0.613 and 0.213 (spread at most 0.012). At `C = 7` the level splits into
+  `d = 71` or 80 (`3^4 - 1`), so `E_circuit` is 0.11 or 0. At `N = 5` the split
+  already starts at `C = 7` (`d = 95` or 127).
+- **Mean against `p`.** In dense, the mean of `1 - (2^C - 1)/M` over the masks
+  matches the mean `E_circuit(p)` within 0.003 at every `p`, so the `p`
+  dependence of `E_circuit` is the distribution of `C` over the masks. In XZ,
+  the gap reaches 0.07, and all of it comes from the truncated top levels,
+  where the prediction gives 0 but `d = 71` gives 0.11.
+
+![E_circuit against C](figures/ecircuit_vs_mincut.png)
+
+**Figure 5. E_circuit against the min cut.** Top: final readout, XZ inputs,
+`T = N`. Bottom: no final readout, dense inputs, `T = 2N`. (a, d) One dot per
+circuit (mean over 40 targets), with the sizes slightly shifted. Red bars:
+`1 - (2^C - 1)/M`. (b, e) Mean over circuits against `p` (dots, standard error)
+and mean of the prediction (lines). (c, f) `log2 R^2(inf)` against the predicted
+value; dashed line: equality.
+
+The JSON next to the figures holds the plotted values
+(`ecircuit_vs_mincut_summary.json`: count, mean, spread, prediction and
+observed visible ranks per `N` and `C`).
