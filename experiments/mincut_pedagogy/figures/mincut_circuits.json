@@ -1,0 +1,102 @@
+{
+ "nofinal": [
+  {
+   "title": "(a) $p = 0$: no measurement",
+   "C": 0,
+   "rank": 1,
+   "K": 0,
+   "n1": 0,
+   "visible_xz_minus_const": 0
+  },
+  {
+   "title": "(b) $K = 1$: q2 at $t = 5$",
+   "C": 1,
+   "rank": 2,
+   "K": 1,
+   "n1": 0,
+   "visible_xz_minus_const": 1
+  },
+  {
+   "title": "(c) $K = 2$: q1 at $t = 2$, q3 at $t = 6$",
+   "C": 2,
+   "rank": 4,
+   "K": 2,
+   "n1": 0,
+   "visible_xz_minus_const": 3
+  },
+  {
+   "title": "(d) $K = 3$ but only 2 bits:\nq0, q1 at $t = 4$, then q0 at $t = 5$",
+   "C": 2,
+   "rank": 4,
+   "K": 3,
+   "n1": 0,
+   "visible_xz_minus_const": 3
+  },
+  {
+   "title": "(e) Zeno, $p = 1$: $K = 32$",
+   "C": 4,
+   "rank": 16,
+   "K": 32,
+   "n1": 4,
+   "visible_xz_minus_const": 15
+  },
+  {
+   "title": "(f) intermediate: $K = 7$, $n_1 = 0$",
+   "C": 6,
+   "rank": 64,
+   "K": 7,
+   "n1": 0,
+   "visible_xz_minus_const": 63
+  }
+ ],
+ "final": [
+  {
+   "title": "(a) $p = 0$: final readout only",
+   "C": 4,
+   "rank": 16,
+   "K": 0,
+   "n1": 0,
+   "visible_xz_minus_const": 15
+  },
+  {
+   "title": "(b) $K = 1$: q2 at $t = 2$",
+   "C": 5,
+   "rank": 32,
+   "K": 1,
+   "n1": 0,
+   "visible_xz_minus_const": 31
+  },
+  {
+   "title": "(c) $K = 2$: q1 at $t = 1$, q3 at $t = 3$",
+   "C": 6,
+   "rank": 64,
+   "K": 2,
+   "n1": 1,
+   "visible_xz_minus_const": 63
+  },
+  {
+   "title": "(d) last layer is free:\nq0 at $t = 4$ repeats the readout",
+   "C": 4,
+   "rank": 16,
+   "K": 1,
+   "n1": 0,
+   "visible_xz_minus_const": 15
+  },
+  {
+   "title": "(e) Zeno, $p = 1$",
+   "C": 4,
+   "rank": 16,
+   "K": 16,
+   "n1": 4,
+   "visible_xz_minus_const": 15
+  },
+  {
+   "title": "(f) $C = 7$: $K = 4$",
+   "C": 7,
+   "rank": 128,
+   "K": 4,
+   "n1": 1,
+   "visible_xz_minus_const": 71
+  }
+ ]
+}
