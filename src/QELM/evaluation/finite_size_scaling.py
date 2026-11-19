@@ -171,6 +171,83 @@ def collapse_quality(
     return float(np.mean(terms)) if terms else float("inf")
 
 
+def hh_terms(
+    curves: Mapping[int, Curve], p_c: float, nu: float, subtract: bool = False
+) -> np.ndarray:
+    """Terms of the exact Houdayer-Hartmann quality, appendix A of PRB 70, 014418.
+
+    For each point ``(x_ij, y_ij, dy_ij)`` of size ``i``, with
+    ``x = (p - p_c) N**(1 / nu)``, every other size that brackets ``x_ij``
+    gives its two bracketing points. One straight line is fitted through all
+    these points, weighted by ``1 / dy**2``, and read at ``x_ij`` as
+    ``(Y_ij, dY_ij)`` (eqs. A2, A3). The term is
+    ``(y_ij - Y_ij)**2 / (dy_ij**2 + dY_ij**2)``. A point that no other size
+    brackets gives no term.
+
+    :func:`collapse_quality` instead interpolates each other size on its own
+    and averages over pairs; the optimum is close, but only this quality has
+    the reference value ``S ~ 1`` of the paper.
+
+    Args:
+        curves: ``{N: (p, O, err)}``, ``p`` increasing.
+        p_c: Trial critical point.
+        nu: Trial exponent, positive.
+        subtract: Use ``O(p, N) - O(p_c, N)`` (:func:`subtract_at`).
+
+    Returns:
+        The terms, one per point with a master curve; empty if ``nu <= 0``.
+    """
+    if nu <= 0:
+        return np.array([])
+    if subtract:
+        curves = subtract_at(curves, p_c)
+    scaled = [
+        ((np.asarray(p) - p_c) * N ** (1 / nu), np.asarray(y), np.asarray(e))
+        for N, (p, y, e) in curves.items()
+    ]
+    terms: list[float] = []
+    for i, (x, y, e) in enumerate(scaled):
+        for xi, yi, ei in zip(x, y, e, strict=True):
+            xs: list[float] = []
+            ys: list[float] = []
+            ws: list[float] = []
+            for k, (xk, yk, ek) in enumerate(scaled):
+                if k == i:
+                    continue
+                j = int(np.searchsorted(xk, xi))
+                if j == 0 or j == len(xk):
+                    continue
+                xs += [xk[j - 1], xk[j]]
+                ys += [yk[j - 1], yk[j]]
+                ws += [1 / ek[j - 1] ** 2, 1 / ek[j] ** 2]
+            if not xs:
+                continue
+            xa, ya, wa = np.array(xs), np.array(ys), np.array(ws)
+            K, Kx, Ky = wa.sum(), (wa * xa).sum(), (wa * ya).sum()
+            Kxx, Kxy = (wa * xa**2).sum(), (wa * xa * ya).sum()
+            D = K * Kxx - Kx**2
+            if D <= 0:
+                continue
+            Y = (Kxx * Ky - Kx * Kxy) / D + xi * (K * Kxy - Kx * Ky) / D
+            dY2 = (Kxx - 2 * xi * Kx + xi**2 * K) / D
+            terms.append(float((yi - Y) ** 2 / (ei**2 + dY2)))
+    return np.array(terms)
+
+
+def hh_quality(
+    curves: Mapping[int, Curve], p_c: float, nu: float, subtract: bool = False
+) -> float:
+    """Exact Houdayer-Hartmann quality ``S``: the mean of :func:`hh_terms`.
+
+    About 1 when the data collapse within their error bars.
+
+    Returns:
+        ``S``, or ``inf`` when no point has a master curve.
+    """
+    terms = hh_terms(curves, p_c, nu, subtract)
+    return float(terms.mean()) if len(terms) else float("inf")
+
+
 def quality_map(
     curves: Mapping[int, Curve],
     p_c_grid: np.ndarray,

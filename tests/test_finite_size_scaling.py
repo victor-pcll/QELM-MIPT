@@ -11,6 +11,8 @@ from QELM.evaluation.finite_size_scaling import (
     crossing_errors,
     crossings,
     fit_collapse,
+    hh_quality,
+    hh_terms,
     quality_map,
 )
 
@@ -87,3 +89,45 @@ def test_quality_map_is_collapse_quality_on_the_grid() -> None:
     assert q.shape == (3, 3)
     assert q[0, 2] == collapse_quality(curves, 0.14, 2.0)
     assert np.unravel_index(np.argmin(q), q.shape) == (1, 1)
+
+
+def test_hh_terms_match_a_hand_computed_case() -> None:
+    # nu = 1 and p of size 2 halved: both sizes sit at x = 0, 1, 2. With two
+    # sizes, the master curve of a point is the line through the two points
+    # of the other size that bracket it, so every term is known by hand.
+    y1, y2 = np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.5, 2.0])
+    curves = {
+        1: (np.array([0.0, 1.0, 2.0]), y1, np.full(3, 0.1)),
+        2: (np.array([0.0, 0.5, 1.0]), y2, np.full(3, 0.1)),
+    }
+    terms = hh_terms(curves, 0.0, 1.0)
+    # x = 0 is not bracketed (no point strictly to its left). At x = 1 the
+    # line through (0, 0) and (1, y_other) gives Y = y_other, dY = 0.1:
+    # term (1 - 1.5)^2 / 0.02 = 12.5. At x = 2, Y = 2 and the term is 0.
+    assert sorted(terms) == pytest.approx([0.0, 0.0, 12.5, 12.5])
+    assert hh_quality(curves, 0.0, 1.0) == pytest.approx(6.25)
+
+
+def test_hh_quality_is_about_one_for_noisy_exact_scaling() -> None:
+    noise = 0.01
+    rng = np.random.default_rng(1)
+    p = np.linspace(0.10, 0.22, 25)
+    values = []
+    for _ in range(20):
+        curves = {}
+        for N in (16, 32, 64):
+            y = 0.5 * (1 - np.tanh((p - 0.16) * N ** (1 / 1.3)))
+            curves[N] = (p, y + noise * rng.normal(size=p.size), np.full_like(p, noise))
+        values.append(hh_quality(curves, 0.16, 1.3))
+    assert 0.6 < float(np.mean(values)) < 1.6
+
+
+def test_hh_quality_is_minimal_near_the_true_pair() -> None:
+    curves = _synthetic(0.16, 1.3)
+    # Exact scaling: only the linear interpolation of tanh is left at the
+    # true pair, far below the quality at a wrong p_c or nu.
+    best = hh_quality(curves, 0.16, 1.3)
+    assert best < 5
+    assert hh_quality(curves, 0.17, 1.3) > 50 * best
+    assert hh_quality(curves, 0.16, 2.0) > 50 * best
+    assert hh_quality(curves, 0.16, 0.0) == float("inf")
