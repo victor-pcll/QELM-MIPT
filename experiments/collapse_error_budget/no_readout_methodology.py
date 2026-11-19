@@ -21,7 +21,7 @@ recomputed with the exact Houdayer-Hartmann quality. Each figure:
 (b) collapse at the optimum;
 (c) ``Q(p_c, nu)`` in red, light near ``Q_min`` and dark for high ``Q``, the
     contour ``Q = 1.3 Q_min``, the optimum with its bars, the literature
-    value for the same circuit in orange.
+    value for the same circuit (open triangle).
 
 When the region touches the edge of the search grid (no finite optimum),
 panel (b) says so and panel (c) shows the search grid. The runs are not in
@@ -56,8 +56,7 @@ from QELM.evaluation.finite_size_scaling import (  # noqa: E402
 RATIO = 4
 FACTOR = 1.3
 BLUE = "#08306b"
-ORANGE = "#e6550d"
-MARKERS = ["o", "s", "D", "^", "v", "P"]
+MARKERS = ["o"] * 6  # same simple marker for every N, as clifford_methodology
 STYLE = {"ms": 3.4, "lw": 0.9, "elinewidth": 0.8, "capsize": 0}
 SEARCH = ((0.10, 0.26), (0.6, 3.0))  # search grid of the analysis
 NU = r"$\nu$"
@@ -239,9 +238,8 @@ def panel_c(ax: Any, fig: Any, c: dict[int, Curve], o: dict[str, Any],
                     mec="white", mew=0.8, capsize=3, lw=1.3, zorder=4)  # fmt: skip
     on_map = pcs[0] <= lit[1] <= pcs[-1] and nus[0] <= lit[3] <= nus[-1]
     if on_map:
-        ax.errorbar(lit[1], lit[3], xerr=lit[2], yerr=lit[4], fmt="^", ms=5.5,
-                    color=ORANGE, mec="k", mew=0.6, capsize=3, lw=1.2,
-                    zorder=4)  # fmt: skip
+        ax.errorbar(lit[1], lit[3], xerr=lit[2], yerr=lit[4], fmt="^", ms=5,
+                    color="k", mfc="white", capsize=3, lw=1.0, zorder=4)  # fmt: skip
     ax.set_xlim(pcs[0], pcs[-1])
     ax.set_ylim(nus[0], nus[-1])
     ax.set_xlabel("$p_c$")
@@ -271,8 +269,8 @@ def figure(model: str, obs: str, fit: dict[str, Any], runs: Path, out: Path) -> 
 
     sizes = sorted(c)
     blank = Line2D([], [], ls="none", marker="")
-    handles: list[Any] = [blank]
-    labels = [f"This work: {o['plain']}"]
+    handles: list[Any] = []
+    labels: list[str] = []
     for k, (col, n) in enumerate(zip(blues(len(sizes)), sizes, strict=True)):
         handles.append(Line2D([], [], color=col, marker=MARKERS[k], ms=3.4, lw=0.9))
         labels.append(f"N = {n}")
@@ -292,20 +290,13 @@ def figure(model: str, obs: str, fit: dict[str, Any], runs: Path, out: Path) -> 
     else:
         labels.append(f"no finite optimum\n(Q_min = {fit['Q_min']:.0f} at the edge)")
         handles.append(blank)
-    handles += [
-        blank,
-        Line2D([], [], color=ORANGE, marker="^", ms=5.5, mec="k", mew=0.6, ls="none"),
-    ]
+    handles += [Line2D([], [], color="k", marker="^", mfc="white", ms=5, ls="none")]
     labels += [
-        "Literature, same circuit",
         f"{lit[0]}\n$p_c$ = {lit[1]} ± {lit[2]}\n{NU} = {lit[3]:.2f} ± {lit[4]}"
         + ("" if on_map else "\n(outside the map)"),
     ]
-    leg = fig.legend(handles, labels, loc="center left", bbox_to_anchor=(1.0, 0.5),
-                     frameon=False, fontsize=8.6, labelspacing=0.8)  # fmt: skip
-    for t in leg.get_texts():
-        if t.get_text().startswith(("This work", "Literature")):
-            t.set_fontweight("bold")
+    fig.legend(handles, labels, loc="center left", bbox_to_anchor=(1.0, 0.5),
+               frameon=False, fontsize=8.8, labelspacing=0.9)  # fmt: skip
     fig.suptitle(f"{TITLE[model]} MIPT without final readout, from the Fourier weights "
                  f"W_A: periodic brickwork, Z measurements, T = 4N, N = "
                  f"{', '.join(map(str, sizes))}", fontsize=12)  # fmt: skip
