@@ -25,7 +25,7 @@ evaluated without any approximation.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -106,10 +106,47 @@ def haar_record(
     if not cps or cps[0] < 1 or any(b <= a for a, b in zip(cps, cps[1:], strict=False)):
         raise ValueError(f"checkpoints must be positive and increasing, got {cps}.")
     dim = 2**n
-    marks = {c: i for i, c in enumerate(cps)}
     weight = np.zeros(len(cps))
     delta = np.zeros(len(cps))
     measured = np.zeros(len(cps), dtype=int)
+    for i, k, count in evolve_kraus(n, p, cps, rng, dtype):
+        purity = _purity(k)
+        weight[i] = dim * purity - 1.0
+        delta[i] = n - np.log2(dim * purity)
+        measured[i] = count
+    return Record(weight=weight, delta=delta, measured=measured)
+
+
+def evolve_kraus(
+    n: int,
+    p: float,
+    checkpoints: Sequence[int],
+    rng: np.random.Generator,
+    dtype: type = np.complex128,
+) -> Iterator[tuple[int, np.ndarray, int]]:
+    """Evolve ``K_m / sqrt(2^N)`` and yield it at each checkpoint.
+
+    The random stream (gates, measured sites, outcomes) is the one of
+    :func:`haar_record`, which reads its ``W`` and ``Delta`` from here.
+
+    Args:
+        n: Number of qubits, even, at least 4 (checked by the callers).
+        p: Measurement probability of each site after each half-layer.
+        checkpoints: Increasing positive numbers of half-layers.
+        rng: Random generator.
+        dtype: Complex type of the Kraus operator.
+
+    Yields:
+        ``(i, k, count)``: index of the checkpoint; ``k``, shape
+        ``(2^N, 2^N)``, rows the output basis (cyclically rotated, see
+        below), columns the input basis with qubit 0 the most significant
+        bit; the number of measurements so far. ``k`` is a working buffer,
+        overwritten when the generator resumes. ``k^dagger k`` does not
+        depend on the rotation of the rows.
+    """
+    cps = list(checkpoints)
+    dim = 2**n
+    marks = {c: i for i, c in enumerate(cps)}
     count = 0
     # k is K / sqrt(2^N), output qubits first (rows), input basis states as
     # columns: Tr[k^dagger k] = Tr[E] / 2^N = 1. Every gate is then a matmul
@@ -142,12 +179,7 @@ def haar_record(
             k /= np.sqrt(p0 if o == 0 else total - p0)
             count += 1
         if t + 1 in marks:
-            i = marks[t + 1]
-            purity = _purity(k)
-            weight[i] = dim * purity - 1.0
-            delta[i] = n - np.log2(dim * purity)
-            measured[i] = count
-    return Record(weight=weight, delta=delta, measured=measured)
+            yield marks[t + 1], k, count
 
 
 def _rotate_one(k: np.ndarray, out: np.ndarray, forward: bool) -> None:
