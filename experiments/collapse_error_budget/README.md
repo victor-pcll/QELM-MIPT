@@ -113,7 +113,7 @@ references, not from `W(m)`.
 `N`): the curves cross at `p_c` (grey band `p_c ± δp_c`, linear zoom in
 the inset). **(b)** the collapse against `(p - p_c) N^(1/nu)` at the
 optimum. **(c)** the exact Houdayer-Hartmann quality `Q` over
-`(p_c, nu)` (red, log scale): the optimum `Q_min = 6.2` at
+`(p_c, nu)` (red, log scale, light near `Q_min`, dark for high `Q`): the optimum `Q_min = 6.2` at
 `p_c = 0.1619 ± 0.0008`, `nu = 1.33 ± 0.03`, the contour
 `Q = 1.3 Q_min` whose projections give these bars, and Gullans & Huse
 (PRL 2020, entropy of a reference qubit: `0.1598 ± 0.0005`, `1.30 ± 0.05`).

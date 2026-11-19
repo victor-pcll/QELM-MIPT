@@ -125,7 +125,7 @@ def figure(curves: dict[int, Curve], row: dict[str, Any], out: Path) -> dict[str
 
     pcs, nus, q = q_map(curves, row)
     vmax = float(np.percentile(q[np.isfinite(q)], 98))
-    im = c.pcolormesh(pcs, nus, q, cmap="Reds_r", shading="auto",
+    im = c.pcolormesh(pcs, nus, q, cmap="Reds", shading="auto",
                       norm=LogNorm(vmin=qmin, vmax=vmax), rasterized=True)  # fmt: skip
     cb = fig.colorbar(im, ax=c, pad=0.02)
     cb.set_label("Houdayer-Hartmann quality $Q$ (log scale)")
