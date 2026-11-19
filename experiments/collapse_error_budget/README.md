@@ -120,3 +120,15 @@ optimum. **(c)** the exact Houdayer-Hartmann quality `Q` over
 The fit is redone on `p <= 0.21` (`--p-max`); with all 23 values of `p`
 it gives `0.1615 ± 0.0007`, `1.32 ± 0.03`, `Q_min = 5.4`
 (`pc_nu_plane.py`). A few seconds.
+
+## No-readout methodology figures (`no_readout_methodology.py`, #385)
+
+Same style, for the provisional `(p_c, nu)` fits of the no-readout runs
+of #378 (PR #380) at `T = 4N`: one PNG per model and observable in
+`figures/no_readout/`. Every observable is a Renyi-2 entropy from the
+Fourier weights `W_A`. The fits are read from `figures/no_readout/fits_T4N.json`
+(the analysis JSON of #378), not redone; the runs are not in git.
+
+    uv run python experiments/collapse_error_budget/no_readout_methodology.py \
+        --runs <runs folder> --fits experiments/collapse_error_budget/figures/no_readout/fits_T4N.json \
+        --out experiments/collapse_error_budget/figures/no_readout
