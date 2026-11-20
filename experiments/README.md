@@ -58,6 +58,7 @@ commands and every option of the launchers.
 | [`operator_cones/`](operator_cones/README.md) | operator light cones of monitored Haar U(4) circuits: outcome-averaged Pauli weight (N = 41), exact trajectory-resolved Pauli weight of a reference qubit and purification (N = 8, 10), Krylov chain of the Floquet channel, Parker et al. `b_n`, one operator in the circuits of #314 (exact span N <= 7, one sampled branch N = 10, 12) | does operator growth (OTOC, Krylov) see the MIPT (#315) |
 | [`pauli_bloch/`](pauli_bloch/README.md) | pedagogical figures, no simulation campaign: Pauli strings as Bloch/Fourier monomials of the dense encoding, change-of-basis and Gram matrices, numerical check, reconstruction of a feature, Pauli weight = frequency | the dictionary behind the Fourier framework (#364), the PTM as the Fourier kernel (#369) |
 | [`effect_rank/`](effect_rank/README.md) | exact rank of the effect space against `p`, one fixed circuit and mask per seed, Haar / U(1) / Z2 / Clifford, angle and dense encodings | which functions of the input the record can reach at all (#313) |
+| [`mincut_pedagogy/`](mincut_pedagogy/README.md) | pedagogical drawings of the min cut on the circuit (`N = 4`, with and without final readout), mean `C` against `p` up to `N = 32` with exact Haar ranks, `S_0` of Skinner, Ruhman and Nahum by min cut | how `rank <= 2^C` works before large campaigns (#383) |
 | [`per_p_convergence/`](per_p_convergence/README.md) | accuracy of the QELM ridge against the trajectories per `p`, 20 Haar circuits | statistics of the readout, sizing of the scaling campaign |
 | [`clifford_state_readout/`](clifford_state_readout/README.md) | `S_R` and purity of the reference qubit from the final Clifford state, ridge / quadratic / MLP | can a readout of the state probe purification (#292) |
 | [`clifford_collapse_map/`](clifford_collapse_map/README.md) | heat map of the collapse quality of `Delta` over `(p_c, nu)`, Clifford runs up to `N = 128` | which `(p_c, nu)` collapse the Clifford MIPT best (#346) |
@@ -1938,3 +1939,18 @@ uv run python main.py -m N=4,6 seed=0,1 \
 Each combination goes to a numbered subfolder of `hydra.sweep.dir`. The bash
 loop is easier to read and to extend (for example to chain a plotting step
 after the runs), which is why the scripts here use it.
+
+## Run the pedagogical min-cut figures (issue #383)
+
+[`mincut_pedagogy/`](mincut_pedagogy/README.md), from that folder:
+
+```bash
+cd experiments/mincut_pedagogy
+uv run python fig_circuits.py figures                 # figures 1 and 2, seconds
+uv run python data.py figures/mincut_data.json        # about 3 minutes
+uv run python fig_curves.py figures/mincut_data.json figures   # figures 3 and 4
+uv run python ecircuit_data.py figures/ecircuit_data.json      # about 1 minute
+uv run python fig_ecircuit.py figures/ecircuit_data.json figures  # figure 5
+uv run python rank_data.py figures/rank_data.json              # about 1 minute
+uv run python fig_mirror.py figures/rank_data.json figures/ecircuit_data.json figures
+```
