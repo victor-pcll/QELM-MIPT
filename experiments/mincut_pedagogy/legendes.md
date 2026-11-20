@@ -145,4 +145,11 @@ C'est le cas le plus général : T = 2N, p de 0 à 1 par pas de 0,05, 60, 40 et 
 - (b) À p = 0,2 : R² = 0,24 (flat), 0,46 (iid), 0,66 (degré ≤ 2).
 - (c) À p = 0,3, readout d'ordre k. Par couche, E_readout(k) = P(m) (T(m) − T_k(m)). k = 3 garde 84 % (flat), 94 % (iid) et 98 % (degré ≤ 2) de R²(∞) ; k = 1 en garde 3 %, 14 % et 17 %.
 
+![Cibles flat et iid](figures/priors.png)
+
+**À quoi ressemblent les cibles flat et iid.** Ce sont des priors sur la cible, pas des encodages : l'encodage (XZ ou dense) fixe w_a, le prior fixe v_a. iid : β_a ~ N(0, 1), énergie w_a par mode. flat : β_a ~ N(0, 1/w_a), énergie 1 par mode. Les deux sont tirés avec les mêmes nombres gaussiens, et chaque cible est normalisée à variance 1.
+- (a-d) N = 2, XZ : les deux priors se ressemblent beaucoup. flat met la moitié de l'énergie au poids 2, iid un tiers.
+- (e, f) N = 6, coupe θ_i = t + φ_i : la cible flat porte plus de produits d'ordre élevé et oscille plus ; la cible iid est plus lisse.
+- (g, h) Énergie par mode et par poids à N = 6. Par poids, flat culmine vers 3N/4 (dense) ou 2N/3 (XZ), iid vers N/2 dans les deux encodages.
+
 Fichiers : figures PNG et JSON dans `figures/`. Bibliothèque : `QELM.evaluation.mincut_graph`. Scripts : `fig_circuits.py`, `data.py`, `fig_curves.py`, `draw.py`.

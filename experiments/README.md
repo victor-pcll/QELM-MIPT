@@ -1957,4 +1957,5 @@ uv run python sk_profile_data.py figures/sk_profile_data.json   # about 6 minute
 uv run python fig_sk_profile.py figures/sk_profile_data.json figures
 uv run python fig_trace_pi.py figures/haar_dense_data.json figures
 uv run python fig_overlap.py figures/haar_dense_data.json figures/sk_profile_data.json figures
+uv run python fig_priors.py figures
 ```

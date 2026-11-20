@@ -11,7 +11,7 @@ The French legends of the figures are in [`legendes.md`](legendes.md).
 
 | | |
 | --- | --- |
-| Scripts | `fig_circuits.py` (drawings), `data.py` (curves), `fig_curves.py` (figures 3 and 4), `draw.py` (drawing helper), `ecircuit_data.py` and `fig_ecircuit.py` (figure 5), `rank_data.py` and `fig_mirror.py` (the two summary figures), `haar_dense_data.py`, `fig_haar_dense.py` and `fig_weight_profile.py` (Haar dense, `N = 4, 5, 6`), `sk_profile_data.py` and `fig_sk_profile.py` (profile of `S_k`, #388), `fig_trace_pi.py` (trace and shape of `Pi`), `fig_overlap.py` (spectral overlap) |
+| Scripts | `fig_circuits.py` (drawings), `data.py` (curves), `fig_curves.py` (figures 3 and 4), `draw.py` (drawing helper), `ecircuit_data.py` and `fig_ecircuit.py` (figure 5), `rank_data.py` and `fig_mirror.py` (the two summary figures), `haar_dense_data.py`, `fig_haar_dense.py` and `fig_weight_profile.py` (Haar dense, `N = 4, 5, 6`), `sk_profile_data.py` and `fig_sk_profile.py` (profile of `S_k`, #388), `fig_trace_pi.py` (trace and shape of `Pi`), `fig_overlap.py` (spectral overlap), `fig_priors.py` (flat and iid targets) |
 | Library | `QELM.evaluation.mincut_graph` (new: graph with or without final readout, causal pruning, partition, SRN `S_0`), `QELM.evaluation.r2_budget.effect_basis` (exact rank) |
 | Physical model | open brickwork, one layer = even bonds, then odd bonds, then `Z` measurements with probability `p`; with or without the final `Z` readout of every site |
 | Sizes | drawings `N = 4` (`T = 8` without readout, `T = 4` with readout); min cut `N = 4` to 32, `T = 2N`; exact Haar rank `N = 3, 4, 5`, `T = 2N`; `S_0`: `N = 8` to 64 |
@@ -288,3 +288,21 @@ puts both on the same axes at `N = 6`.
   `P(m) (T(m) - T_k(m))`: the vertical gap on a linear scale, weighted by
   `P(m)`. `k = 3` keeps 84 % (flat), 94 % (iid) and 98 % (degree ≤ 2) of
   `R²(∞)`; `k = 1` keeps 3 %, 14 % and 17 %.
+
+## What the flat and iid targets look like
+
+`flat` and `iid` are priors on the target, not encodings. The encoding (`XZ`
+angles or dense) fixes the norms `w_a = E[B_a²]`. The prior fixes the
+variances `v_a = E[β_a²]`: iid, `β_a ~ N(0, 1)` and energy `w_a` per mode; flat,
+`β_a ~ N(0, 1/w_a)` and energy 1 per mode. `fig_priors.py` draws both from the
+same Gaussian numbers, so a flat sample and an iid sample differ only by the
+scale of each mode, and normalises every sample to unit variance.
+
+![Flat and iid targets](figures/priors.png)
+
+- **(a-d)** `N = 2`, `XZ`: the two priors barely differ. Flat puts half the
+  energy on weight 2, iid one third.
+- **(e, f)** `N = 6`, along the cut `θ_i = t + φ_i`: the flat sample carries
+  more high-order products and wiggles more; the iid one is smoother.
+- **(g, h)** Energy per mode and per weight at `N = 6`. Per weight, flat peaks
+  at `3N/4` (dense) or `2N/3` (`XZ`), iid at `N/2` in both encodings.
