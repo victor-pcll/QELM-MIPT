@@ -141,6 +141,10 @@ circuit (mean over 40 targets), with the sizes slightly shifted. Red bars:
 and mean of the prediction (lines). (c, f) `log2 R^2(inf)` against the predicted
 value; dashed line: equality.
 
+The derivation of the prediction, with its hypotheses and limits, is in
+[`documentation/notes/ecircuit-coupe-minimale.md`](../../documentation/notes/ecircuit-coupe-minimale.md)
+(in French).
+
 The JSON next to the figures holds the plotted values
 (`ecircuit_vs_mincut_summary.json`: count, mean, spread, prediction and
 observed visible ranks per `N` and `C`).

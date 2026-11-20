@@ -91,4 +91,6 @@ Dans le budget `1 = E_circuit + E_readout(k) + R²(k)` (#360), la coupe fixe la 
 - **(b, e) Contre p.** En dense, la moyenne de 1 − (2^C − 1)/M sur les masques redonne E_circuit(p) à 0,003 près pour chaque p. La dépendance en p de E_circuit est donc entièrement celle de la distribution de C. En XZ, l'écart monte jusqu'à 0,07, et il vient entièrement des niveaux du haut tronqués : la prédiction y vaut 0, alors que d = 71 donne 0,11.
 - **(c, f)** log₂ R²(∞) contre la valeur prédite. Tirets : égalité.
 
+La démonstration complète, avec ses hypothèses et ses limites, est dans la note [`ecircuit-coupe-minimale.md`](../../documentation/notes/ecircuit-coupe-minimale.md).
+
 Fichiers : figures PNG et JSON dans `figures/`. Bibliothèque : `QELM.evaluation.mincut_graph`. Scripts : `fig_circuits.py`, `data.py`, `fig_curves.py`, `draw.py`.
