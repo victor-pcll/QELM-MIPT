@@ -27,8 +27,9 @@ for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 import argparse  # noqa: E402
 import json  # noqa: E402
 import time  # noqa: E402
-from concurrent.futures import ProcessPoolExecutor  # noqa: E402
+from concurrent.futures import ProcessPoolExecutor, as_completed  # noqa: E402
 from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
 import numpy as np  # noqa: E402
 
@@ -69,6 +70,31 @@ def _chunk(args: tuple[str, int, float, tuple[int, ...], int, int, int]) -> np.n
     return out
 
 
+def _run_chunks(
+    pool: ProcessPoolExecutor, jobs: list[tuple[Any, ...]], folder: Path
+) -> list[np.ndarray]:
+    """Results of every chunk, each saved to ``folder`` as soon as it is done.
+
+    Chunks already saved (an earlier launch that was interrupted) are read
+    back instead of being recomputed; the folder is removed once the ``p`` is
+    complete.
+    """
+    folder.mkdir(parents=True, exist_ok=True)
+    paths = [folder / f"first{job[5]:06d}_count{job[6]}.npy" for job in jobs]
+    todo = [i for i, path in enumerate(paths) if not path.exists()]
+    futures = {pool.submit(_chunk, jobs[i]): i for i in todo}
+    for future in as_completed(futures):
+        i = futures[future]
+        tmp = paths[i].with_suffix(".tmp.npy")
+        np.save(tmp, future.result())
+        tmp.replace(paths[i])
+    out = [np.load(path) for path in paths]
+    for path in paths:
+        path.unlink()
+    folder.rmdir()
+    return out
+
+
 def summarise(data: np.ndarray, ratios: list[int]) -> dict[str, object]:
     """Per-sample values and ``[mean, sem]`` of each observable and ratio."""
     row: dict[str, object] = {}
@@ -98,7 +124,10 @@ def main(argv: list[str] | None = None) -> None:
 
     samples = args.samples or SAMPLES[args.model][args.n]
     grid = args.p or P_GRID[args.model]
-    chunk = args.chunk or max(1, samples // (4 * args.workers))
+    # small chunks: each one is saved as soon as it is done (resume)
+    chunk = args.chunk or max(1, min(samples // (4 * args.workers), 50))
+    if args.model == "haar" and args.n >= 12:
+        chunk = args.chunk or 1
     checkpoints = tuple(r * args.n for r in args.ratios)
     args.out.mkdir(parents=True, exist_ok=True)
     path = args.out / f"{args.model}_N{args.n}.json"
@@ -121,6 +150,7 @@ def main(argv: list[str] | None = None) -> None:
         result["per_p"] = old["per_p"]
     per_p: list[dict[str, object]] = result["per_p"]  # type: ignore[assignment]
     done = {round(float(r["p"]), 6) for r in per_p if r["samples"] == samples}
+    partial = args.out / "partial" / f"{args.model}_N{args.n}"
 
     with ProcessPoolExecutor(args.workers) as pool:
         for p in grid:
@@ -133,7 +163,7 @@ def main(argv: list[str] | None = None) -> None:
                 for first in range(0, samples, chunk)
             ]  # fmt: skip
             start = time.time()
-            data = np.concatenate(list(pool.map(_chunk, jobs)))
+            data = np.concatenate(_run_chunks(pool, jobs, partial / f"p{p:.4f}"))
             row: dict[str, object] = {
                 "p": float(p),
                 "samples": int(data.shape[0]),

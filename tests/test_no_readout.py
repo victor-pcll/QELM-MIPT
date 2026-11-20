@@ -221,3 +221,22 @@ def test_run_script_writes_samples_and_resumes(
     capsys.readouterr()
     script.main(argv)  # type: ignore[attr-defined]
     assert capsys.readouterr().out.count("already written") == 2
+
+
+def test_run_script_reuses_saved_chunks(tmp_path: object) -> None:
+    import json
+    from pathlib import Path
+
+    out = Path(str(tmp_path))
+    script = _load_script()
+    folder = out / "partial" / "haar_N4" / "p0.1000"
+    folder.mkdir(parents=True)
+    # A chunk left by an interrupted launch is read back, not recomputed.
+    np.save(folder / "first000000_count2.npy", np.full((2, 3, 4), 7.0))
+    argv = ["--model", "haar", "--n", "4", "--samples", "4", "--p", "0.1",
+            "--chunk", "2", "--workers", "1", "--out", str(out)]  # fmt: skip
+    script.main(argv)  # type: ignore[attr-defined]
+    row = json.loads((out / "haar_N4.json").read_text())["per_p"][0]
+    assert row["samples_delta_T4N"][:2] == [7.0, 7.0]
+    assert row["samples_delta_T4N"][2] != 7.0
+    assert not folder.exists()
