@@ -11,7 +11,7 @@ The French legends of the figures are in [`legendes.md`](legendes.md).
 
 | | |
 | --- | --- |
-| Scripts | `fig_circuits.py` (drawings), `data.py` (curves), `fig_curves.py` (figures 3 and 4), `draw.py` (drawing helper), `ecircuit_data.py` and `fig_ecircuit.py` (figure 5) |
+| Scripts | `fig_circuits.py` (drawings), `data.py` (curves), `fig_curves.py` (figures 3 and 4), `draw.py` (drawing helper), `ecircuit_data.py` and `fig_ecircuit.py` (figure 5), `rank_data.py` and `fig_mirror.py` (the two summary figures) |
 | Library | `QELM.evaluation.mincut_graph` (new: graph with or without final readout, causal pruning, partition, SRN `S_0`), `QELM.evaluation.r2_budget.effect_basis` (exact rank) |
 | Physical model | open brickwork, one layer = even bonds, then odd bonds, then `Z` measurements with probability `p`; with or without the final `Z` readout of every site |
 | Sizes | drawings `N = 4` (`T = 8` without readout, `T = 4` with readout); min cut `N = 4` to 32, `T = 2N`; exact Haar rank `N = 3, 4, 5`, `T = 2N`; `S_0`: `N = 8` to 64 |
@@ -148,3 +148,26 @@ The derivation of the prediction, with its hypotheses and limits, is in
 The JSON next to the figures holds the plotted values
 (`ecircuit_vs_mincut_summary.json`: count, mean, spread, prediction and
 observed visible ranks per `N` and `C`).
+
+## Two summary figures: geometry, then learning
+
+`rank_data.py` computes the exact dense rank of Haar circuits and of Clifford
+circuits on the same masks, with `C` and the two bounds. It covers `N = 3, 4, 5`,
+`p = 0` to 1, 24 masks per point (10 at `N = 5`), in the two settings of
+figure 5. `fig_mirror.py` draws the argument in two steps.
+
+![Step 1](figures/mirror_1_rank_vs_mincut.png)
+
+**Step 1. Dense rank against the min cut.** Solid lines: `⟨C⟩`. Dots: Haar
+`⟨log2 rank⟩`. Open squares: Clifford on the same masks. Thin lines: expected
+record bound (dashed) and input bound (dash-dot).
+- Haar sits on `C` for 1 097 of the 1 098 circuits. The exception is one mask
+  without final readout at `N = 4`.
+- Clifford stays at `N` with a final readout. Without it, Clifford is at most
+  `N` and below `N` at small `p`.
+
+![Step 2](figures/mirror_2_ecircuit_vs_mincut.png)
+
+**Step 2. `E_circuit` against `C`.** Same data as figure 5: level by level (a, b)
+and against `p` (c, d).
+

@@ -93,4 +93,16 @@ Dans le budget `1 = E_circuit + E_readout(k) + R²(k)` (#360), la coupe fixe la 
 
 La démonstration complète, avec ses hypothèses et ses limites, est dans la note [`ecircuit-coupe-minimale.md`](../../documentation/notes/ecircuit-coupe-minimale.md).
 
+## 7. Les deux figures de synthèse
+
+![Étape 1](figures/mirror_1_rank_vs_mincut.png)
+
+**Étape 1. Rang dense contre coupe minimale**, N = 3, 4, 5, p de 0 à 1, 24 masques par point (10 à N = 5). Traits pleins : ⟨C⟩. Points : ⟨log₂ rang⟩ de Haar. Carrés vides : Clifford sur les mêmes masques. Traits fins : espérance de la borne des records (tirets : pNT, ou N + pN(T − 1) avec lecture finale) et de la borne d'entrée (tiret-point : N(2 − p)).
+- Haar est sur C pour 1 097 des 1 098 circuits. L'exception est un masque sans lecture finale, à N = 4.
+- Clifford reste à N avec lecture finale. Sans lecture finale, il est au plus à N, et en dessous à petit p.
+
+![Étape 2](figures/mirror_2_ecircuit_vs_mincut.png)
+
+**Étape 2. E_circuit contre C.** Mêmes données que la figure 5 : niveau par niveau (a, b) et contre p (c, d).
+
 Fichiers : figures PNG et JSON dans `figures/`. Bibliothèque : `QELM.evaluation.mincut_graph`. Scripts : `fig_circuits.py`, `data.py`, `fig_curves.py`, `draw.py`.
