@@ -11,7 +11,7 @@ The French legends of the figures are in [`legendes.md`](legendes.md).
 
 | | |
 | --- | --- |
-| Scripts | `fig_circuits.py` (drawings), `data.py` (curves), `fig_curves.py` (figures 3 and 4), `draw.py` (drawing helper), `ecircuit_data.py` and `fig_ecircuit.py` (figure 5), `rank_data.py` and `fig_mirror.py` (the two summary figures), `haar_dense_data.py`, `fig_haar_dense.py` and `fig_weight_profile.py` (Haar dense, `N = 4, 5, 6`) |
+| Scripts | `fig_circuits.py` (drawings), `data.py` (curves), `fig_curves.py` (figures 3 and 4), `draw.py` (drawing helper), `ecircuit_data.py` and `fig_ecircuit.py` (figure 5), `rank_data.py` and `fig_mirror.py` (the two summary figures), `haar_dense_data.py`, `fig_haar_dense.py` and `fig_weight_profile.py` (Haar dense, `N = 4, 5, 6`), `sk_profile_data.py` and `fig_sk_profile.py` (profile of `S_k`, #388), `fig_trace_pi.py` (trace and shape of `Pi`), `fig_overlap.py` (spectral overlap), `fig_priors.py` (flat and iid targets) |
 | Library | `QELM.evaluation.mincut_graph` (new: graph with or without final readout, causal pruning, partition, SRN `S_0`), `QELM.evaluation.r2_budget.effect_basis` (exact rank) |
 | Physical model | open brickwork, one layer = even bonds, then odd bonds, then `Z` measurements with probability `p`; with or without the final `Z` readout of every site |
 | Sizes | drawings `N = 4` (`T = 8` without readout, `T = 4` with readout); min cut `N = 4` to 32, `T = 2N`; exact Haar rank `N = 3, 4, 5`, `T = 2N`; `S_0`: `N = 8` to 64 |
@@ -212,3 +212,97 @@ uniform capture, `(2^C - 1)/(4^N - 1)`.
   one (panel d). The isotropic prediction depends on `C` alone. The `iid` one
   needs this profile.
 
+## Which Pauli weights the `k`-bit parities reach (#388)
+
+`E_readout(k)` compares the span `S` of the whole record with the span `S_k`
+of the parities of at most `k` record bits (`parity_operator_rows`). Here `k`
+counts record bits, not input Pauli weight. `sk_profile_data.py` builds `S_k`
+for `k = 1, 2, 3` and `S` (`k = inf`) in whitened coordinates, with Haar gates,
+dense inputs, no final readout, `T = 2N`, `p = 0.1, 0.2, 0.3, 0.5, 0.7` and 40,
+30 and 20 circuits per point for `N = 4, 5, 6` (about 6 minutes on 4 cores).
+Each span gives its profile `d_m^(k) = sum_{|a| = m} [Pi_k]_aa`. Then, for any
+prior that depends only on the weight,
+`R²(k) = Σ_m Ω(m) d_m^(k) / Σ_m Ω(m) mult(m)` and
+`E_readout(k) = R²(∞) - R²(k)`.
+
+![S_k profile](figures/sk_profile.png)
+
+**(a-c) `d_m^(k) / mult(m)` at `p = 0.3`.** Single bits (`k = 1`) reach almost
+only weight 1: the fraction drops by a factor of 3.5 (`N = 4`) to 6 (`N = 6`) per unit of weight,
+against about 1.5 to 2 for the full span. Each extra bit lifts the higher
+weights.
+
+**(d-f) Share of the weight-`m` content of `S` reached by `S_k`,
+`⟨d_m^(k)⟩ / ⟨d_m^(∞)⟩`.**
+- The share falls with `m` at fixed `k`: rebuilding a weight-`m` operator needs
+  parities of several bits, roughly `k ≥ m`. At `N = 6`, `p = 0.3`, `k = m`
+  reaches 0.42, 0.70 and 0.92 of weights 1, 2 and 3, and `k = 3` reaches 0.64
+  of weight 6.
+- The share grows with `p`. At `p = 0.7`, `k = 2` reaches at least 0.89 of every
+  weight at `N = 4` and 6 (0.73 at `N = 5`), and `k = 3` reaches 0.96 to 1. At `p = 0.1` and 0.2, few records see
+  long-lived wires, and the information sits in high-order correlations of
+  the bits: `k = 3` reaches only 0.78 to 0.88 of weight 1 and 0.16 to 0.23 of
+  weight 6 at `N = 6`.
+- For the isotropic target, `R²(k) = dim S_k / (4^N - 1)`. At `N = 6`, `p = 0.2`,
+  `dim S_3 = 394` against `dim S = 933` on average, so `k = 3` loses 58 % of
+  `R²(∞)`. At `p = 0.5` it loses 6 %.
+
+## `E_circuit(p)` reduced to the projector
+
+With infinitely many shots (exact Heisenberg spans), the full effect space
+(`k = inf`) and the flat prior, the estimation and readout errors are zero and
+the task drops out: `E_circuit = 1 - Tr(Pi)/M`, with `Tr(Pi) = d`.
+`fig_trace_pi.py` replots `haar_dense_data.json` in this form.
+
+![Trace and shape of Pi](figures/trace_pi.png)
+
+- **(a) The mass of `Pi` is the min cut.** `d(p)` lies on `2^C - 1` of the same
+  masks to within 2 out of about 1 000 (`N = 6`), and on the 2 000-mask curve
+  to within the sampling of the masks.
+- **(b, c) The shape of `Pi` follows `C`, not `p` directly.** The ratio between
+  successive weights is `1/3` at both ends: at small `p` (few records) and at
+  `p = 1`, where the records of the first layer read `Z` on every site and `S`
+  holds only the `Z` strings (`d_m = C(N, m)`, exactly `3^(-m)`). The profile is
+  flattest, ratio about 0.6, at the top of the dome of `C` (`p ≈ 0.2` to 0.4).
+  It never reaches uniform capture (ratio 1) at these sizes. The three sizes
+  overlap, and nothing marks a finite `p_c`.
+
+## Spectral overlap of the target and the circuit
+
+For a prior that depends only on the weight, `R²(∞) = Σ_m P(m) T(m)`, with
+`P(m) = Ω_m mult(m) / Σ Ω mult` the share of the target energy at weight `m`
+and `T(m) = d_m / mult(m)` the share of the weight-`m` modes that the circuit
+transmits (`T_k(m)` for the parities of at most `k` bits). `fig_overlap.py`
+puts both on the same axes at `N = 6`.
+
+![Spectral overlap](figures/overlap.png)
+
+- **(a)** The flat target sits at high weight (`P(m) = mult(m)/M`, binomial of
+  mean `3N/4`). The iid target is centred on `N/2`: `Ω_m mult(m) = C(N, m)`, so
+  `P(m) = C(N, m)/(2^N - 1)`. It is not a low-weight target. Only the degree-2
+  target lives at low weight. `T(m)` is highest and flattest at the top of the
+  dome (`p = 0.2`), and steepest (`3^(-m)`) at small `C`.
+- **(b)** At `p = 0.2` (`⟨C⟩ = 9.8`): `R² = 0.24` (flat), 0.46 (iid), 0.66
+  (degree ≤ 2). The lower the weights of the target, the better it is served.
+- **(c)** At `p = 0.3`, readout of order `k`. Per layer, `E_readout(k)` is
+  `P(m) (T(m) - T_k(m))`: the vertical gap on a linear scale, weighted by
+  `P(m)`. `k = 3` keeps 84 % (flat), 94 % (iid) and 98 % (degree ≤ 2) of
+  `R²(∞)`; `k = 1` keeps 3 %, 14 % and 17 %.
+
+## What the flat and iid targets look like
+
+`flat` and `iid` are priors on the target, not encodings. The encoding (`XZ`
+angles or dense) fixes the norms `w_a = E[B_a²]`. The prior fixes the
+variances `v_a = E[β_a²]`: iid, `β_a ~ N(0, 1)` and energy `w_a` per mode; flat,
+`β_a ~ N(0, 1/w_a)` and energy 1 per mode. `fig_priors.py` draws both from the
+same Gaussian numbers, so a flat sample and an iid sample differ only by the
+scale of each mode, and normalises every sample to unit variance.
+
+![Flat and iid targets](figures/priors.png)
+
+- **(a-d)** `N = 2`, `XZ`: the two priors barely differ. Flat puts half the
+  energy on weight 2, iid one third.
+- **(e, f)** `N = 6`, along the cut `θ_i = t + φ_i`: the flat sample carries
+  more high-order products and wiggles more; the iid one is smoother.
+- **(g, h)** Energy per mode and per weight at `N = 6`. Per weight, flat peaks
+  at `3N/4` (dense) or `2N/3` (`XZ`), iid at `N/2` in both encodings.

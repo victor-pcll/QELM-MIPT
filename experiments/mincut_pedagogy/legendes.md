@@ -124,4 +124,32 @@ C'est le cas le plus général : T = 2N, p de 0 à 1 par pas de 0,05, 60, 40 et 
 - Quand C → 2N, le profil s'aplatit vers la capture uniforme (rapports de 0,7 à 0,9 à C = 2N − 1).
 - 𝒮 favorise donc les bas poids. Le prior `iid`, qui met sa variance sur les bas poids, donne un E_circuit nettement plus bas que le prior isotrope (panneau d). La prédiction isotrope ne dépend que de C ; la prédiction `iid` a besoin de ce profil.
 
+![Profil de S_k](figures/sk_profile.png)
+
+**Profil en poids de 𝒮_k, l'espace des parités d'au plus k bits de record (#388).** Haar, encodage dense, sans lecture finale, T = 2N. Ici k compte des bits de record, pas le poids de Pauli de l'entrée.
+- (a-c) d_m^(k) / mult(m) à p = 0,3. Les bits seuls (k = 1) n'atteignent presque que le poids 1 : la fraction est divisée par 3,5 (N = 4) à 6 (N = 6) à chaque unité de poids, contre 1,5 à 2 pour 𝒮 entier.
+- (d-f) Part du contenu de poids m de 𝒮 atteinte par 𝒮_k. Elle baisse avec m : reconstruire un opérateur de poids m demande des parités d'environ m bits ou plus. À N = 6 et p = 0,3, k = m atteint 0,42, 0,70 et 0,92 des poids 1, 2 et 3.
+- Elle monte avec p. À p = 0,7, k = 2 atteint au moins 0,89 de chaque poids à N = 4 et 6 (0,73 à N = 5), et k = 3 de 0,96 à 1. À p = 0,1 et 0,2, l'information est dans les corrélations d'ordre élevé des bits : k = 3 n'atteint que 0,16 à 0,23 du poids 6 à N = 6.
+- Cible isotrope : R²(k) = dim 𝒮_k / (4^N − 1). À N = 6 et p = 0,2, k = 3 perd 58 % de R²(∞) ; à p = 0,5, 6 %.
+
+![Trace et forme de Π](figures/trace_pi.png)
+
+**E_circuit(p) réduit au projecteur.** Tirs infinis (espaces de Heisenberg exacts), k = ∞ et prior flat : E_estimation = E_readout = 0 et la tâche disparaît, E_circuit = 1 − Tr Π / M, avec Tr Π = d.
+- (a) La masse de Π est la coupe : d(p) est sur 2^C − 1 des mêmes masques à 2 près sur environ 1 000 (N = 6), et sur la courbe à 2 000 masques à l'échantillonnage près.
+- (b, c) La forme de Π suit C, pas p directement. Le rapport entre poids successifs vaut 1/3 aux deux bouts : à petit p (peu de records) et à p = 1, où les records de la première couche lisent Z sur chaque site et 𝒮 ne contient que les chaînes de Z (d_m = C(N, m), exactement 3^(−m)). Le profil est le plus plat, rapport d'environ 0,6, au sommet du dôme de C (p ≈ 0,2 à 0,4). Il n'atteint jamais la capture uniforme (rapport 1) à ces tailles. Les trois tailles se superposent, sans p_c fini.
+
+![Recouvrement spectral](figures/overlap.png)
+
+**Recouvrement spectral entre la cible et le circuit, N = 6.** R²(∞) = Σ_m P(m) T(m), avec P(m) la part de l'énergie de la cible au poids m et T(m) = d_m / mult(m) la part des modes de poids m que le circuit transmet.
+- (a) La cible flat est aux grands poids (binomiale de moyenne 3N/4). La cible iid est centrée sur N/2 (P(m) = C(N, m)/(2^N − 1)) : ce n'est pas une cible de bas poids. Seule la cible de degré ≤ 2 est aux bas poids. T(m) est le plus haut et le plus plat au sommet du dôme (p = 0,2), et suit 3^(−m) aux petites coupes.
+- (b) À p = 0,2 : R² = 0,24 (flat), 0,46 (iid), 0,66 (degré ≤ 2).
+- (c) À p = 0,3, readout d'ordre k. Par couche, E_readout(k) = P(m) (T(m) − T_k(m)). k = 3 garde 84 % (flat), 94 % (iid) et 98 % (degré ≤ 2) de R²(∞) ; k = 1 en garde 3 %, 14 % et 17 %.
+
+![Cibles flat et iid](figures/priors.png)
+
+**À quoi ressemblent les cibles flat et iid.** Ce sont des priors sur la cible, pas des encodages : l'encodage (XZ ou dense) fixe w_a, le prior fixe v_a. iid : β_a ~ N(0, 1), énergie w_a par mode. flat : β_a ~ N(0, 1/w_a), énergie 1 par mode. Les deux sont tirés avec les mêmes nombres gaussiens, et chaque cible est normalisée à variance 1.
+- (a-d) N = 2, XZ : les deux priors se ressemblent beaucoup. flat met la moitié de l'énergie au poids 2, iid un tiers.
+- (e, f) N = 6, coupe θ_i = t + φ_i : la cible flat porte plus de produits d'ordre élevé et oscille plus ; la cible iid est plus lisse.
+- (g, h) Énergie par mode et par poids à N = 6. Par poids, flat culmine vers 3N/4 (dense) ou 2N/3 (XZ), iid vers N/2 dans les deux encodages.
+
 Fichiers : figures PNG et JSON dans `figures/`. Bibliothèque : `QELM.evaluation.mincut_graph`. Scripts : `fig_circuits.py`, `data.py`, `fig_curves.py`, `draw.py`.

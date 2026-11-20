@@ -149,7 +149,70 @@ demande qu'aucun site ne soit mesuré à la première couche (`n₁ = 0`, sinon
 lecture finale), le maximum observé est `2N − 1`, d'où le plancher
 `E_circuit ≈ 0,5`.
 
-## 6. Ce qu'il faut en retenir
+## 6. Le budget d'erreur complet
+
+À nombre de tirs infini, le budget de la ridge (#360) s'écrit
+
+```
+1 − R²(k) = E_circuit + E_readout(k),
+E_circuit    = Σ_a Ω_a (1 − π_a(𝒮))         / Σ_a Ω_a,
+E_readout(k) = Σ_a Ω_a (π_a(𝒮) − π_a(𝒮_k))  / Σ_a Ω_a,
+```
+
+avec les notations de la section 2 : `v_a = E[β_a²]` est la variance du mode
+dans la cible, `w_a = E_x[B_a²]` sa norme pour la loi des entrées,
+`Ω_a = v_a w_a` son énergie, et `π_a(𝒱) = ‖Π_𝒱 e_a‖²` sa capture par le
+sous-espace `𝒱` en coordonnées blanchies. La seule hypothèse est une covariance
+diagonale en chaînes de Pauli, tirée indépendamment du circuit, et l'égalité est
+un rapport de moyennes.
+
+**Par couches de poids.** Si `Ω_a = Ω_m` ne dépend que de `m = |a|`, la somme
+se regroupe exactement, sans aucune symétrie du circuit :
+
+```
+E[R²(∞)] = Σ_m P(m) · d_m / mult(m),    P(m) = Ω_m mult(m) / Σ_m' Ω_m' mult(m').
+```
+
+`P(m)` est la part de l'énergie de la cible au poids `m`, et `d_m / mult(m)` la
+part des modes de poids `m` que le circuit transmet. Avec `mult(m) = C(N, m) 3^m`
+en dense et `C(N, m) 2^m` en XZ :
+- `flat` (`Ω_a` constant) : `P(m) = mult(m)/M`, donc `E[R²] = d/M`. En dense et
+  quand le rang vaut `2^C`, c'est `(2^C − 1)/(4^N − 1)` : seule la coupe compte.
+- `iid` (`v_a = 1`, donc `Ω_m = w_m`) : `Ω_m mult(m) = C(N, m)` dans les deux
+  encodages, donc `E[R²] = Σ_m C(N, m) (d_m / mult(m)) / (2^N − 1)`. Comme le
+  profil favorise les bas poids, `iid` fait mieux que `d/M` : 0,251 contre 0,188
+  à `N = 4`, `C = 4`, en XZ (#362). En XZ, `d_m` est le profil de la projection
+  sur les chaînes sans `Y`.
+
+**Ce que borne `E_circuit`.** Une fonction quelconque du record `g(m)`, même non
+linéaire en les bits, a pour moyenne `Σ_m g(m) Pr(m | x)`, qui est linéaire en
+`Pr(m | x)`. `E_circuit` est donc le plancher de tout décodeur du record à **un
+tir par entrée**. Une fonction non linéaire des probabilités elles-mêmes peut
+sortir de `𝒮`, mais elle demande plusieurs tirs sur la même entrée, ce qui est
+un autre dispositif.
+
+**Ce que mesure `E_readout(k)`.** `𝒮_k` est engendré par les parités d'au plus
+`k` bits de record. Une parité de `k` bits, remontée en Heisenberg, a un support
+étalé sur l'entrée : ce n'est pas une troncature `m ≤ k`. Mesuré (#388) : les
+parités d'un bit n'atteignent presque que le poids 1, un opérateur de poids `m`
+demande des parités d'environ `m` bits ou plus, et d'autant plus que `p` est
+petit.
+
+**Dépendances.**
+
+| Grandeur | Rôle | Dépend de `p` | De la tâche (`v_a`) | De l'encodage (`w_a`) |
+| --- | --- | --- | --- | --- |
+| coupe `C` | goulot du réseau de tenseurs | oui (pic qui glisse vers `p → 0`, sans `p_c` fini) | non | non |
+| espace `𝒮` (non blanchi) | ce que les records voient | oui | non | non |
+| profil `π_a(𝒮)`, `d_m` | transfert par poids | oui | non | **oui** (blanchiment, troncature XZ) |
+| `𝒮_k`, `π_a(𝒮_k)` | parités à `k` clics | oui | non | **oui** |
+| `E_circuit`, `R²(∞)` | variance hors d'atteinte du circuit | oui | oui | oui |
+| `E_readout(k)` | perte due aux parités tronquées | oui | oui | oui |
+
+Le terme d'estimation à nombre fini de tirs n'est pas traité ici. Son
+comportement avec `N` reste à établir.
+
+## 7. Ce qu'il faut en retenir
 
 1. `E_circuit` est fixé par la géométrie du masque, au travers de `C` : c'est une
    fonction de comptage, du type Rényi 0 (voir la comparaison avec Skinner,
@@ -163,6 +226,10 @@ lecture finale), le maximum observé est `2N − 1`, d'où le plancher
    `𝒮_k ⊂ 𝒮` a son propre profil `d_m^(k)`, et
    `R²(k) = Σ_a Ω_a π_a(𝒮_k) / Σ_a Ω_a`, `E_readout(k) = R²(∞) − R²(k)`.
    La coupe fixe seulement le plafond `E_readout(k) ≤ R²(∞)`.
+   Les parités d'un bit n'atteignent presque que le poids 1. Reconstruire un
+   opérateur de poids `m` demande des parités d'environ `m` bits ou plus, et
+   d'autant plus que `p` est petit (#388,
+   `experiments/mincut_pedagogy/figures/sk_profile.png`).
 5. Comme le rang, ce bilan est à nombre de tirs infini et à masque fixe. La MIPT
    est à chercher dans les quantités pondérées par la règle de Born (note
    `transition-rang-mipt.md`).
