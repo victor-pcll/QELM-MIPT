@@ -57,6 +57,35 @@ XZ, au niveau `C = 4` : `E_circuit = 0,749` en `iid`, contre `0,812 = 1 − 15/8
 en `flat` (#362). Une cible structurée, par exemple de bas degré, peut être bien
 mieux ou bien moins bien servie que `d/M`.
 
+**Prior général.** Pour une covariance diagonale en chaînes de Pauli, avec une
+variance `v_a` par coefficient, on pose `Ω_a = v_a w_a` et `π_a = [Π]_aa`. Alors
+
+```
+E[R²(∞)] = Σ_a Ω_a π_a / Σ_a Ω_a,
+```
+
+au sens d'un rapport de moyennes. Si `Ω_a` ne dépend que du poids `m = |a|`, on
+regroupe par couches : `E[R²] = Σ_m Ω(m) d_m / Σ_m Ω(m) mult(m)`, avec
+`d_m = Σ_{|a| = m} π_a` et `mult(m) = C(N, m) 3^m` en dense. `flat` et `iid`
+sont deux cas particuliers.
+
+**Le bas degré n'est pas concentré.** Aux petites coupes, on observe
+`d_m / mult(m) ∝ 3^(−m)`, donc `d_m ∝ C(N, m)` : le sous-espace est étalé sur
+tous les poids, avec un maximum vers `m = N/2`. À `N = 6` et `C = 6`,
+`d_m = [6,2 ; 15,1 ; 19,6 ; 14,8 ; 6,1 ; 1,1]`. Une cible de degré ≤ 2 (même
+variance sur les couches `m = 1, 2`, zéro au-delà) donne :
+
+| `C` | `R²` degré ≤ 2 | `R²` flat |
+| --- | --- | --- |
+| 3 | 0,02 | 0,002 |
+| 6 | 0,14 | 0,015 |
+| 8 | 0,35 | 0,06 |
+| 9 | 0,50 | 0,12 |
+| 11 | 0,82 | 0,50 |
+
+Le bas degré est environ 10 fois mieux servi que la cible isotrope, mais il
+faut `C ≈ 9` sur 12 pour atteindre `R² = 0,5` (`experiments/mincut_pedagogy/figures/weight_profile_by_level.png`).
+
 ## 3. Le décompte des dimensions
 
 **Dénominateur `M`.** La variance ignore le mode constant (la chaîne identité,
@@ -129,6 +158,11 @@ lecture finale), le maximum observé est `2N − 1`, d'où le plancher
    `C` sur les masques : en dense, la prédiction suit la moyenne à 0,003 près.
 3. Les écarts ont trois sources connues : la troncature XZ, les rares masques
    sans lecture finale où le rang reste sous `2^C`, et les cibles non isotropes.
-4. Comme le rang, ce bilan est à nombre de tirs infini et à masque fixe. La MIPT
+4. `E_readout(k)` n'est pas une troncature en poids de Pauli. Dans le dépôt,
+   `k` compte les parités d'au plus `k` **bits de record**. Leur sous-espace
+   `𝒮_k ⊂ 𝒮` a son propre profil `d_m^(k)`, et
+   `R²(k) = Σ_a Ω_a π_a(𝒮_k) / Σ_a Ω_a`, `E_readout(k) = R²(∞) − R²(k)`.
+   La coupe fixe seulement le plafond `E_readout(k) ≤ R²(∞)`.
+5. Comme le rang, ce bilan est à nombre de tirs infini et à masque fixe. La MIPT
    est à chercher dans les quantités pondérées par la règle de Born (note
    `transition-rang-mipt.md`).
