@@ -161,7 +161,7 @@ figure 5. `fig_mirror.py` draws the argument in two steps.
 **Step 1. Dense rank against the min cut.** Solid lines: `⟨C⟩`. Dots: Haar
 `⟨log2 rank⟩`. Open squares: Clifford on the same masks. Thin lines: expected
 record bound (dashed) and input bound (dash-dot).
-- Haar sits on `C` for 1 097 of the 1 098 circuits. The exception is one mask
+- Haar sits on `C` for 1 275 of the 1 276 circuits. The exception is one mask
   without final readout at `N = 4`.
 - Clifford stays at `N` with a final readout. Without it, Clifford is at most
   `N` and below `N` at small `p`.

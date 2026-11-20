@@ -98,7 +98,7 @@ La démonstration complète, avec ses hypothèses et ses limites, est dans la no
 ![Étape 1](figures/mirror_1_rank_vs_mincut.png)
 
 **Étape 1. Rang dense contre coupe minimale**, N = 3, 4, 5, p de 0 à 1, 24 masques par point (10 à N = 5). Traits pleins : ⟨C⟩. Points : ⟨log₂ rang⟩ de Haar. Carrés vides : Clifford sur les mêmes masques. Traits fins : espérance de la borne des records (tirets : pNT, ou N + pN(T − 1) avec lecture finale) et de la borne d'entrée (tiret-point : N(2 − p)).
-- Haar est sur C pour 1 097 des 1 098 circuits. L'exception est un masque sans lecture finale, à N = 4.
+- Haar est sur C pour 1 275 des 1 276 circuits. L'exception est un masque sans lecture finale, à N = 4.
 - Clifford reste à N avec lecture finale. Sans lecture finale, il est au plus à N, et en dessous à petit p.
 
 ![Étape 2](figures/mirror_2_ecircuit_vs_mincut.png)
