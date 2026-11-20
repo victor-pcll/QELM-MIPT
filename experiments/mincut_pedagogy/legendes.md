@@ -138,4 +138,11 @@ C'est le cas le plus général : T = 2N, p de 0 à 1 par pas de 0,05, 60, 40 et 
 - (a) La masse de Π est la coupe : d(p) est sur 2^C − 1 des mêmes masques à 2 près sur environ 1 000 (N = 6), et sur la courbe à 2 000 masques à l'échantillonnage près.
 - (b, c) La forme de Π suit C, pas p directement. Le rapport entre poids successifs vaut 1/3 aux deux bouts : à petit p (peu de records) et à p = 1, où les records de la première couche lisent Z sur chaque site et 𝒮 ne contient que les chaînes de Z (d_m = C(N, m), exactement 3^(−m)). Le profil est le plus plat, rapport d'environ 0,6, au sommet du dôme de C (p ≈ 0,2 à 0,4). Il n'atteint jamais la capture uniforme (rapport 1) à ces tailles. Les trois tailles se superposent, sans p_c fini.
 
+![Recouvrement spectral](figures/overlap.png)
+
+**Recouvrement spectral entre la cible et le circuit, N = 6.** R²(∞) = Σ_m P(m) T(m), avec P(m) la part de l'énergie de la cible au poids m et T(m) = d_m / mult(m) la part des modes de poids m que le circuit transmet.
+- (a) La cible flat est aux grands poids (binomiale de moyenne 3N/4). La cible iid est centrée sur N/2 (P(m) = C(N, m)/(2^N − 1)) : ce n'est pas une cible de bas poids. Seule la cible de degré ≤ 2 est aux bas poids. T(m) est le plus haut et le plus plat au sommet du dôme (p = 0,2), et suit 3^(−m) aux petites coupes.
+- (b) À p = 0,2 : R² = 0,24 (flat), 0,46 (iid), 0,66 (degré ≤ 2).
+- (c) À p = 0,3, readout d'ordre k. Par couche, E_readout(k) = P(m) (T(m) − T_k(m)). k = 3 garde 84 % (flat), 94 % (iid) et 98 % (degré ≤ 2) de R²(∞) ; k = 1 en garde 3 %, 14 % et 17 %.
+
 Fichiers : figures PNG et JSON dans `figures/`. Bibliothèque : `QELM.evaluation.mincut_graph`. Scripts : `fig_circuits.py`, `data.py`, `fig_curves.py`, `draw.py`.

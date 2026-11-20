@@ -11,7 +11,7 @@ The French legends of the figures are in [`legendes.md`](legendes.md).
 
 | | |
 | --- | --- |
-| Scripts | `fig_circuits.py` (drawings), `data.py` (curves), `fig_curves.py` (figures 3 and 4), `draw.py` (drawing helper), `ecircuit_data.py` and `fig_ecircuit.py` (figure 5), `rank_data.py` and `fig_mirror.py` (the two summary figures), `haar_dense_data.py`, `fig_haar_dense.py` and `fig_weight_profile.py` (Haar dense, `N = 4, 5, 6`), `sk_profile_data.py` and `fig_sk_profile.py` (profile of `S_k`, #388), `fig_trace_pi.py` (trace and shape of `Pi`) |
+| Scripts | `fig_circuits.py` (drawings), `data.py` (curves), `fig_curves.py` (figures 3 and 4), `draw.py` (drawing helper), `ecircuit_data.py` and `fig_ecircuit.py` (figure 5), `rank_data.py` and `fig_mirror.py` (the two summary figures), `haar_dense_data.py`, `fig_haar_dense.py` and `fig_weight_profile.py` (Haar dense, `N = 4, 5, 6`), `sk_profile_data.py` and `fig_sk_profile.py` (profile of `S_k`, #388), `fig_trace_pi.py` (trace and shape of `Pi`), `fig_overlap.py` (spectral overlap) |
 | Library | `QELM.evaluation.mincut_graph` (new: graph with or without final readout, causal pruning, partition, SRN `S_0`), `QELM.evaluation.r2_budget.effect_basis` (exact rank) |
 | Physical model | open brickwork, one layer = even bonds, then odd bonds, then `Z` measurements with probability `p`; with or without the final `Z` readout of every site |
 | Sizes | drawings `N = 4` (`T = 8` without readout, `T = 4` with readout); min cut `N = 4` to 32, `T = 2N`; exact Haar rank `N = 3, 4, 5`, `T = 2N`; `S_0`: `N = 8` to 64 |
@@ -266,3 +266,25 @@ the task drops out: `E_circuit = 1 - Tr(Pi)/M`, with `Tr(Pi) = d`.
   flattest, ratio about 0.6, at the top of the dome of `C` (`p ≈ 0.2` to 0.4).
   It never reaches uniform capture (ratio 1) at these sizes. The three sizes
   overlap, and nothing marks a finite `p_c`.
+
+## Spectral overlap of the target and the circuit
+
+For a prior that depends only on the weight, `R²(∞) = Σ_m P(m) T(m)`, with
+`P(m) = Ω_m mult(m) / Σ Ω mult` the share of the target energy at weight `m`
+and `T(m) = d_m / mult(m)` the share of the weight-`m` modes that the circuit
+transmits (`T_k(m)` for the parities of at most `k` bits). `fig_overlap.py`
+puts both on the same axes at `N = 6`.
+
+![Spectral overlap](figures/overlap.png)
+
+- **(a)** The flat target sits at high weight (`P(m) = mult(m)/M`, binomial of
+  mean `3N/4`). The iid target is centred on `N/2`: `Ω_m mult(m) = C(N, m)`, so
+  `P(m) = C(N, m)/(2^N - 1)`. It is not a low-weight target. Only the degree-2
+  target lives at low weight. `T(m)` is highest and flattest at the top of the
+  dome (`p = 0.2`), and steepest (`3^(-m)`) at small `C`.
+- **(b)** At `p = 0.2` (`⟨C⟩ = 9.8`): `R² = 0.24` (flat), 0.46 (iid), 0.66
+  (degree ≤ 2). The lower the weights of the target, the better it is served.
+- **(c)** At `p = 0.3`, readout of order `k`. Per layer, `E_readout(k)` is
+  `P(m) (T(m) - T_k(m))`: the vertical gap on a linear scale, weighted by
+  `P(m)`. `k = 3` keeps 84 % (flat), 94 % (iid) and 98 % (degree ≤ 2) of
+  `R²(∞)`; `k = 1` keeps 3 %, 14 % and 17 %.
