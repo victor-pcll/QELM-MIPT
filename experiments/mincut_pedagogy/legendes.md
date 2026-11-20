@@ -105,4 +105,23 @@ La démonstration complète, avec ses hypothèses et ses limites, est dans la no
 
 **Étape 2. E_circuit contre C.** Mêmes données que la figure 5 : niveau par niveau (a, b) et contre p (c, d).
 
+## 8. Haar, encodage dense, sans lecture finale, N = 4, 5, 6
+
+C'est le cas le plus général : T = 2N, p de 0 à 1 par pas de 0,05, 60, 40 et 30 circuits par point, 40 cibles isotropes par circuit, et la coupe seule calculée sur 2 000 masques indépendants par point.
+
+![Étape 1](figures/haar_dense_step1_rank.png)
+
+**Étape 1.** Points : ⟨log₂ rang⟩ exact. Traits : ⟨C⟩ sur 2 000 masques. Traits fins : les deux bornes en moyenne. Le rang vaut 2^C pour 1 256 circuits sur 1 260 (N = 4), 839 sur 840 (N = 5) et 629 sur 630 (N = 6).
+
+![Étape 2](figures/haar_dense_step2_ecircuit.png)
+
+**Étape 2. E_circuit(p) mesuré et formule théorique sur le même graphe.** Points : E_circuit mesuré (erreur standard sur les circuits). Traits : ⟨1 − (2^C − 1)/(4^N − 1)⟩ sur la loi P(C | p), calculée à partir de la coupe seule sur 2 000 masques. Croix : la même formule sur les masques des circuits mesurés. Les croix sont sur les points à 0,001 près pour chaque p et chaque N. L'écart aux traits, au plus 0,037, vient de l'échantillonnage des 30 à 60 masques par point. 4 points sur 63 sont au-delà de deux erreurs standard (au plus 3,5), un peu plus que pour un échantillonnage gaussien, parce que la loi de C sur les masques est discrète et asymétrique. Les croix montrent que la formule elle-même tient à 0,001 près.
+
+![Profil en poids](figures/weight_profile_by_level.png)
+
+**Profil en poids de Pauli par niveau de C.** d_m / mult(m) est la fraction de la couche de poids m captée par 𝒮. Tirets : capture uniforme (2^C − 1)/(4^N − 1).
+- À petit C, chaque unité de poids en plus divise la fraction par 3 (rapports de 0,3 à 0,37 jusqu'à C ≈ N), donc d_m ∝ C(N, m). Les clics sont des bits classiques : en pratique, un seul Pauli par site est atteint.
+- Quand C → 2N, le profil s'aplatit vers la capture uniforme (rapports de 0,7 à 0,9 à C = 2N − 1).
+- 𝒮 favorise donc les bas poids. Le prior `iid`, qui met sa variance sur les bas poids, donne un E_circuit nettement plus bas que le prior isotrope (panneau d). La prédiction isotrope ne dépend que de C ; la prédiction `iid` a besoin de ce profil.
+
 Fichiers : figures PNG et JSON dans `figures/`. Bibliothèque : `QELM.evaluation.mincut_graph`. Scripts : `fig_circuits.py`, `data.py`, `fig_curves.py`, `draw.py`.

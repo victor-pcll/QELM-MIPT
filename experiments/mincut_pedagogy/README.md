@@ -11,7 +11,7 @@ The French legends of the figures are in [`legendes.md`](legendes.md).
 
 | | |
 | --- | --- |
-| Scripts | `fig_circuits.py` (drawings), `data.py` (curves), `fig_curves.py` (figures 3 and 4), `draw.py` (drawing helper), `ecircuit_data.py` and `fig_ecircuit.py` (figure 5), `rank_data.py` and `fig_mirror.py` (the two summary figures) |
+| Scripts | `fig_circuits.py` (drawings), `data.py` (curves), `fig_curves.py` (figures 3 and 4), `draw.py` (drawing helper), `ecircuit_data.py` and `fig_ecircuit.py` (figure 5), `rank_data.py` and `fig_mirror.py` (the two summary figures), `haar_dense_data.py`, `fig_haar_dense.py` and `fig_weight_profile.py` (Haar dense, `N = 4, 5, 6`) |
 | Library | `QELM.evaluation.mincut_graph` (new: graph with or without final readout, causal pruning, partition, SRN `S_0`), `QELM.evaluation.r2_budget.effect_basis` (exact rank) |
 | Physical model | open brickwork, one layer = even bonds, then odd bonds, then `Z` measurements with probability `p`; with or without the final `Z` readout of every site |
 | Sizes | drawings `N = 4` (`T = 8` without readout, `T = 4` with readout); min cut `N = 4` to 32, `T = 2N`; exact Haar rank `N = 3, 4, 5`, `T = 2N`; `S_0`: `N = 8` to 64 |
@@ -170,4 +170,45 @@ record bound (dashed) and input bound (dash-dot).
 
 **Step 2. `E_circuit` against `C`.** Same data as figure 5: level by level (a, b)
 and against `p` (c, d).
+
+## Haar, dense inputs, no final readout, `N = 4, 5, 6`
+
+This is the most general setting: no final readout, dense inputs, `T = 2N`,
+and `p` from 0 to 1 in steps of 0.05. `haar_dense_data.py` uses 60, 40 and 30
+circuits per point for `N = 4, 5, 6`, with 40 isotropic targets per circuit.
+It also computes the min cut on 2 000 independent masks per point (about 10
+minutes on 4 cores; the points are saved to `figures/haar_dense_data.json.parts/`
+as they are done, and an interrupted run resumes from them; they are not committed).
+
+![Step 1, Haar dense](figures/haar_dense_step1_rank.png)
+
+**Step 1. Exact `⟨log2 rank⟩` (dots) against `⟨C⟩` (lines, 2 000 masks) and the
+two expected bounds.** The rank equals `2^C` for 1 256 of 1 260 circuits
+(`N = 4`), 839 of 840 (`N = 5`) and 629 of 630 (`N = 6`).
+
+![Step 2, Haar dense](figures/haar_dense_step2_ecircuit.png)
+
+**Step 2. Measured `E_circuit(p)` (dots, standard error over circuits) against
+`⟨1 - (2^C - 1)/(4^N - 1)⟩` over `P(C | p)`.** The lines use the min cut alone,
+on 2 000 masks. The crosses use the same formula on the masks of the measured
+circuits. The crosses lie on the dots to within 0.001 at every `p` and `N`. The
+gap to the lines, at most 0.037, is the sampling of the 30 to 60 masks per
+point. 4 of the 63 points lie beyond two standard errors (at most 3.5), slightly
+more than Gaussian sampling gives, since the distribution of `C` over masks is
+discrete and skewed. The crosses show that the formula itself holds to 0.001.
+
+![Weight profile](figures/weight_profile_by_level.png)
+
+**Pauli-weight profile.** `d_m / mult(m)` is the fraction of the weight-`m`
+shell that the span captures, grouped by level of `C`. The dashed lines show
+uniform capture, `(2^C - 1)/(4^N - 1)`.
+- At low `C` each extra unit of weight divides the fraction by 3 (ratios 0.3
+  to 0.37 up to `C ≈ N`), so `d_m ∝ C(N, m)`. Measured outcomes are classical
+  bits, so only one Pauli per site is effectively reached.
+- As `C → 2N` the profile flattens towards uniform capture: ratios 0.7 to 0.9
+  at `C = 2N - 1`.
+- The span therefore favours low weights. The `iid` prior, which puts its
+  variance on low weights, gives a much lower `E_circuit` than the isotropic
+  one (panel d). The isotropic prediction depends on `C` alone. The `iid` one
+  needs this profile.
 
