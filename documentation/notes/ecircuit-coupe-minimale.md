@@ -163,6 +163,10 @@ lecture finale), le maximum observé est `2N − 1`, d'où le plancher
    `𝒮_k ⊂ 𝒮` a son propre profil `d_m^(k)`, et
    `R²(k) = Σ_a Ω_a π_a(𝒮_k) / Σ_a Ω_a`, `E_readout(k) = R²(∞) − R²(k)`.
    La coupe fixe seulement le plafond `E_readout(k) ≤ R²(∞)`.
+   Les parités d'un bit n'atteignent presque que le poids 1. Reconstruire un
+   opérateur de poids `m` demande des parités d'environ `m` bits ou plus, et
+   d'autant plus que `p` est petit (#388,
+   `experiments/mincut_pedagogy/figures/sk_profile.png`).
 5. Comme le rang, ce bilan est à nombre de tirs infini et à masque fixe. La MIPT
    est à chercher dans les quantités pondérées par la règle de Born (note
    `transition-rang-mipt.md`).

@@ -124,4 +124,12 @@ C'est le cas le plus général : T = 2N, p de 0 à 1 par pas de 0,05, 60, 40 et 
 - Quand C → 2N, le profil s'aplatit vers la capture uniforme (rapports de 0,7 à 0,9 à C = 2N − 1).
 - 𝒮 favorise donc les bas poids. Le prior `iid`, qui met sa variance sur les bas poids, donne un E_circuit nettement plus bas que le prior isotrope (panneau d). La prédiction isotrope ne dépend que de C ; la prédiction `iid` a besoin de ce profil.
 
+![Profil de S_k](figures/sk_profile.png)
+
+**Profil en poids de 𝒮_k, l'espace des parités d'au plus k bits de record (#388).** Haar, encodage dense, sans lecture finale, T = 2N. Ici k compte des bits de record, pas le poids de Pauli de l'entrée.
+- (a-c) d_m^(k) / mult(m) à p = 0,3. Les bits seuls (k = 1) n'atteignent presque que le poids 1 : la fraction est divisée par 3,5 (N = 4) à 6 (N = 6) à chaque unité de poids, contre 1,5 à 2 pour 𝒮 entier.
+- (d-f) Part du contenu de poids m de 𝒮 atteinte par 𝒮_k. Elle baisse avec m : reconstruire un opérateur de poids m demande des parités d'environ m bits ou plus. À N = 6 et p = 0,3, k = m atteint 0,42, 0,70 et 0,92 des poids 1, 2 et 3.
+- Elle monte avec p. À p = 0,7, k = 2 atteint au moins 0,89 de chaque poids à N = 4 et 6 (0,73 à N = 5), et k = 3 de 0,96 à 1. À p = 0,1 et 0,2, l'information est dans les corrélations d'ordre élevé des bits : k = 3 n'atteint que 0,16 à 0,23 du poids 6 à N = 6.
+- Cible isotrope : R²(k) = dim 𝒮_k / (4^N − 1). À N = 6 et p = 0,2, k = 3 perd 58 % de R²(∞) ; à p = 0,5, 6 %.
+
 Fichiers : figures PNG et JSON dans `figures/`. Bibliothèque : `QELM.evaluation.mincut_graph`. Scripts : `fig_circuits.py`, `data.py`, `fig_curves.py`, `draw.py`.

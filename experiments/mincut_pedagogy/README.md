@@ -11,7 +11,7 @@ The French legends of the figures are in [`legendes.md`](legendes.md).
 
 | | |
 | --- | --- |
-| Scripts | `fig_circuits.py` (drawings), `data.py` (curves), `fig_curves.py` (figures 3 and 4), `draw.py` (drawing helper), `ecircuit_data.py` and `fig_ecircuit.py` (figure 5), `rank_data.py` and `fig_mirror.py` (the two summary figures), `haar_dense_data.py`, `fig_haar_dense.py` and `fig_weight_profile.py` (Haar dense, `N = 4, 5, 6`) |
+| Scripts | `fig_circuits.py` (drawings), `data.py` (curves), `fig_curves.py` (figures 3 and 4), `draw.py` (drawing helper), `ecircuit_data.py` and `fig_ecircuit.py` (figure 5), `rank_data.py` and `fig_mirror.py` (the two summary figures), `haar_dense_data.py`, `fig_haar_dense.py` and `fig_weight_profile.py` (Haar dense, `N = 4, 5, 6`), `sk_profile_data.py` and `fig_sk_profile.py` (profile of `S_k`, #388) |
 | Library | `QELM.evaluation.mincut_graph` (new: graph with or without final readout, causal pruning, partition, SRN `S_0`), `QELM.evaluation.r2_budget.effect_basis` (exact rank) |
 | Physical model | open brickwork, one layer = even bonds, then odd bonds, then `Z` measurements with probability `p`; with or without the final `Z` readout of every site |
 | Sizes | drawings `N = 4` (`T = 8` without readout, `T = 4` with readout); min cut `N = 4` to 32, `T = 2N`; exact Haar rank `N = 3, 4, 5`, `T = 2N`; `S_0`: `N = 8` to 64 |
@@ -212,3 +212,37 @@ uniform capture, `(2^C - 1)/(4^N - 1)`.
   one (panel d). The isotropic prediction depends on `C` alone. The `iid` one
   needs this profile.
 
+## Which Pauli weights the `k`-bit parities reach (#388)
+
+`E_readout(k)` compares the span `S` of the whole record with the span `S_k`
+of the parities of at most `k` record bits (`parity_operator_rows`). Here `k`
+counts record bits, not input Pauli weight. `sk_profile_data.py` builds `S_k`
+for `k = 1, 2, 3` and `S` (`k = inf`) in whitened coordinates, with Haar gates,
+dense inputs, no final readout, `T = 2N`, `p = 0.1, 0.2, 0.3, 0.5, 0.7` and 40,
+30 and 20 circuits per point for `N = 4, 5, 6` (about 6 minutes on 4 cores).
+Each span gives its profile `d_m^(k) = sum_{|a| = m} [Pi_k]_aa`. Then, for any
+prior that depends only on the weight,
+`R²(k) = Σ_m Ω(m) d_m^(k) / Σ_m Ω(m) mult(m)` and
+`E_readout(k) = R²(∞) - R²(k)`.
+
+![S_k profile](figures/sk_profile.png)
+
+**(a-c) `d_m^(k) / mult(m)` at `p = 0.3`.** Single bits (`k = 1`) reach almost
+only weight 1: the fraction drops by a factor of 3.5 (`N = 4`) to 6 (`N = 6`) per unit of weight,
+against about 1.5 to 2 for the full span. Each extra bit lifts the higher
+weights.
+
+**(d-f) Share of the weight-`m` content of `S` reached by `S_k`,
+`⟨d_m^(k)⟩ / ⟨d_m^(∞)⟩`.**
+- The share falls with `m` at fixed `k`: rebuilding a weight-`m` operator needs
+  parities of several bits, roughly `k ≥ m`. At `N = 6`, `p = 0.3`, `k = m`
+  reaches 0.42, 0.70 and 0.92 of weights 1, 2 and 3, and `k = 3` reaches 0.64
+  of weight 6.
+- The share grows with `p`. At `p = 0.7`, `k = 2` reaches at least 0.89 of every
+  weight at `N = 4` and 6 (0.73 at `N = 5`), and `k = 3` reaches 0.96 to 1. At `p = 0.1` and 0.2, few records see
+  long-lived wires, and the information sits in high-order correlations of
+  the bits: `k = 3` reaches only 0.78 to 0.88 of weight 1 and 0.16 to 0.23 of
+  weight 6 at `N = 6`.
+- For the isotropic target, `R²(k) = dim S_k / (4^N - 1)`. At `N = 6`, `p = 0.2`,
+  `dim S_3 = 394` against `dim S = 933` on average, so `k = 3` loses 58 % of
+  `R²(∞)`. At `p = 0.5` it loses 6 %.
