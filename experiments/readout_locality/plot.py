@@ -193,6 +193,36 @@ def fig_vs_p(main: dict[int, Locality], out: Path, summary: dict) -> None:
     plt.close(fig)
 
 
+def peak(p: np.ndarray, per_circuit: np.ndarray, n_boot: int = 300) -> dict:
+    """Position and height of the maximum of the mean over circuits.
+
+    Parabola through the five grid points around the maximum; the error is the
+    standard deviation over a bootstrap of the circuits.
+    """
+
+    def fit(m: np.ndarray) -> tuple[float, float]:
+        j = int(np.argmax(m))
+        sl = slice(max(j - 2, 0), j + 3)
+        c = np.polyfit(p[sl], m[sl], 2)
+        x = float(-c[1] / (2 * c[0])) if c[0] < 0 else float(p[j])
+        return x, float(np.polyval(c, x))
+
+    x, y = fit(np.nanmean(per_circuit, axis=0))
+    rng = np.random.default_rng(0)
+    n_c = per_circuit.shape[0]
+    boot = [
+        fit(np.nanmean(per_circuit[rng.integers(0, n_c, n_c)], axis=0))
+        for _ in range(n_boot)
+    ]
+    b = np.array(boot)
+    return {
+        "p_max": x,
+        "p_max_err": float(b[:, 0].std()),
+        "height": y,
+        "height_err": float(b[:, 1].std()),
+    }
+
+
 def fig_mean_weight(main: dict[int, Locality], out: Path, summary: dict) -> None:
     fig, axes = plt.subplots(1, 3, figsize=(9.6, 2.9))
     sizes = list(main)
@@ -212,7 +242,12 @@ def fig_mean_weight(main: dict[int, Locality], out: Path, summary: dict) -> None
             lw=1,
             label=f"N = {n}",
         )
-        summary["mean_w"][str(n)] = {"mean": m.tolist(), "sem": e.tolist()}
+        summary["mean_w"][str(n)] = {
+            "mean": m.tolist(),
+            "sem": e.tolist(),
+            "peak": peak(loc.p, loc.mean_w()),
+            "std_over_circuits": np.nanstd(loc.mean_w(), axis=0).tolist(),
+        }
     axes[0].set_ylabel(r"$\langle w\rangle / N$", fontsize=8)
     axes[0].set_xlabel("p", fontsize=8)
     axes[0].legend(fontsize=6, frameon=False)
@@ -309,7 +344,7 @@ def fig_haar(data: Path, out: Path, summary: dict) -> None:
     cfg = json.loads(str(d["config"]))
     rank, wtr, p = d["rank"].astype(float), d["wtr"], d["p"]
     k_max = int(cfg["k_max"])
-    fig, axes = plt.subplots(1, 2, figsize=(6.6, 2.8), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(6.6, 3.2), sharey=True)
     summary["haar"] = {"n": cfg["n"], "depth": cfg["depth"]}
     styles = ["-", "--", "-.", ":"]
     for ax, (prior, arr) in zip(axes, (("flat", rank), ("iid", wtr)), strict=True):
@@ -337,8 +372,9 @@ def fig_haar(data: Path, out: Path, summary: dict) -> None:
         mark_pc(ax)
         style(ax)
     axes[0].set_ylabel(r"$E_{readout}(k)\,/\,(1-E_{circuit})$", fontsize=8)
-    axes[0].legend(fontsize=6, frameon=False, ncol=2)
-    fig.tight_layout()
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, fontsize=6, frameon=False, ncol=4, loc="lower center")
+    fig.tight_layout(rect=(0, 0.12, 1, 1))
     fig.savefig(out / "haar_vs_clifford.png", dpi=200)
     plt.close(fig)
 
