@@ -1955,4 +1955,5 @@ uv run python rank_data.py figures/rank_data.json              # about 1 minute
 uv run python fig_mirror.py figures/rank_data.json figures/ecircuit_data.json figures
 uv run python sk_profile_data.py figures/sk_profile_data.json   # about 6 minutes, 4 cores
 uv run python fig_sk_profile.py figures/sk_profile_data.json figures
+uv run python fig_trace_pi.py figures/haar_dense_data.json figures
 ```

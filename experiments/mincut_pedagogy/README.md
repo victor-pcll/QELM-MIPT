@@ -11,7 +11,7 @@ The French legends of the figures are in [`legendes.md`](legendes.md).
 
 | | |
 | --- | --- |
-| Scripts | `fig_circuits.py` (drawings), `data.py` (curves), `fig_curves.py` (figures 3 and 4), `draw.py` (drawing helper), `ecircuit_data.py` and `fig_ecircuit.py` (figure 5), `rank_data.py` and `fig_mirror.py` (the two summary figures), `haar_dense_data.py`, `fig_haar_dense.py` and `fig_weight_profile.py` (Haar dense, `N = 4, 5, 6`), `sk_profile_data.py` and `fig_sk_profile.py` (profile of `S_k`, #388) |
+| Scripts | `fig_circuits.py` (drawings), `data.py` (curves), `fig_curves.py` (figures 3 and 4), `draw.py` (drawing helper), `ecircuit_data.py` and `fig_ecircuit.py` (figure 5), `rank_data.py` and `fig_mirror.py` (the two summary figures), `haar_dense_data.py`, `fig_haar_dense.py` and `fig_weight_profile.py` (Haar dense, `N = 4, 5, 6`), `sk_profile_data.py` and `fig_sk_profile.py` (profile of `S_k`, #388), `fig_trace_pi.py` (trace and shape of `Pi`) |
 | Library | `QELM.evaluation.mincut_graph` (new: graph with or without final readout, causal pruning, partition, SRN `S_0`), `QELM.evaluation.r2_budget.effect_basis` (exact rank) |
 | Physical model | open brickwork, one layer = even bonds, then odd bonds, then `Z` measurements with probability `p`; with or without the final `Z` readout of every site |
 | Sizes | drawings `N = 4` (`T = 8` without readout, `T = 4` with readout); min cut `N = 4` to 32, `T = 2N`; exact Haar rank `N = 3, 4, 5`, `T = 2N`; `S_0`: `N = 8` to 64 |
@@ -246,3 +246,23 @@ weights.
 - For the isotropic target, `R²(k) = dim S_k / (4^N - 1)`. At `N = 6`, `p = 0.2`,
   `dim S_3 = 394` against `dim S = 933` on average, so `k = 3` loses 58 % of
   `R²(∞)`. At `p = 0.5` it loses 6 %.
+
+## `E_circuit(p)` reduced to the projector
+
+With infinitely many shots (exact Heisenberg spans), the full effect space
+(`k = inf`) and the flat prior, the estimation and readout errors are zero and
+the task drops out: `E_circuit = 1 - Tr(Pi)/M`, with `Tr(Pi) = d`.
+`fig_trace_pi.py` replots `haar_dense_data.json` in this form.
+
+![Trace and shape of Pi](figures/trace_pi.png)
+
+- **(a) The mass of `Pi` is the min cut.** `d(p)` lies on `2^C - 1` of the same
+  masks to within 2 out of about 1 000 (`N = 6`), and on the 2 000-mask curve
+  to within the sampling of the masks.
+- **(b, c) The shape of `Pi` follows `C`, not `p` directly.** The ratio between
+  successive weights is `1/3` at both ends: at small `p` (few records) and at
+  `p = 1`, where the records of the first layer read `Z` on every site and `S`
+  holds only the `Z` strings (`d_m = C(N, m)`, exactly `3^(-m)`). The profile is
+  flattest, ratio about 0.6, at the top of the dome of `C` (`p ≈ 0.2` to 0.4).
+  It never reaches uniform capture (ratio 1) at these sizes. The three sizes
+  overlap, and nothing marks a finite `p_c`.

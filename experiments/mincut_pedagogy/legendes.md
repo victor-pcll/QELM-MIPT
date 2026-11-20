@@ -132,4 +132,10 @@ C'est le cas le plus général : T = 2N, p de 0 à 1 par pas de 0,05, 60, 40 et 
 - Elle monte avec p. À p = 0,7, k = 2 atteint au moins 0,89 de chaque poids à N = 4 et 6 (0,73 à N = 5), et k = 3 de 0,96 à 1. À p = 0,1 et 0,2, l'information est dans les corrélations d'ordre élevé des bits : k = 3 n'atteint que 0,16 à 0,23 du poids 6 à N = 6.
 - Cible isotrope : R²(k) = dim 𝒮_k / (4^N − 1). À N = 6 et p = 0,2, k = 3 perd 58 % de R²(∞) ; à p = 0,5, 6 %.
 
+![Trace et forme de Π](figures/trace_pi.png)
+
+**E_circuit(p) réduit au projecteur.** Tirs infinis (espaces de Heisenberg exacts), k = ∞ et prior flat : E_estimation = E_readout = 0 et la tâche disparaît, E_circuit = 1 − Tr Π / M, avec Tr Π = d.
+- (a) La masse de Π est la coupe : d(p) est sur 2^C − 1 des mêmes masques à 2 près sur environ 1 000 (N = 6), et sur la courbe à 2 000 masques à l'échantillonnage près.
+- (b, c) La forme de Π suit C, pas p directement. Le rapport entre poids successifs vaut 1/3 aux deux bouts : à petit p (peu de records) et à p = 1, où les records de la première couche lisent Z sur chaque site et 𝒮 ne contient que les chaînes de Z (d_m = C(N, m), exactement 3^(−m)). Le profil est le plus plat, rapport d'environ 0,6, au sommet du dôme de C (p ≈ 0,2 à 0,4). Il n'atteint jamais la capture uniforme (rapport 1) à ces tailles. Les trois tailles se superposent, sans p_c fini.
+
 Fichiers : figures PNG et JSON dans `figures/`. Bibliothèque : `QELM.evaluation.mincut_graph`. Scripts : `fig_circuits.py`, `data.py`, `fig_curves.py`, `draw.py`.
