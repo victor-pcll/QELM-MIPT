@@ -95,3 +95,39 @@ The Haar and Clifford `Delta` runs are in git
 (`experiments/haar_collapse_map/runs`, `experiments/clifford_collapse_map/sources`).
 The #358 runs (14 MB, per-sample values) are not; `--bipartite-runs` points
 to them.
+
+## Clifford methodology figure (`clifford_methodology.py`)
+
+One figure that explains the method on Clifford, from the mode measurement
+`W(m)` only: `Delta = N - log2(1 + W(m))` of #346, `T = 2N`,
+`N = 16, 32, 64, 128`, all 23 values of `p` from 0.08 to 0.30. `I3` and
+`S(N/2)` (#358) are left out on purpose: they come from the state of the
+references, not from `W(m)`.
+
+    uv run python clifford_methodology.py
+
+![Clifford methodology](figures/clifford_methodology_delta.png)
+
+**(a)** `Delta` against `p`, one shade of blue per `N` (light for small
+`N`): the curves cross at `p_c` (grey band `p_c ± δp_c`, linear zoom in
+the inset). **(b)** the collapse against `(p - p_c) N^(1/nu)` at the
+optimum. **(c)** the exact Houdayer-Hartmann quality `Q` over
+`(p_c, nu)` (red, log scale, light near `Q_min`, dark for high `Q`): the optimum `Q_min = 5.4` at
+`p_c = 0.1615 ± 0.0007`, `nu = 1.32 ± 0.03`, the contour
+`Q = 1.3 Q_min` whose projections give these bars, and Gullans & Huse
+(PRL 2020, entropy of a reference qubit: `0.1598 ± 0.0005`, `1.30 ± 0.05`).
+All `p` are kept because they give the lowest `Q_min`: the cuts
+`p <= 0.23` and `p <= 0.21` (`--p-max`) give `Q_min = 6.0` and `6.2`. Same
+values as `pc_nu_plane.py`. A few seconds.
+
+## No-readout methodology figures (`no_readout_methodology.py`, #385)
+
+Same style, for the provisional `(p_c, nu)` fits of the no-readout runs
+of #378 (PR #380) at `T = 4N`: one PNG per model and observable in
+`figures/no_readout/`. Every observable is a Renyi-2 entropy from the
+Fourier weights `W_A`. The fits are read from `figures/no_readout/fits_T4N.json`
+(the analysis JSON of #378), not redone; the runs are not in git.
+
+    uv run python experiments/collapse_error_budget/no_readout_methodology.py \
+        --runs <runs folder> --fits experiments/collapse_error_budget/figures/no_readout/fits_T4N.json \
+        --out experiments/collapse_error_budget/figures/no_readout
