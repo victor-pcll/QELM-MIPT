@@ -130,21 +130,28 @@ def _reference_group(stab: np.ndarray, n_sys: int) -> np.ndarray:
     sys_cols = list(range(n_sys)) + [n + q for q in range(n_sys)]
     ref_cols = list(range(n_sys, n)) + [n + q for q in range(n_sys, n)]
     A = np.array(stab[:, sys_cols + ref_cols], dtype=bool)
+    rows, width = A.shape
+    # Rows packed into 64-bit words: one XOR per word instead of per bit.
+    words = -(-width // 64)
+    packed = np.zeros((rows, 8 * words), dtype=np.uint8)
+    packed[:, : -(-width // 8)] = np.packbits(A, axis=1, bitorder="little")
+    P = packed.view("<u8")
     rank = 0
-    rows = A.shape[0]
     for col in range(len(sys_cols)):
-        piv = np.flatnonzero(A[rank:, col])
+        w, mask = col // 64, np.uint64(1 << (col % 64))
+        piv = np.flatnonzero(P[rank:, w] & mask)
         if piv.size == 0:
             continue
         p = rank + int(piv[0])
-        A[[rank, p]] = A[[p, rank]]
-        others = np.flatnonzero(A[:, col])
+        P[[rank, p]] = P[[p, rank]]
+        others = np.flatnonzero(P[:, w] & mask)
         others = others[others != rank]
-        A[others] ^= A[rank]
+        P[others] ^= P[rank]
         rank += 1
         if rank == rows:
             break
-    return np.asarray(A[rank:, len(sys_cols) :])
+    bits = np.unpackbits(P[rank:].view(np.uint8), axis=1, bitorder="little")
+    return np.asarray(bits[:, len(sys_cols) : width], dtype=bool)
 
 
 def pauli_bits(n: int, ops: dict[int, str]) -> np.ndarray:

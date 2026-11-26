@@ -235,8 +235,9 @@ def clifford_entropies(group: np.ndarray, n: int) -> dict[Region, float]:
     for u in range(n):  # the complement is the interval [u, u + ell)
         pivots: dict[int, int] = {}
         for ell in range(1, n):
-            for v in cols[(u + ell - 1) % n]:
-                _insert(pivots, v)
+            if len(pivots) < r:  # once the rank is r, it stays r
+                for v in cols[(u + ell - 1) % n]:
+                    _insert(pivots, v)
             if ell in lengths:
                 region = interval(u + ell, n - ell, n)
                 out[region] = float(len(region) - (r - len(pivots)))
@@ -248,6 +249,8 @@ def clifford_entropies(group: np.ndarray, n: int) -> dict[Region, float]:
             region = tuple(sorted(a + c))
             pivots = {}
             for site in interval(s + q, q, n) + interval(s + 3 * q, q, n):
+                if len(pivots) == r:
+                    break
                 for v in cols[site]:
                     _insert(pivots, v)
             out[region] = float(len(region) - (r - len(pivots)))
